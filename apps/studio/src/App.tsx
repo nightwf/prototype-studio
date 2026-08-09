@@ -120,9 +120,10 @@ function pageSlug(title: string, existingIds: string[]): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "page";
-  let candidate = base;
+  const slug = /^[a-z]/.test(base) ? base : `page-${base}`;
+  let candidate = slug;
   let suffix = 2;
-  while (existingIds.includes(candidate)) candidate = `${base}-${suffix++}`;
+  while (existingIds.includes(candidate)) candidate = `${slug}-${suffix++}`;
   return candidate;
 }
 
