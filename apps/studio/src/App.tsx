@@ -470,6 +470,7 @@ export function App() {
   const [boardZoom, setBoardZoom] = useState(1);
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
+  const [boardMoreOpen, setBoardMoreOpen] = useState(false);
   const boardViewRef = useRef<BoardRendererHandle>(null);
   const boardRef = useRef(board);
   const boardRevisionRef = useRef(board.revision);
@@ -921,6 +922,15 @@ export function App() {
     boardRef.current = board;
     boardRevisionRef.current = board.revision;
   }, [board]);
+
+  useEffect(() => {
+    if (!boardMoreOpen) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (!(event.target as HTMLElement).closest(".board-more")) setBoardMoreOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [boardMoreOpen]);
 
   const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新", silent = false): Promise<boolean> => {
     // 1) 本地乐观应用：基于 ref 链，保证连续快速调用（如拖拽）不会版本回退。
@@ -1484,6 +1494,13 @@ window.addEventListener('DOMContentLoaded', function () {
     />;
   }
 
+  const viewSwitcher = (
+    <div className="view-switcher">
+      <button className={viewMode === "page" ? "is-active" : ""} onClick={() => setViewMode("page")}><Monitor size={14} />页面</button>
+      <button className={viewMode === "canvas" ? "is-active" : ""} onClick={() => { setViewMode("canvas"); setBoardSelectedId(undefined); }}><LayoutGrid size={14} />画布</button>
+    </div>
+  );
+
   return <div className="studio-shell">
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
@@ -1557,30 +1574,40 @@ window.addEventListener('DOMContentLoaded', function () {
     <main className="studio-canvas">
       <div className="canvas-toolbar">
         {activeWorkspace === "pages" ? <>
-          <div className="view-switcher">
-            <button className={viewMode === "page" ? "is-active" : ""} onClick={() => setViewMode("page")}><Monitor size={14} />页面</button>
-            <button className={viewMode === "canvas" ? "is-active" : ""} onClick={() => { setViewMode("canvas"); setBoardSelectedId(undefined); }}><LayoutGrid size={14} />画布</button>
-          </div>
           {viewMode === "page" ? <>
-            <div className="viewport-switcher"><button className="is-active"><Monitor size={14} />桌面</button><button><PanelRight size={14} />平板</button></div>
-            <div className="canvas-meta"><span>1280 × 820</span><i /><StatusDot tone="info">可点选模式</StatusDot></div>
-            <div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div>
-          </> : <>
-            <div className="canvas-meta"><span>画布 · {board.objects.length} 个对象</span><i /><StatusDot tone="info">拖拽移动 · 双击页面进入编辑</StatusDot></div>
-            <div className="board-tools">
-              <button onClick={() => setBoardTool(boardTool === "page" ? "none" : "page")}><Plus size={13} />页面</button>
-              <button onClick={() => void addBoardNote()}><StickyNote size={13} />说明</button>
-              <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
-              <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
-              <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
-              <button className={boardSnap ? "is-active" : ""} onClick={() => setBoardSnap((value) => !value)} title="拖动时按 10px 网格吸附"><Magnet size={13} />吸附</button>
-              <button onClick={() => setBoardExportOpen(true)}><Download size={13} />导出 HTML</button>
-              {webMode && webProjectId ? <>
-                <button onClick={() => void shareWebProject()}><Share2 size={13} />分享</button>
-                <button onClick={() => void downloadWebZip()}><Save size={13} />整包</button>
-              </> : null}
+            <div className="canvas-toolbar-left">
+              {viewSwitcher}
+              <div className="viewport-switcher"><button className="is-active"><Monitor size={14} />桌面</button><button><PanelRight size={14} />平板</button></div>
+              <div className="canvas-meta"><span>1280 × 820</span><i /><span className="board-hint-text">可点选模式</span></div>
             </div>
-            <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
+            <div className="canvas-toolbar-actions"><div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div></div>
+          </> : <>
+            <div className="canvas-toolbar-left">
+              {viewSwitcher}
+              <div className="canvas-meta"><span>画布 · {board.objects.length} 个对象</span><i /><span className="board-hint-text">拖拽移动 · 双击页面进入编辑 · 右键更多</span></div>
+            </div>
+            <div className="canvas-toolbar-actions">
+              <div className="board-tools">
+                <button onClick={() => setBoardTool(boardTool === "page" ? "none" : "page")}><Plus size={13} />页面</button>
+                <button onClick={() => void addBoardNote()}><StickyNote size={13} />说明</button>
+                <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
+                <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
+                <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
+                <div className="board-more">
+                  <button className={boardMoreOpen ? "is-active" : ""} onClick={() => setBoardMoreOpen((value) => !value)} title="更多操作"><MoreHorizontal size={13} />更多</button>
+                  {boardMoreOpen ? <div className="board-more-menu">
+                    <button className={boardSnap ? "is-active" : ""} onClick={() => setBoardSnap((value) => !value)}><Magnet size={12} />网格吸附（10px）</button>
+                    <i />
+                    <button onClick={() => { setBoardMoreOpen(false); setBoardExportOpen(true); }}><Download size={12} />导出 HTML</button>
+                    {webMode && webProjectId ? <>
+                      <button onClick={() => { setBoardMoreOpen(false); void shareWebProject(); }}><Share2 size={12} />分享</button>
+                      <button onClick={() => { setBoardMoreOpen(false); void downloadWebZip(); }}><Save size={12} />整包</button>
+                    </> : null}
+                  </div> : null}
+                </div>
+              </div>
+              <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
+            </div>
           </>}
         </> : <>
           <div className="requirement-toolbar-title"><FileText size={14} /><span>Requirement Model</span></div>
