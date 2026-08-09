@@ -47,6 +47,7 @@ export interface WebProject {
   description?: string;
   status: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export const webAuth = {

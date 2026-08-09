@@ -103,7 +103,7 @@ import {
   type RequirementTemplates
 } from "@prototype-studio/requirement-engine/browser";
 import type { RequirementModel } from "@prototype-studio/dsl-schema";
-import { webAuth, webMode, webSpace, type WebUser } from "./webBridge";
+import { webAuth, webMode, webProjects, webSpace, type WebUser } from "./webBridge";
 import { AuthScreen, ProjectsScreen } from "./WebScreens";
 
 type ToastTone = "success" | "warning" | "danger" | "info";
@@ -439,6 +439,7 @@ export function App() {
   const boardPanRef = useRef<{ x: number; y: number; startX: number; startY: number } | undefined>(undefined);
   const [webSession, setWebSession] = useState<WebUser>();
   const [webProjectId, setWebProjectId] = useState<string>();
+  const [webBoot, setWebBoot] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const currentPage = useMemo(() => pages.find((page) => page.page.id === currentPageId), [currentPageId, pages]);
@@ -1165,13 +1166,19 @@ window.addEventListener('DOMContentLoaded', function () {
 
   useEffect(() => {
     if (!webMode) return;
-    void webAuth.me().then((result) => {
-      if (result.user) {
-        setWebSession(result.user);
-        const project = new URLSearchParams(window.location.search).get("project");
-        if (project) void loadWebProject(project);
-      }
-    });
+    void webAuth.me()
+      .then(async (result) => {
+        if (result.user) {
+          setWebSession(result.user);
+          const project = new URLSearchParams(window.location.search).get("project");
+          if (project) { void loadWebProject(project); return; }
+          const listed = await webProjects.list();
+          const latest = [...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+          if (latest) void loadWebProject(latest.id);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => setWebBoot(true));
   }, [loadWebProject]);
 
   const updateSelected = (changes: Partial<UIComponent>) => {
@@ -1288,6 +1295,7 @@ window.addEventListener('DOMContentLoaded', function () {
     ...dsl.overlays
   ].filter(() => Boolean(currentPage));
 
+  if (webMode && !webBoot) return <div className="web-screen"><div className="web-card"><div className="web-empty">正在打开…</div></div></div>;
   if (webMode && !webSession) return <AuthScreen onAuthenticated={setWebSession} />;
   if (webMode && webSession && !webProjectId) {
     return <ProjectsScreen
@@ -1301,13 +1309,15 @@ window.addEventListener('DOMContentLoaded', function () {
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
       <div className="project-switcher-wrap">
-        <button className="studio-project-switcher" onClick={() => setShowProjectMenu(!showProjectMenu)}><FolderOpen size={14} /><span>{projectName}{projectRoot ? " · 本地项目" : isDesktopRuntime() ? "" : " · 示例项目"}</span><ChevronDown size={13} /></button>
+        <button className="studio-project-switcher" onClick={() => setShowProjectMenu(!showProjectMenu)}><FolderOpen size={14} /><span>{projectName}{projectRoot ? (webMode ? " · 云端项目" : " · 本地项目") : isDesktopRuntime() ? "" : " · 示例项目"}</span><ChevronDown size={13} /></button>
         {showProjectMenu ? <div className="project-menu">
           <div className="project-menu-head"><span>PROJECT ROOT</span><code>{projectRoot ?? "examples/case-management"}</code></div>
-          <button onClick={openLocalProject}><FolderOpen size={14} /><span><strong>打开本地项目</strong><small>选择包含 project.yaml 的目录</small></span></button>
-          <button onClick={createLocalProject}><Plus size={14} /><span><strong>创建新项目</strong><small>生成标准目录与 project.yaml</small></span></button>
-          <i />
-          <button onClick={launchMcp}><Zap size={14} /><span><strong>启动 Local MCP</strong><small>当前状态：{mcpState}</small></span><StatusDot tone={mcpState === "running" ? "success" : mcpState === "unavailable" ? "danger" : "neutral"}>{mcpState}</StatusDot></button>
+          {!webMode ? <>
+            <button onClick={openLocalProject}><FolderOpen size={14} /><span><strong>打开本地项目</strong><small>选择包含 project.yaml 的目录</small></span></button>
+            <button onClick={createLocalProject}><Plus size={14} /><span><strong>创建新项目</strong><small>生成标准目录与 project.yaml</small></span></button>
+            <i />
+            <button onClick={launchMcp}><Zap size={14} /><span><strong>启动 Local MCP</strong><small>当前状态：{mcpState}</small></span><StatusDot tone={mcpState === "running" ? "success" : mcpState === "unavailable" ? "danger" : "neutral"}>{mcpState}</StatusDot></button>
+          </> : <button onClick={() => { setShowProjectMenu(false); setWebProjectId(undefined); setPages([]); setBoard(defaultBoardFromPages([])); }}><FolderOpen size={14} /><span><strong>返回项目列表</strong><small>切换到其他云端项目</small></span></button>}
         </div> : null}
       </div>
       <div className="studio-title-actions">
@@ -1602,7 +1612,7 @@ window.addEventListener('DOMContentLoaded', function () {
           <button onClick={() => setShowSettings(false)} aria-label="关闭设置"><X size={14} /></button>
         </header>
         <div className="settings-body">
-          {!isDesktopRuntime() ? <div className="settings-note">当前是浏览器体验模式，不能读写本地项目。请在桌面 App 中打开或创建项目后连接 Codex。</div>
+          {!isDesktopRuntime() ? <div className="settings-note">{webMode ? "网页端连接 Codex：回到“我的项目”页复制 API Token，再在 ~/.codex/config.toml 配置 url = http://127.0.0.1:8787/mcp 与 bearer_token_env_var = PROTOTYPE_STUDIO_TOKEN。" : "当前是浏览器体验模式，不能读写本地项目。请在桌面 App 中打开或创建项目后连接 Codex。"}</div>
             : !mcpConnection ? <div className="settings-note">正在读取连接信息…</div>
             : <>
                 <div className="settings-row"><span>项目目录</span><code>{mcpConnection.projectRoot ?? "未打开项目"}</code></div>

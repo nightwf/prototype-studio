@@ -46,6 +46,10 @@ export class ProjectSpaceManager {
     return resolve(this.spacesBaseDir, projectId);
   }
 
+  private async touchProject(projectId: string): Promise<void> {
+    await this.metadata.updateProject(projectId, {});
+  }
+
   async requireProject(userId: string, projectId: string): Promise<ProjectRow> {
     const row = await this.metadata.getProjectById(projectId);
     if (!row) throw new SpaceError("NOT_FOUND", "项目不存在。");
@@ -111,23 +115,29 @@ export class ProjectSpaceManager {
       throw new SpaceError("INVALID_INPUT", "页面 DSL 未通过校验。", validation.errors);
     }
     await writePage(row.spacePath, dsl);
+    await this.touchProject(projectId);
     return { id: dsl.page.id, title: dsl.page.title };
   }
 
   async applyPageCommands(userId: string, projectId: string, pageId: string, input: Omit<ExecuteCommandsInput, "dsl">) {
     const row = await this.requireProject(userId, projectId);
-    return executeProjectCommands(row.spacePath, pageId, input);
+    const result = await executeProjectCommands(row.spacePath, pageId, input);
+    await this.touchProject(projectId);
+    return result;
   }
 
   async putPageSnapshot(userId: string, projectId: string, pageId: string, dsl: PageDSL, input: PersistPageSnapshotInput) {
     const row = await this.requireProject(userId, projectId);
     if (dsl.page.id !== pageId) throw new SpaceError("INVALID_INPUT", "page.id 与 URL 不一致。");
-    return persistPageSnapshot(row.spacePath, dsl, input);
+    const result = await persistPageSnapshot(row.spacePath, dsl, input);
+    await this.touchProject(projectId);
+    return result;
   }
 
   async deletePage(userId: string, projectId: string, pageId: string): Promise<void> {
     const row = await this.requireProject(userId, projectId);
     await deletePage(row.spacePath, pageId);
+    await this.touchProject(projectId);
   }
 
   async getBoard(userId: string, projectId: string) {
@@ -137,7 +147,9 @@ export class ProjectSpaceManager {
 
   async applyBoardCommands(userId: string, projectId: string, input: ExecuteBoardCommandsInput) {
     const row = await this.requireProject(userId, projectId);
-    return executeBoardCommands(row.spacePath, input);
+    const result = await executeBoardCommands(row.spacePath, input);
+    await this.touchProject(projectId);
+    return result;
   }
 
   async revisions(userId: string, projectId: string) {

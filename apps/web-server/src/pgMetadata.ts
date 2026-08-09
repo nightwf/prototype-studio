@@ -104,7 +104,7 @@ export class PostgresMetadataStore implements MetadataStore {
 
   async listProjectsByOwner(ownerId: string): Promise<ProjectRow[]> {
     const result = await this.pool.query(
-      "select p.* from projects p where p.owner_id = $1 or exists (select 1 from project_members m where m.project_id = p.id and m.user_id = $1) order by p.created_at",
+      "select p.* from projects p where p.owner_id = $1 or exists (select 1 from project_members m where m.project_id = p.id and m.user_id = $1) order by p.updated_at desc",
       [ownerId]
     );
     return result.rows.map(mapProject);

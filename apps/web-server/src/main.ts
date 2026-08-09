@@ -14,7 +14,7 @@ async function main(): Promise<void> {
   await mkdir(spacesDir, { recursive: true });
   const metadata = process.env.DATABASE_URL
     ? new PostgresMetadataStore(process.env.DATABASE_URL)
-    : new MemoryMetadataStore();
+    : new MemoryMetadataStore(process.env.METADATA_FILE ?? join(process.cwd(), "data", "metadata.json"));
   if (metadata instanceof PostgresMetadataStore) await metadata.migrate();
   const spaces = new ProjectSpaceManager(metadata, spacesDir);
   const app = await buildApp({ metadata, spaces, inviteCodes, baseUrl });

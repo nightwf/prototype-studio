@@ -156,4 +156,16 @@ describe("web server project spaces", () => {
     });
     expect([400, 409]).toContain(duplicate.statusCode);
   });
+
+  it("lists projects ordered by most recent update first", async () => {
+    const { app } = await testApp();
+    const { cookie } = await registerAndLogin(app, "排序", "sort@example.com");
+    const auth = { cookie };
+    const a = (await app.inject({ method: "POST", url: "/api/projects", payload: { name: "A" }, headers: auth })).json().project.id as string;
+    const b = (await app.inject({ method: "POST", url: "/api/projects", payload: { name: "B" }, headers: auth })).json().project.id as string;
+    await app.inject({ method: "POST", url: `/api/projects/${a}/pages`, payload: structuredClone(caseListExample), headers: auth });
+
+    const list = (await app.inject({ method: "GET", url: "/api/projects", headers: auth })).json().projects as Array<{ id: string }>;
+    expect(list.map((project) => project.id)).toEqual([a, b]);
+  });
 });
