@@ -1,8 +1,11 @@
 import type { BoardCommand, BoardDSL, Command, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
+import { isDesktopRuntime } from "./desktopBridge";
 
 const apiBase = (import.meta.env.VITE_WEB_API as string | undefined)?.replace(/\/+$/, "") ?? "";
 
-export const webMode = Boolean(apiBase);
+// 网页端部署（浏览器打开）始终走云端登录/项目流程；
+// 只有桌面 App（Tauri）里才是本地项目模式。
+export const webMode = Boolean(apiBase) || !isDesktopRuntime();
 
 let apiToken = (typeof localStorage !== "undefined" ? localStorage.getItem("ps_api_token") : null) ?? "";
 
