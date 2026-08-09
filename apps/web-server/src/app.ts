@@ -87,12 +87,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return;
     }
     const userId = randomUUID();
+    const passwordHash = await hashPassword(body.password);
+    const user = await options.metadata.createUser(body.name.trim(), body.email.trim().toLowerCase(), passwordHash, userId);
     if (!(await options.metadata.consumeInvite(body.inviteCode, userId))) {
+      await options.metadata.deleteUser(userId);
       reply.code(400).send({ ok: false, error: "INVALID_INVITE", message: "邀请码无效或已被使用。" });
       return;
     }
-    const passwordHash = await hashPassword(body.password);
-    const user = await options.metadata.createUser(body.name.trim(), body.email.trim().toLowerCase(), passwordHash, userId);
     reply.code(201).send({ ok: true, user: { id: user.id, name: user.name, email: user.email } });
   });
 

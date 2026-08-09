@@ -43,6 +43,10 @@ export class PostgresMetadataStore implements MetadataStore {
     return mapUser(result.rows[0]);
   }
 
+  async deleteUser(id: string): Promise<void> {
+    await this.pool.query("delete from users where id = $1", [id]);
+  }
+
   async getUserByEmail(email: string): Promise<User | undefined> {
     const result = await this.pool.query("select * from users where email = $1", [email]);
     return result.rows[0] ? mapUser(result.rows[0]) : undefined;

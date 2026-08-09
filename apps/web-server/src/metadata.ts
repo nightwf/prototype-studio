@@ -45,6 +45,7 @@ export interface ShareLinkRow {
 
 export interface MetadataStore {
   createUser(name: string, email: string, passwordHash: string, id?: string): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserById(id: string): Promise<User | undefined>;
   createInvite(code: string): Promise<void>;
@@ -119,6 +120,11 @@ export class MemoryMetadataStore implements MetadataStore {
     this.users.set(user.id, user);
     await this.persist();
     return user;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    this.users.delete(id);
+    await this.persist();
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
