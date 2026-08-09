@@ -262,7 +262,7 @@ export function BoardRenderer({
             <div
               className="board-page-body"
               ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}
-              onClick={(event) => {
+              onClickCapture={(event) => {
                 if (!picking) return;
                 event.stopPropagation();
                 const target = (event.target as HTMLElement).closest?.("[data-component-id]") as HTMLElement | null;
