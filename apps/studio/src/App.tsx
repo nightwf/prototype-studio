@@ -910,6 +910,8 @@ export function App() {
         source: "manual",
         operator: "jojo"
       });
+      // 先本地乐观更新，保证画布拖拽等交互即时反馈；
+      // 服务端成功后以服务端返回为准，失败时重新读取恢复一致。
       setBoard(result.board);
       if (webMode && webProjectId) {
         await webSpace.boardCommands(webProjectId, board.revision, commands, "manual", "jojo");
@@ -921,7 +923,16 @@ export function App() {
       toast("success", message, `画布 Revision ${result.board.revision}`);
       return true;
     } catch (error) {
-      toast("danger", "画布修改未执行", error instanceof Error ? error.message : "未知错误");
+      // 画布可能已被其他会话（另一个标签页 / Codex）修改：先重新读取最新画布，
+      // 避免本地乐观状态与服务端版本继续偏离。
+      if (webMode && webProjectId) {
+        try {
+          const fresh = await webSpace.board(webProjectId);
+          setBoard(fresh.board);
+        } catch { /* 忽略重新读取失败，保留当前状态 */ }
+      }
+      const detail = error instanceof Error ? error.message : "未知错误";
+      toast("danger", "画布修改未执行", `${detail} 已自动重新读取画布，请重试刚才的操作。`);
       return false;
     }
   }, [board, projectRoot, toast, webProjectId]);
