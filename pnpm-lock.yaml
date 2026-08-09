@@ -130,6 +130,9 @@ importers:
       '@fastify/cors':
         specifier: ^11.3.0
         version: 11.3.0
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.30.0
+        version: 1.30.0(zod@3.25.76)
       '@prototype-studio/command-engine':
         specifier: workspace:^
         version: link:../../packages/command-engine
@@ -145,6 +148,9 @@ importers:
       '@prototype-studio/renderer':
         specifier: workspace:^
         version: link:../../packages/renderer
+      '@prototype-studio/requirement-engine':
+        specifier: workspace:^
+        version: link:../../packages/requirement-engine
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
@@ -160,6 +166,9 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.8(react@19.2.8)
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       '@types/archiver':
         specifier: ^8.0.0

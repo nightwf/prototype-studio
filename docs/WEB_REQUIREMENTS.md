@@ -109,7 +109,7 @@ Prototype Studio 网页端是一个**云托管、多项目、可分享**的需�
 
 - 协议：Streamable HTTP（Codex 原生支持），Bearer Token 鉴权；
 - **Codex 只配置一次**（指向服务端 URL），项目通过工具参数 `project_id` 选择；
-- 工具清单：`prototype_list_projects`、`prototype_create_project`、`prototype_get_project`、`prototype_list_pages`、`prototype_get_page`、`prototype_get_dsl`、`prototype_get_component`、`prototype_get_requirement`、`prototype_get_board`、`prototype_create_page`、`prototype_delete_page`、`prototype_update_component`、`prototype_move_component`、`prototype_delete_component`、`prototype_create_overlay`、`prototype_update_overlay`、`prototype_apply_commands`、`prototype_apply_board_commands`、`prototype_validate_dsl`、`prototype_get_preview_url`、`prototype_render_preview`；
+- 工具清单（已实现）：`prototype_list_projects`、`prototype_create_project`、`prototype_create_project_from_requirement`、`prototype_get_project`、`prototype_list_pages`、`prototype_get_page`、`prototype_get_dsl`、`prototype_get_component`、`prototype_get_requirement`、`prototype_get_board`、`prototype_create_page`、`prototype_delete_page`、`prototype_apply_commands`、`prototype_apply_board_commands`、`prototype_validate_dsl`、`prototype_get_preview_url`、`prototype_render_preview`（组件级便捷工具 update/move/delete_component 与 overlay 系列可由 `apply_commands` 表达，后续按需补充）；
 - 安全：路径永不暴露给 Codex；`project_id` 必须属于调用者权限范围；写操作与服务端共用版本链。
 
 ### 5.7 分享与预览

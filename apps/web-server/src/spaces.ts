@@ -43,7 +43,7 @@ export class ProjectSpaceManager {
     return resolve(this.spacesBaseDir, projectId);
   }
 
-  private async requireProject(userId: string, projectId: string): Promise<ProjectRow> {
+  async requireProject(userId: string, projectId: string): Promise<ProjectRow> {
     const row = await this.metadata.getProjectById(projectId);
     if (!row) throw new SpaceError("NOT_FOUND", "项目不存在。");
     if (row.status !== "active") throw new SpaceError("ARCHIVED", "项目已归档。");
@@ -158,19 +158,23 @@ export class ProjectSpaceManager {
     return entries;
   }
 
-  async requirements(userId: string, projectId: string, fileName: string) {
+  async requirements(userId: string, projectId: string, idOrFile: string) {
     const row = await this.requireProject(userId, projectId);
     const requirementsRoot = resolve(row.spacePath, "requirements");
-    const target = resolve(requirementsRoot, fileName);
-    if (target !== requirementsRoot && !target.startsWith(`${requirementsRoot}${sep}`)) {
-      throw new SpaceError("INVALID_INPUT", "需求文件名越界。");
+    const candidates = idOrFile.includes(".") ? [idOrFile] : [`${idOrFile}.md`, `${idOrFile}.txt`, `${idOrFile}.requirement.json`];
+    for (const candidate of candidates) {
+      const target = resolve(requirementsRoot, candidate);
+      if (target === requirementsRoot || !target.startsWith(`${requirementsRoot}${sep}`)) {
+        throw new SpaceError("INVALID_INPUT", "需求文件名越界。");
+      }
+      try {
+        const content = await readFile(target, "utf8");
+        return { file: candidate, content: content.slice(0, 25_000), truncated: content.length > 25_000 };
+      } catch {
+        // try next candidate
+      }
     }
-    try {
-      const content = await readFile(target, "utf8");
-      return { file: fileName, content: content.slice(0, 25_000), truncated: content.length > 25_000 };
-    } catch {
-      throw new SpaceError("NOT_FOUND", "需求文件不存在。");
-    }
+    throw new SpaceError("NOT_FOUND", "需求文件不存在。");
   }
 
   async productPackage(userId: string, projectId: string) {

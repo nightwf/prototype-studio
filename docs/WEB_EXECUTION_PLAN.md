@@ -127,6 +127,8 @@ audit_index(id bigserial pk, project_id uuid fk, object_type text, revision_id t
 - 新增 list_projects / create_project（含从需求创建）；
 - Codex 联调烟测（一次配置、跨项目操作、权限隔离验证）。
 
+> ✅ 已完成：`/mcp` 挂载于 web-server（Streamable HTTP）；每个会话按 Authorization Bearer 绑定用户；工具：list_projects / create_project / create_project_from_requirement / get_project / list_pages / get_page / get_dsl / get_component / get_requirement / get_board / create_page / delete_page / apply_commands / apply_board_commands / validate_dsl / get_preview_url / render_preview；真实 HTTP MCP 客户端烟测（含跨用户 FORBIDDEN 与无效 token UNAUTHORIZED）通过；预览 URL 支持网页端按 `?project=&page=` 直接打开。
+
 ### Phase 4：分享与导出（1–2 天）
 
 - 只读分享链接、匿名预览；

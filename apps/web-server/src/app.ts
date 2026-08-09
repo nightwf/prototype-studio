@@ -8,11 +8,14 @@ import { MetadataError } from "./metadata";
 import { hashPassword, newToken, verifyPassword } from "./auth";
 import { ProjectSpaceManager, SpaceError } from "./spaces";
 import { renderBoardHtml } from "./export";
+import { handleCloudMcpRequest } from "./mcp/http";
+import { buildCloudMcpServer } from "./mcp/server";
 
 export interface AppOptions {
   metadata: MetadataStore;
   spaces: ProjectSpaceManager;
   inviteCodes?: string[];
+  baseUrl?: string;
 }
 
 const projectIdPattern = /^[a-zA-Z0-9-]{8,64}$/;
@@ -41,6 +44,7 @@ function toHttpError(error: unknown): { status: number; code: string; message: s
 
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  const baseUrl = options.baseUrl ?? "http://127.0.0.1:8787";
   await app.register(cookie);
   await app.register(cors, { origin: true, credentials: true, allowedHeaders: ["content-type", "authorization"] });
 
@@ -265,6 +269,18 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return { ok: true, zip: zip.toString("base64"), bytes: zip.length };
     }
     reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "导出类型仅支持 product-package 或 html。" });
+  });
+
+  app.route({
+    method: ["GET", "POST", "DELETE"],
+    url: "/mcp",
+    handler: async (request, reply) => {
+      reply.hijack();
+      await handleCloudMcpRequest(request.raw, reply.raw, {
+        parsedBody: request.body,
+        createServer: (token) => buildCloudMcpServer({ metadata: options.metadata, spaces: options.spaces, baseUrl, token })
+      });
+    }
   });
 
   app.setErrorHandler((error, request, reply) => {

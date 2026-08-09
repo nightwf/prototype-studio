@@ -1136,9 +1136,13 @@ window.addEventListener('DOMContentLoaded', function () {
   useEffect(() => {
     if (!webMode) return;
     void webAuth.me().then((result) => {
-      if (result.user) setWebSession(result.user);
+      if (result.user) {
+        setWebSession(result.user);
+        const project = new URLSearchParams(window.location.search).get("project");
+        if (project) void loadWebProject(project);
+      }
     });
-  }, []);
+  }, [loadWebProject]);
 
   const updateSelected = (changes: Partial<UIComponent>) => {
     if (!selected) return;
