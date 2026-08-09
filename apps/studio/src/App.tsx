@@ -103,6 +103,8 @@ import {
   type RequirementTemplates
 } from "@prototype-studio/requirement-engine/browser";
 import type { RequirementModel } from "@prototype-studio/dsl-schema";
+import { webAuth, webMode, webSpace, type WebUser } from "./webBridge";
+import { AuthScreen, ProjectsScreen } from "./WebScreens";
 
 type ToastTone = "success" | "warning" | "danger" | "info";
 interface Toast { id: number; tone: ToastTone; title: string; detail?: string }
@@ -435,6 +437,8 @@ export function App() {
   const [boardDraft, setBoardDraft] = useState<Record<string, unknown>>({});
   const boardSeedDone = useRef(false);
   const boardPanRef = useRef<{ x: number; y: number; startX: number; startY: number } | undefined>(undefined);
+  const [webSession, setWebSession] = useState<WebUser>();
+  const [webProjectId, setWebProjectId] = useState<string>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   const currentPage = useMemo(() => pages.find((page) => page.page.id === currentPageId), [currentPageId, pages]);
@@ -456,6 +460,29 @@ export function App() {
     setToasts((items) => [...items.slice(-2), { id, tone, title, detail }]);
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3300);
   }, []);
+
+  const loadWebProject = useCallback(async (projectId: string) => {
+    try {
+      const tree = await webSpace.tree(projectId);
+      const loadedPages: PageDSL[] = [];
+      for (const summary of tree.pages) {
+        loadedPages.push((await webSpace.getPage(projectId, summary.id)).dsl);
+      }
+      setPages(loadedPages);
+      setBoard(tree.board);
+      setProjectName(tree.manifest.name);
+      setProjectRoot(`web://${projectId}`);
+      setCurrentPageId(loadedPages[0]?.page.id ?? null);
+      setSelectedId("");
+      setHistory([]);
+      setRedoStack([]);
+      setViewMode("canvas");
+      setWebProjectId(projectId);
+      toast("success", "项目已打开", tree.manifest.name);
+    } catch (error) {
+      toast("danger", "无法打开项目", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [toast]);
 
   const copyText = useCallback(async (text: string) => {
     try {
@@ -643,7 +670,11 @@ export function App() {
       return;
     }
     try {
-      if (projectRoot && isDesktopRuntime()) await createDesktopPage(page.page.id, stringifyYaml(page, { lineWidth: 0 }));
+      if (webMode && webProjectId) {
+        await webSpace.createPage(webProjectId, page);
+      } else if (projectRoot && isDesktopRuntime()) {
+        await createDesktopPage(page.page.id, stringifyYaml(page, { lineWidth: 0 }));
+      }
       setPages((items) => [...items, page]);
       setCurrentPageId(page.page.id);
       setSelectedId("");
@@ -656,7 +687,7 @@ export function App() {
     } catch (error) {
       toast("danger", "无法创建页面", error instanceof Error ? error.message : "本地页面写入失败");
     }
-  }, [newPageTitle, newPageType, pages, projectRoot, toast]);
+  }, [newPageTitle, newPageType, pages, projectRoot, toast, webProjectId]);
 
   const renamePage = useCallback((pageId: string) => {
     const page = pages.find((item) => item.page.id === pageId);
@@ -672,7 +703,11 @@ export function App() {
         if (!trimmed || trimmed === page.page.title) return;
         const renamed: PageDSL = { ...page, revision: page.revision + 1, page: { ...page.page, title: trimmed } };
         try {
-          if (projectRoot && isDesktopRuntime()) await renameDesktopPage(pageId, trimmed);
+          if (webMode && webProjectId) {
+            await webSpace.putPage(webProjectId, pageId, renamed, page.revision, "manual", "jojo");
+          } else if (projectRoot && isDesktopRuntime()) {
+            await renameDesktopPage(pageId, trimmed);
+          }
           setPages((items) => items.map((item) => item.page.id === pageId ? renamed : item));
           toast("success", "页面已重命名", `${page.page.title} → ${trimmed}`);
         } catch (error) {
@@ -680,7 +715,7 @@ export function App() {
         }
       }
     });
-  }, [askText, pages, projectRoot, toast]);
+  }, [askText, pages, projectRoot, toast, webProjectId]);
 
   const deletePage = useCallback((pageId: string) => {
     const index = pages.findIndex((item) => item.page.id === pageId);
@@ -694,7 +729,11 @@ export function App() {
       danger: true,
       onConfirm: async () => {
         try {
-          if (projectRoot && isDesktopRuntime()) await trashDesktopPage(pageId);
+          if (webMode && webProjectId) {
+            await webSpace.deletePage(webProjectId, pageId);
+          } else if (projectRoot && isDesktopRuntime()) {
+            await trashDesktopPage(pageId);
+          }
           const remaining = pages.filter((item) => item.page.id !== pageId);
           setPages(remaining);
           if (currentPageId === pageId) {
@@ -710,7 +749,7 @@ export function App() {
         }
       }
     });
-  }, [askConfirm, currentPageId, pages, projectRoot, toast]);
+  }, [askConfirm, currentPageId, pages, projectRoot, toast, webProjectId]);
 
   const movePage = useCallback(async (pageId: string, targetIndex: number) => {
     const fromIndex = pages.findIndex((item) => item.page.id === pageId);
@@ -792,7 +831,7 @@ export function App() {
   }, [currentPageId, projectRoot, toast]);
 
   useEffect(() => {
-    if (isDesktopRuntime() || boardSeedDone.current) return;
+    if (isDesktopRuntime() || webMode || boardSeedDone.current) return;
     boardSeedDone.current = true;
     if (pages.length) setBoard(defaultBoardFromPages(pages));
   }, [pages]);
@@ -807,7 +846,11 @@ export function App() {
   const runCommands = useCallback(async (commands: Command[], source: RevisionRecord["source"] = "manual", message = "修改已保存"): Promise<boolean> => {
     try {
       const result = executeCommands({ dsl, baseRevision: dsl.revision, commands, source, operator: source === "ai" ? "Codex" : "jojo" });
-      await persistDesktopPage(result.dsl, result.revision);
+      if (webMode && webProjectId) {
+        await webSpace.commands(webProjectId, result.dsl.page.id, dsl.revision, commands, source, source === "ai" ? "Codex" : "jojo");
+      } else {
+        await persistDesktopPage(result.dsl, result.revision);
+      }
       setDsl(result.dsl);
       setHistory((items) => [...items, result.revision]);
       setRedoStack([]);
@@ -817,7 +860,7 @@ export function App() {
       toast("danger", "修改未执行", error instanceof Error ? error.message : "未知错误");
       return false;
     }
-  }, [dsl, persistDesktopPage, toast]);
+  }, [dsl, persistDesktopPage, toast, webProjectId]);
 
   const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新"): Promise<boolean> => {
     try {
@@ -829,7 +872,11 @@ export function App() {
         operator: "jojo"
       });
       setBoard(result.board);
-      if (projectRoot && isDesktopRuntime()) {
+      if (webMode && webProjectId) {
+        await webSpace.boardCommands(webProjectId, board.revision, commands, "manual", "jojo");
+        const fresh = await webSpace.board(webProjectId);
+        setBoard(fresh.board);
+      } else if (projectRoot && isDesktopRuntime()) {
         await persistDesktopBoardRevision(stringifyYaml(result.board, { lineWidth: 0 }), result.revision);
       }
       toast("success", message, `画布 Revision ${result.board.revision}`);
@@ -838,7 +885,7 @@ export function App() {
       toast("danger", "画布修改未执行", error instanceof Error ? error.message : "未知错误");
       return false;
     }
-  }, [board, projectRoot, toast]);
+  }, [board, projectRoot, toast, webProjectId]);
 
   const boardPageMap = useMemo(() => {
     const map: Record<string, PageDSL> = {};
@@ -1057,7 +1104,20 @@ window.addEventListener('DOMContentLoaded', function () {
 </script>
 </body>
 </html>`;
-    if (projectRoot && isDesktopRuntime()) {
+    if (webMode && webProjectId) {
+      void webSpace.exportHtml(webProjectId)
+        .then((result) => {
+          const blob = new Blob([result.html], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = "prototype-board.html";
+          link.click();
+          URL.revokeObjectURL(url);
+          toast("success", "画布已导出", "已下载 prototype-board.html");
+        })
+        .catch((error) => toast("danger", "导出失败", error instanceof Error ? error.message : "未知错误"));
+    } else if (projectRoot && isDesktopRuntime()) {
       void exportDesktopBoardHtml(html)
         .then((path) => toast("success", "画布已导出", path))
         .catch((error) => toast("danger", "导出失败", error instanceof Error ? error.message : "请检查项目目录权限"));
@@ -1073,6 +1133,13 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   };
 
+  useEffect(() => {
+    if (!webMode) return;
+    void webAuth.me().then((result) => {
+      if (result.user) setWebSession(result.user);
+    });
+  }, []);
+
   const updateSelected = (changes: Partial<UIComponent>) => {
     if (!selected) return;
     const type = ["modal", "drawer", "popover"].includes(selected.type) ? "UPDATE_OVERLAY" : "UPDATE_COMPONENT";
@@ -1084,7 +1151,11 @@ window.addEventListener('DOMContentLoaded', function () {
     if (!target) return;
     try {
       const result = createRevertRevision(dsl, target, "jojo");
-      await persistDesktopPage(result.dsl, result.revision);
+      if (webMode && webProjectId) {
+        await webSpace.putPage(webProjectId, result.dsl.page.id, result.dsl, dsl.revision, "undo", "jojo");
+      } else {
+        await persistDesktopPage(result.dsl, result.revision);
+      }
       setDsl(result.dsl);
       setHistory((items) => [...items.slice(0, -1), result.revision]);
       setRedoStack((items) => [...items, target]);
@@ -1183,6 +1254,15 @@ window.addEventListener('DOMContentLoaded', function () {
     ...dsl.overlays
   ].filter(() => Boolean(currentPage));
 
+  if (webMode && !webSession) return <AuthScreen onAuthenticated={setWebSession} />;
+  if (webMode && webSession && !webProjectId) {
+    return <ProjectsScreen
+      user={webSession}
+      onOpenProject={(id) => void loadWebProject(id)}
+      onLogout={() => { void webAuth.logout(); setWebSession(undefined); }}
+    />;
+  }
+
   return <div className="studio-shell">
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
@@ -1202,6 +1282,7 @@ window.addEventListener('DOMContentLoaded', function () {
         <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!currentPage} onClick={() => setShowHistory(!showHistory)} active={showHistory}><History size={14} />版本 <span className="revision-badge">{currentPage?.revision ?? 0}</span></ToolButton>
+        {webMode ? <ToolButton compact title="返回项目列表" onClick={() => { setWebProjectId(undefined); setPages([]); setBoard(defaultBoardFromPages([])); }}><FolderOpen size={15} /></ToolButton> : null}
         <ToolButton><Share2 size={14} />分享</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
       </div>

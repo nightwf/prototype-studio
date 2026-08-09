@@ -72,6 +72,17 @@ describe("web server project spaces", () => {
     expect(commands.statusCode).toBe(200);
     expect(commands.json()).toMatchObject({ ok: true, revision: 2 });
 
+    const currentPage = await app.inject({ method: "GET", url: `/api/projects/${projectId}/pages/case-list`, headers: auth });
+    const pageDsl = currentPage.json().dsl as typeof caseListExample;
+    const snapshot = await app.inject({
+      method: "PUT",
+      url: `/api/projects/${projectId}/pages/case-list`,
+      payload: { content: { ...pageDsl, revision: 3, page: { ...pageDsl.page, title: "案件管理-改" } }, base_revision: 2 },
+      headers: auth
+    });
+    expect(snapshot.statusCode).toBe(200);
+    expect(snapshot.json()).toMatchObject({ ok: true, revision: 3 });
+
     const boardCommands = await app.inject({
       method: "POST",
       url: `/api/projects/${projectId}/board-commands`,

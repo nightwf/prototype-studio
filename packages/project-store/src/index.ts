@@ -349,6 +349,50 @@ export async function executeProjectCommands(
   return result;
 }
 
+export interface PersistPageSnapshotInput {
+  baseRevision: number;
+  source: RevisionSource;
+  operator: string;
+}
+
+/** Writes a page snapshot (undo/redo/rename/title edits) through the version chain with an empty command list. */
+export async function persistPageSnapshot(
+  root: string,
+  dsl: PageDSL,
+  input: PersistPageSnapshotInput
+): Promise<{ dsl: PageDSL; revision: RevisionRecord }> {
+  const current = await getPage(root, dsl.page.id);
+  if (input.baseRevision !== current.revision) {
+    throw new ProjectStoreError(
+      "REVISION_NOT_FOUND",
+      `页面当前 revision 为 ${current.revision}，但快照基于 ${input.baseRevision}。`,
+      { currentRevision: current.revision, baseRevision: input.baseRevision }
+    );
+  }
+  const validation = validateDSL(dsl);
+  if (!validation.valid) {
+    throw new ProjectStoreError("INVALID_DSL_FILE", "页面快照未通过 DSL 校验。", validation.errors);
+  }
+  if (dsl.revision !== current.revision + 1) {
+    throw new ProjectStoreError("INVALID_DSL_FILE", "页面快照 revision 必须是 baseRevision + 1。");
+  }
+  const revision: RevisionRecord = {
+    id: randomUUID(),
+    pageId: dsl.page.id,
+    revision: dsl.revision,
+    source: input.source,
+    operator: input.operator,
+    baseRevision: current.revision,
+    commands: [],
+    before: current,
+    after: dsl,
+    changedComponentIds: [],
+    createdAt: new Date().toISOString()
+  };
+  await persistRevision(root, dsl, revision);
+  return { dsl, revision };
+}
+
 export async function getRevision(root: string, pageId: string, revision: number): Promise<RevisionRecord> {
   const filePath = projectPath(root, `.prototype/revisions/${pageId}/${String(revision).padStart(6, "0")}.json`);
   if (!(await pathExists(filePath))) throw new ProjectStoreError("REVISION_NOT_FOUND", `找不到页面“${pageId}”的 revision ${revision}。`);

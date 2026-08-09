@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BoardRenderer } from "@prototype-studio/renderer";
 import type { BoardDSL, PageDSL } from "@prototype-studio/dsl-schema";
 
-const rendererSourceDir = fileURLToPath(new URL("../../../packages/renderer/src", import.meta.url));
+const rendererSourceDir = join(process.cwd(), "packages", "renderer", "src");
 
 export async function renderBoardHtml(board: BoardDSL, pages: Record<string, PageDSL>, title: string): Promise<string> {
   const [boardCss, rendererCss] = await Promise.all([

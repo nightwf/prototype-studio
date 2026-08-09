@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
+import cors from "@fastify/cors";
 import type { BoardCommand, Command, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
@@ -41,6 +42,7 @@ function toHttpError(error: unknown): { status: number; code: string; message: s
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   await app.register(cookie);
+  await app.register(cors, { origin: true, credentials: true, allowedHeaders: ["content-type", "authorization"] });
 
   for (const code of options.inviteCodes ?? ["PROTOTYPE-DEV"]) {
     await options.metadata.createInvite(code);
@@ -169,6 +171,29 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const dsl = request.body as PageDSL;
     const created = await options.spaces.createPage(user.id, projectIdOf(request.params), dsl);
     reply.code(201).send({ ok: true, page: created });
+  });
+
+  app.put("/api/projects/:projectId/pages/:pageId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { pageId?: string };
+    const body = request.body as { content?: PageDSL; base_revision?: number; source?: RevisionSource; operator?: string };
+    if (!body.content || typeof body.base_revision !== "number") {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "content 与 base_revision 为必填。" });
+      return;
+    }
+    const result = await options.spaces.putPageSnapshot(user.id, projectIdOf(request.params), params.pageId ?? "", body.content, {
+      baseRevision: body.base_revision,
+      source: body.source ?? "api",
+      operator: body.operator ?? user.name
+    });
+    return { ok: true, revision: result.revision.revision };
+  });
+
+  app.delete("/api/projects/:projectId/pages/:pageId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { pageId?: string };
+    await options.spaces.deletePage(user.id, projectIdOf(request.params), params.pageId ?? "");
+    return { ok: true };
   });
 
   app.post("/api/projects/:projectId/commands", async (request, reply) => {

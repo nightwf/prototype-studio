@@ -9,8 +9,11 @@ import {
   executeProjectCommands,
   getPage,
   openProject,
+  deletePage,
   readBoard,
+  persistPageSnapshot,
   writePage,
+  type PersistPageSnapshotInput,
   type ExecuteBoardCommandsInput
 } from "@prototype-studio/project-store";
 import type { ExecuteCommandsInput } from "@prototype-studio/command-engine";
@@ -111,6 +114,17 @@ export class ProjectSpaceManager {
   async applyPageCommands(userId: string, projectId: string, pageId: string, input: Omit<ExecuteCommandsInput, "dsl">) {
     const row = await this.requireProject(userId, projectId);
     return executeProjectCommands(row.spacePath, pageId, input);
+  }
+
+  async putPageSnapshot(userId: string, projectId: string, pageId: string, dsl: PageDSL, input: PersistPageSnapshotInput) {
+    const row = await this.requireProject(userId, projectId);
+    if (dsl.page.id !== pageId) throw new SpaceError("INVALID_INPUT", "page.id 与 URL 不一致。");
+    return persistPageSnapshot(row.spacePath, dsl, input);
+  }
+
+  async deletePage(userId: string, projectId: string, pageId: string): Promise<void> {
+    const row = await this.requireProject(userId, projectId);
+    await deletePage(row.spacePath, pageId);
   }
 
   async getBoard(userId: string, projectId: string) {

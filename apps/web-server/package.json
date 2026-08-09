@@ -7,11 +7,14 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "build": "tsup",
+    "start": "node dist/main.cjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config ../../vitest.config.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^11.3.0",
     "@prototype-studio/command-engine": "workspace:^",
     "@prototype-studio/dsl-schema": "workspace:^",
     "@prototype-studio/dsl-validator": "workspace:^",
@@ -26,6 +29,7 @@
   "devDependencies": {
     "@types/archiver": "^8.0.0",
     "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6"
+    "@types/react-dom": "^19.1.6",
+    "tsup": "^8.5.0"
   }
 }
