@@ -1,0 +1,16 @@
+{
+  "name": "@prototype-studio/command-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prototype-studio/dsl-schema": "workspace:*",
+    "@prototype-studio/dsl-validator": "workspace:*"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "name": "@prototype-studio/dsl-schema",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./example": "./src/example.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

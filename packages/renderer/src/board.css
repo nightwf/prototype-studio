@@ -1,0 +1,39 @@
+.board-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.board-links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.board-object { position: absolute; box-sizing: border-box; border: 1px solid #9aa7ad; border-radius: 9px; background: white; box-shadow: 0 10px 30px rgba(26, 35, 42, 0.14); }
+.board-object.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35); }
+.board-object--page { display: flex; flex-direction: column; overflow: hidden; }
+.board-page-head { height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: #222b32; color: #c7d1d6; font-size: 10px; }
+.board-page-head small { color: #7f8c94; font: 8px/1 var(--ps-font-mono); }
+.board-page-body { flex: 1; overflow: auto; background: #f2f3f1; }
+.board-page-missing { padding: 20px; color: #b04a5a; font-size: 11px; }
+.board-object--note { padding: 14px; overflow: auto; background: #fff8ec; border-color: #e4c98b; }
+.board-note-text { white-space: pre-wrap; color: #7a5b1d; font-size: 11px; line-height: 1.6; }
+.board-object--flowchart, .board-object--er { overflow: hidden; background: #101820; border-color: #33424d; }
+.board-flowchart, .board-er { position: relative; width: 100%; height: 100%; }
+.board-flowchart-edges, .board-er-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.board-flowchart-nodes { position: absolute; inset: 0; }
+.board-flow-node { position: absolute; left: 50%; width: 160px; margin-left: -80px; height: 40px; display: grid; place-items: center; border: 1px solid #22d3ee; border-radius: 8px; background: rgba(8, 51, 68, 0.5); color: #a5f3fc; font-size: 10px; }
+.board-er-entities { position: absolute; inset: 0; display: flex; gap: 16px; padding: 12px; }
+.board-er-entity { min-width: 130px; border: 1px solid #a78bfa; border-radius: 8px; background: rgba(76, 29, 149, 0.25); padding: 8px; }
+.board-er-entity strong { display: block; margin-bottom: 6px; color: #ddd6fe; font-size: 10px; }
+.board-er-entity span { display: block; color: #c4b5fd; font-size: 8px; line-height: 1.7; }
+.board-generic { height: 100%; overflow: auto; padding: 12px; background: #101820; color: #94a3b8; }
+.board-generic strong { display: block; margin-bottom: 8px; color: #e2e8f0; font: 700 10px/1 var(--ps-font-mono); text-transform: uppercase; }
+.board-generic pre { margin: 0; white-space: pre-wrap; word-break: break-all; font: 8px/1.5 var(--ps-font-mono); }
+.board-marker-pin { position: absolute; z-index: 30; width: 26px; height: 26px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; color: white; font: 700 11px/1 var(--ps-font-mono); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); cursor: pointer; }
+.board-marker-pin.is-selected { outline: 2px solid rgba(59, 130, 246, 0.7); outline-offset: 2px; }
+.board-marker-pin--orange { background: #f97316; }
+.board-marker-pin--blue { background: #3b82f6; }
+.board-marker-pin--green { background: #22c55e; }
+.board-marker-pin--red { background: #ef4444; }
+.board-marker-pin--purple { background: #a855f7; }
+.board-annotation-panel { position: absolute; top: 0; width: 300px; max-height: 480px; overflow: auto; border: 1px solid #3a4650; border-radius: 10px; background: #141b21; color: #dfe4e7; box-shadow: 0 18px 50px rgba(5, 11, 15, 0.3); }
+.board-annotation-head { padding: 11px 13px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #2b353d; }
+.board-annotation-head strong { font-size: 11px; }
+.board-annotation-head span { color: #7f8c94; font: 8px/1 var(--ps-font-mono); }
+.board-annotation-item { width: 100%; min-height: 44px; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border: 0; border-bottom: 1px solid #242e35; background: transparent; color: #cfd6da; text-align: left; cursor: pointer; }
+.board-annotation-item:hover { background: #1d2730; }
+.board-annotation-item.is-selected { background: #1a2f42; }
+.board-annotation-item i { position: static; display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; }
+.board-annotation-item span { font-size: 9px; line-height: 1.5; }

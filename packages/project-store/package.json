@@ -1,0 +1,19 @@
+{
+  "name": "@prototype-studio/project-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prototype-studio/command-engine": "workspace:*",
+    "@prototype-studio/dsl-schema": "workspace:*",
+    "@prototype-studio/dsl-validator": "workspace:*",
+    "chokidar": "^4.0.3",
+    "yaml": "^2.8.0"
+  }
+}

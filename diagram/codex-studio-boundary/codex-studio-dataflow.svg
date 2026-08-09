@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 920">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&amp;display=swap');
+    text { font-family: 'JetBrains Mono', 'Noto Sans SC', 'PingFang SC', sans-serif; }
+  </style>
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+    </pattern>
+    <marker id="arrow-amber" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#fb923c"/>
+    </marker>
+    <marker id="arrow-open-orange" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polyline points="0 0, 10 3.5, 0 7" fill="none" stroke="#fb923c" stroke-width="1.5"/>
+    </marker>
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-emerald" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-slate" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect width="100%" height="100%" fill="#0f172a"/>
+  <rect width="100%" height="100%" fill="url(#grid)"/>
+
+  <!-- Title -->
+  <text x="40" y="34" fill="white" font-size="16" font-weight="700">Codex × Prototype Studio · 数据流与职责边界</text>
+  <text x="40" y="54" fill="#94a3b8" font-size="10">需求理解在 Codex，产品表达在 Studio；Local MCP 是唯一交互通道，UI DSL 是唯一事实源</text>
+
+  <!-- Region boundaries -->
+  <rect x="40" y="80" width="340" height="640" rx="12" fill="none" stroke="#fbbf24" stroke-width="1" stroke-dasharray="8,4"/>
+  <text x="52" y="96" fill="#fbbf24" font-size="10" font-weight="600">CODEX · 外部 AI 代理</text>
+  <rect x="610" y="80" width="670" height="640" rx="12" fill="none" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
+  <text x="622" y="96" fill="#22d3ee" font-size="10" font-weight="600">PROTOTYPE STUDIO · 本地优先桌面应用</text>
+
+  <!-- MCP boundary line -->
+  <line x1="440" y1="80" x2="440" y2="720" stroke="#fb923c" stroke-width="1" stroke-dasharray="6,4" opacity="0.8"/>
+
+  <!-- ===== Codex region arrows ===== -->
+  <path d="M65,184 L52,184 L52,344 L65,344" fill="none" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-slate)"/>
+  <text x="60" y="240" fill="#94a3b8" font-size="8">① 读取 / OCR / 提取</text>
+  <path d="M215,274 L215,300" fill="none" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-slate)"/>
+  <text x="222" y="290" fill="#94a3b8" font-size="8">澄清 / 补充</text>
+  <path d="M215,388 L215,420" fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+  <text x="222" y="406" fill="#fbbf24" font-size="8">整理输出</text>
+  <path d="M65,388 L52,388 L52,575 L65,575" fill="none" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+  <text x="60" y="480" fill="#fbbf24" font-size="8">生成命令</text>
+
+  <!-- Boundary arrows: Codex -> Studio -->
+  <path d="M355,460 L630,150" fill="none" stroke="#fbbf24" stroke-width="1.8" marker-end="url(#arrow-amber)"/>
+  <text x="460" y="318" fill="#fbbf24" font-size="8" font-weight="600">② 结构化页面模板</text>
+  <text x="460" y="330" fill="#fbbf24" font-size="7">YAML / JSON · 字段级定义</text>
+  <path d="M355,575 L630,402" fill="none" stroke="#fbbf24" stroke-width="1.8" marker-end="url(#arrow-amber)"/>
+  <text x="400" y="560" fill="#fbbf24" font-size="8" font-weight="600">③ AI 结构化 Command</text>
+
+  <!-- Boundary arrow: Studio -> Codex (return) -->
+  <path d="M900,444 L950,444 L950,680 L380,680" fill="none" stroke="#fb923c" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrow-open-orange)"/>
+  <text x="400" y="672" fill="#fb923c" font-size="8">④ 状态回传 / Preview URL</text>
+
+  <!-- MCP panel -->
+  <rect x="355" y="100" width="175" height="160" rx="8" fill="#0f172a"/>
+  <rect x="355" y="100" width="175" height="160" rx="8" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="442.5" y="122" fill="white" font-size="11" font-weight="600" text-anchor="middle">Local MCP · stdio</text>
+  <text x="442.5" y="140" fill="#94a3b8" font-size="8" text-anchor="middle">仅限当前 Project Root</text>
+  <text x="442.5" y="156" fill="#94a3b8" font-size="8" text-anchor="middle">Codex ↔ Studio 唯一通道</text>
+  <text x="442.5" y="174" fill="#fbbf24" font-size="7" text-anchor="middle">读 · get_project / get_dsl</text>
+  <text x="442.5" y="188" fill="#fbbf24" font-size="7" text-anchor="middle">get_requirement / get_component</text>
+  <text x="442.5" y="202" fill="#fbbf24" font-size="7" text-anchor="middle">get_preview_url</text>
+  <text x="442.5" y="218" fill="#fbbf24" font-size="7" text-anchor="middle">写 · apply_commands</text>
+  <text x="442.5" y="232" fill="#fbbf24" font-size="7" text-anchor="middle">update / move / delete_component</text>
+  <text x="442.5" y="246" fill="#fbbf24" font-size="7" text-anchor="middle">create_page / create_overlay</text>
+  <text x="390" y="292" fill="#fb7185" font-size="8">禁止整页覆盖 DSL / 绕过 Revision</text>
+
+  <!-- ===== Codex region boxes ===== -->
+  <rect x="65" y="120" width="290" height="64" rx="6" fill="#0f172a"/>
+  <rect x="65" y="120" width="290" height="64" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="210" y="144" fill="white" font-size="11" font-weight="600" text-anchor="middle">原始需求文档</text>
+  <text x="210" y="161" fill="#94a3b8" font-size="9" text-anchor="middle">DOCX / PDF / 扫描件 / TAPD</text>
+
+  <rect x="65" y="210" width="290" height="64" rx="6" fill="#0f172a"/>
+  <rect x="65" y="210" width="290" height="64" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="210" y="234" fill="white" font-size="11" font-weight="600" text-anchor="middle">产品经理 · 意图 / 澄清</text>
+  <text x="210" y="251" fill="#94a3b8" font-size="9" text-anchor="middle">口头补充 · 需求确认 · 反馈</text>
+
+  <rect x="65" y="300" width="290" height="88" rx="6" fill="#0f172a"/>
+  <rect x="65" y="300" width="290" height="88" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="210" y="324" fill="white" font-size="11" font-weight="600" text-anchor="middle">Codex · 读取 / 理解 / 决策</text>
+  <text x="210" y="342" fill="#94a3b8" font-size="9" text-anchor="middle">OCR · 提取 · 需求整理 · 拆解</text>
+  <text x="210" y="358" fill="#94a3b8" font-size="9" text-anchor="middle">不直接写项目文件</text>
+
+  <rect x="65" y="420" width="290" height="80" rx="6" fill="#0f172a"/>
+  <rect x="65" y="420" width="290" height="80" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="210" y="444" fill="white" font-size="11" font-weight="600" text-anchor="middle">产出 · 页面模板 + 需求模型</text>
+  <text x="210" y="461" fill="#94a3b8" font-size="9" text-anchor="middle">结构化 YAML/JSON · 字段级定义</text>
+
+  <rect x="65" y="535" width="290" height="80" rx="6" fill="#0f172a"/>
+  <rect x="65" y="535" width="290" height="80" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
+  <text x="210" y="559" fill="white" font-size="11" font-weight="600" text-anchor="middle">产出 · AI 结构化 Command</text>
+  <text x="210" y="576" fill="#94a3b8" font-size="9" text-anchor="middle">UPDATE / MOVE / CREATE_OVERLAY…</text>
+  <text x="210" y="592" fill="#94a3b8" font-size="9" text-anchor="middle">经 MCP 提交 · 不直接改 DSL</text>
+
+  <!-- ===== Studio internal arrows ===== -->
+  <path d="M765,190 L765,230" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <text x="700" y="212" fill="#34d399" font-size="8">模板 / 需求</text>
+  <path d="M900,272 L970,152" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <text x="920" y="252" fill="#34d399" font-size="8">生成 DSL</text>
+  <path d="M900,402 L970,152" fill="none" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+  <text x="920" y="320" fill="#34d399" font-size="8">写 DSL</text>
+  <path d="M1100,194 L1100,235" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+  <text x="1107" y="216" fill="#22d3ee" font-size="8">读取</text>
+  <path d="M1100,319 L1100,360" fill="none" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+  <text x="1107" y="341" fill="#22d3ee" font-size="8">渲染</text>
+
+  <!-- ===== Studio left column boxes ===== -->
+  <rect x="630" y="110" width="270" height="80" rx="6" fill="#0f172a"/>
+  <rect x="630" y="110" width="270" height="80" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="765" y="134" fill="white" font-size="11" font-weight="600" text-anchor="middle">Studio 编辑器</text>
+  <text x="765" y="151" fill="#94a3b8" font-size="9" text-anchor="middle">需求输入 · 页面树 · 属性面板</text>
+  <text x="765" y="167" fill="#94a3b8" font-size="9" text-anchor="middle">命令栏 · Page Plan 确认</text>
+
+  <rect x="630" y="230" width="270" height="84" rx="6" fill="#0f172a"/>
+  <rect x="630" y="230" width="270" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="765" y="254" fill="white" font-size="11" font-weight="600" text-anchor="middle">Requirement Engine</text>
+  <text x="765" y="271" fill="#94a3b8" font-size="9" text-anchor="middle">模板 → Page Plan（显式类型）</text>
+  <text x="765" y="288" fill="#94a3b8" font-size="9" text-anchor="middle">按声明生成字段级 DSL</text>
+
+  <rect x="630" y="360" width="270" height="84" rx="6" fill="#0f172a"/>
+  <rect x="630" y="360" width="270" height="84" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="765" y="384" fill="white" font-size="11" font-weight="600" text-anchor="middle">Command Engine + Validator</text>
+  <text x="765" y="401" fill="#94a3b8" font-size="9" text-anchor="middle">baseRevision 检查 → 校验</text>
+  <text x="765" y="418" fill="#94a3b8" font-size="9" text-anchor="middle">属性 / 拖拽 / MCP 命令统一入口</text>
+
+  <rect x="630" y="490" width="270" height="70" rx="6" fill="#0f172a"/>
+  <rect x="630" y="490" width="270" height="70" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="765" y="514" fill="white" font-size="11" font-weight="600" text-anchor="middle">File Watcher</text>
+  <text x="765" y="531" fill="#94a3b8" font-size="9" text-anchor="middle">外部变更 → 校验 → 刷新 Preview</text>
+
+  <rect x="630" y="600" width="270" height="70" rx="6" fill="#0f172a"/>
+  <rect x="630" y="600" width="270" height="70" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
+  <text x="765" y="624" fill="white" font-size="11" font-weight="600" text-anchor="middle">Product Package</text>
+  <text x="765" y="641" fill="#94a3b8" font-size="9" text-anchor="middle">导出 requirement/DSL/rules/acceptance</text>
+
+  <!-- ===== Studio right column boxes ===== -->
+  <rect x="970" y="110" width="270" height="84" rx="6" fill="#0f172a"/>
+  <rect x="970" y="110" width="270" height="84" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1105" y="134" fill="white" font-size="11" font-weight="600" text-anchor="middle">UI DSL · pages/*.ui.yaml</text>
+  <text x="1105" y="151" fill="#94a3b8" font-size="9" text-anchor="middle">唯一事实源 · 可读可 Git Diff</text>
+  <text x="1105" y="168" fill="#94a3b8" font-size="9" text-anchor="middle">Codex 不整页重写 · Renderer 只读</text>
+
+  <rect x="970" y="235" width="270" height="84" rx="6" fill="#0f172a"/>
+  <rect x="970" y="235" width="270" height="84" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1105" y="259" fill="white" font-size="11" font-weight="600" text-anchor="middle">确定性 Renderer</text>
+  <text x="1105" y="276" fill="#94a3b8" font-size="9" text-anchor="middle">固定组件映射 · Design Token</text>
+  <text x="1105" y="293" fill="#94a3b8" font-size="9" text-anchor="middle">不调用 AI · 同 DSL 同输出</text>
+
+  <rect x="970" y="360" width="270" height="84" rx="6" fill="#0f172a"/>
+  <rect x="970" y="360" width="270" height="84" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+  <text x="1105" y="384" fill="white" font-size="11" font-weight="600" text-anchor="middle">Preview iframe</text>
+  <text x="1105" y="401" fill="#94a3b8" font-size="9" text-anchor="middle">可点选 · 可交互 Mock</text>
+  <text x="1105" y="418" fill="#94a3b8" font-size="9" text-anchor="middle">prototype:// 本地路由</text>
+
+  <rect x="970" y="485" width="270" height="70" rx="6" fill="#0f172a"/>
+  <rect x="970" y="485" width="270" height="70" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
+  <text x="1105" y="509" fill="white" font-size="11" font-weight="600" text-anchor="middle">Revision + Audit</text>
+  <text x="1105" y="526" fill="#94a3b8" font-size="9" text-anchor="middle">.prototype/revisions/ · audit.jsonl</text>
+
+  <rect x="970" y="590" width="270" height="70" rx="6" fill="#0f172a"/>
+  <rect x="970" y="590" width="270" height="70" rx="6" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="1105" y="614" fill="white" font-size="11" font-weight="600" text-anchor="middle">本地项目目录</text>
+  <text x="1105" y="631" fill="#94a3b8" font-size="9" text-anchor="middle">requirements/ pages/ flows/ data/</text>
+
+  <!-- Constraints -->
+  <text x="630" y="742" fill="#fb7185" font-size="9">约束：Renderer 不调用 AI；同一 DSL + Renderer + Design System 版本输出一致。</text>
+  <text x="630" y="758" fill="#fb7185" font-size="9">约束：写操作统一走 Command Engine（baseRevision → 校验 → 原子写文件 → 追加 Revision + Audit）；Codex 只经 MCP 提交结构化命令。</text>
+
+  <!-- Legend -->
+  <rect x="40" y="810" width="14" height="14" rx="3" fill="rgba(120,53,15,0.4)" stroke="#fbbf24" stroke-width="1"/>
+  <text x="60" y="821" fill="#94a3b8" font-size="9">Codex / 外部 AI</text>
+  <rect x="230" y="810" width="14" height="14" rx="3" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1"/>
+  <text x="250" y="821" fill="#94a3b8" font-size="9">MCP 边界 · 唯一通道</text>
+  <rect x="450" y="810" width="14" height="14" rx="3" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+  <text x="470" y="821" fill="#94a3b8" font-size="9">Studio 交互层</text>
+  <rect x="630" y="810" width="14" height="14" rx="3" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
+  <text x="650" y="821" fill="#94a3b8" font-size="9">引擎与生成</text>
+
+  <rect x="40" y="850" width="14" height="14" rx="3" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
+  <text x="60" y="861" fill="#94a3b8" font-size="9">数据与持久化</text>
+  <rect x="230" y="850" width="14" height="14" rx="3" fill="rgba(30,41,59,0.5)" stroke="#94a3b8" stroke-width="1"/>
+  <text x="250" y="861" fill="#94a3b8" font-size="9">外部输入</text>
+  <rect x="450" y="850" width="14" height="14" rx="3" fill="none" stroke="#fb7185" stroke-width="1"/>
+  <text x="470" y="861" fill="#94a3b8" font-size="9">约束 / 不可越界</text>
+  <text x="630" y="861" fill="#94a3b8" font-size="9">①②③④ = 跨边界主数据流</text>
+</svg>

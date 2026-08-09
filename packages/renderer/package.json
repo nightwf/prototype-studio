@@ -1,0 +1,26 @@
+{
+  "name": "@prototype-studio/renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "test": "vitest run --root ../.. packages/renderer/src/index.test.tsx",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --max-warnings=0"
+  },
+  "dependencies": {
+    "@prototype-studio/design-system": "workspace:*",
+    "@prototype-studio/dsl-schema": "workspace:*",
+    "lucide-react": "^0.536.0",
+    "react": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "react-dom": "^19.1.0"
+  }
+}

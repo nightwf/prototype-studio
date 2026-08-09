@@ -1,0 +1,15 @@
+{
+  "name": "@prototype-studio/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tauri 2 desktop shell for Prototype Studio",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "pnpm --dir ../mcp build:sidecar:mac && tauri build --bundles app --ci",
+    "build:dmg": "pnpm --dir ../mcp build:sidecar:mac && tauri build --bundles dmg --ci",
+    "check": "cargo check --manifest-path src-tauri/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4"
+  }
+}

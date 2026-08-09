@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+*.tmp
+.prototype/cache/
+coverage/
+target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/bin/prototype-mcp
+apps/mcp/dist-sidecar/

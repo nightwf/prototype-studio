@@ -1,0 +1,9 @@
+id: case-center-demo
+name: 案件中台
+description: Prototype Studio 端到端示例项目
+status: active
+dslVersion: "1.0"
+rendererVersion: "0.1.0"
+designSystemVersion: "0.1.0"
+createdAt: "2026-08-07T00:00:00.000Z"
+updatedAt: "2026-08-07T00:00:00.000Z"

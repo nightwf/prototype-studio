@@ -1,0 +1,24 @@
+[package]
+name = "prototype-studio-desktop"
+version = "0.1.0"
+description = "Local-first desktop shell for Prototype Studio"
+authors = ["Prototype Studio Contributors"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "prototype_studio_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+notify = "8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+uuid = { version = "1", features = ["v4", "serde"] }

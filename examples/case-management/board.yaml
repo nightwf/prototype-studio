@@ -1,0 +1,13 @@
+dslVersion: "1.0"
+id: case-center-demo-board
+revision: 1
+objects:
+  - id: obj-case-list
+    type: page
+    pageId: case-list
+    x: 120
+    y: 80
+    width: 960
+    height: 640
+    source: default
+links: []

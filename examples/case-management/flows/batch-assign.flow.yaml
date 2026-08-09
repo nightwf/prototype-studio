@@ -1,0 +1,9 @@
+id: batch-assign
+name: 案件批量分配
+steps:
+  - select: table.caseList
+  - trigger: toolbar.batchAssign
+  - open: overlay.batchAssign
+  - validate: overlay.batchAssign.collector
+  - submit: overlay.batchAssign
+  - refresh: case-list

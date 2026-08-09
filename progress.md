@@ -1,0 +1,26 @@
+# Progress
+
+- 2026-08-07：开始盘点项目与需求文档。
+- 2026-08-07：完整阅读 V1.1 PRD，确认目录中暂无代码或其他设计资产。
+- 2026-08-07：完成产品边界、Local-first 架构、核心流程、DSL/Command/Revision/MCP 与验收标准提取。
+- 2026-08-07：识别云端架构、分享能力、版本持久化和 AI 接入等关键歧义，形成默认处理原则。
+- 2026-08-07：完成 Goal 提示词评审稿，覆盖产品目标、不可破坏原则、五大 MVP 闭环、实施顺序、工程质量和 Definition of Done。
+- 2026-08-07：完成覆盖复核，Goal 提示词进入产品经理评审。
+- 2026-08-07：Goal 开始执行；建立 pnpm monorepo、DSL Spec 1.0 类型/Schema、示例案件 DSL、Validator 与 Command/Revision 核心。
+- 2026-08-07：首次依赖安装因 npm registry 连接重置未完成，已记录并准备重试。
+- 2026-08-08：补齐 Renderer 表单/详情/Card/Tabs 运行能力、全部 visibleWhen 运算符与运行态事件；组件级错误隔离通过 6 项渲染测试。
+- 2026-08-08：Studio 完成多页面创建、切换、排序、重命名、可恢复删除，并补齐无页面空状态；E2E 覆盖全部页面操作。
+- 2026-08-08：按产品经理确认记录 ADR-007：原始 DOCX/PDF/OCR 文档处理由 Codex 负责，Studio 只消费规范化文本或 Requirement Model，并撤回全部文档解析依赖。
+- 2026-08-08：桌面端补齐追加式 Revision 持久化接线（persist_page_revision）、页面顺序持久化、可恢复删除与文件监听联动。
+- 2026-08-08：修复 Local MCP sidecar 的 stdio 托管生命周期与烟测路径；真实 MCP Client 验证 17 个工具、项目读取与需求读取。
+- 2026-08-08：全量门禁通过：35 项单测、全仓 typecheck、lint 零警告、Studio/MCP 生产构建、Tauri App 打包与 sidecar 烟测。
+- 2026-08-08：实现 ADR-008 结构化页面模板契约——Codex 交付 YAML/JSON 字段级定义（显式页面类型、查询字段、表格列、表单字段、选项、校验规则），Studio 按声明确定性生成完整 DSL；Studio 粘贴入口自动识别模板，Markdown 路径保持不变；新增 4 项单测与模板端到端验证。
+- 2026-08-08：更新数据流图与文档，明确“Codex 交付页面模板 + 需求模型，Studio 生成 DSL”；模板变更后的增量同步列为后续迭代。
+- 2026-08-08：新增“连接 Codex”开箱体验——打开桌面项目后 Local MCP 自动启动；顶栏设置面板展示项目目录、MCP 状态，并提供可复制的 MCP 配置（config.toml）与协作提示词；Rust 端新增 local_mcp_connection_info 命令与转义测试，E2E 覆盖设置面板。
+- 2026-08-09：修复桌面 App“创建新项目/重命名/删除无反应”——Tauri WebView 不支持 window.prompt/confirm，改为应用内弹窗（输入框与确认框），Web 与桌面统一；E2E 同步改用新弹窗交互，全量测试与桌面打包通过。
+- 2026-08-09：修复“新建项目后预览仍显示内置示例页”——预览 iframe 默认渲染示例、且桌面 WebView 收不到 iframe 就绪信号导致新页面 DSL 未下发；改为预览等待真实 DSL（加载态）、iframe 加载完成即下发当前页面、放宽来源校验，iframe 标题与地址栏随当前页面动态变化。
+- 2026-08-09：实现画布（Board）Phase 0-2 与对象连线——BoardDSL 数据模型与校验、board.yaml 读写与默认画布、applyBoardCommands 命令引擎、BoardRenderer（页面帧/说明/标注/连线/流程图/ER 渲染）、Studio 画布视图（缩放/平移/拖拽/添加页面/说明/标注/连线/对象属性编辑），标注按产品经理确认挂靠组件；新增 10 项测试，E2E 覆盖画布流程，桌面端新增 read/write_board_yaml 并完成打包验证。
+- 2026-08-09：实现画布“对象类型开放机制”——校验器注册表（defineBoardObjectType）与渲染器注册表（registerBoardObjectRenderer），未知类型校验降级为警告并按通用卡片渲染；新增流程图/ER 图结构化编辑器（节点/连线/实体/字段/主键/关系增删改）；E2E 覆盖流程图添加与编辑，47 项单测全过，桌面重新打包。
+- 2026-08-09：画布规划收口全部完成——画布 Revision 历史（Node/桌面端落盘+审计+Studio 接入）、MCP 画布工具（prototype_get_board / prototype_apply_board_commands，工具总数 19）、Product Package 含画布、Codex 模板 board 交付（页面帧/标注/说明/流程图/ER/连线）、独立 HTML 画布导出（含标注自动定位）；49 项单测、E2E（含导出下载）、生产构建、桌面打包与 sidecar 烟测全部通过。
+- 2026-08-09：标注交互补齐——画布/页面编辑双入口添加标注，圆点可拖拽微调位置（offset 写回 board.yaml 进版本链）；修复画布视口平移手势吞掉面板按钮点击的问题；E2E 覆盖标注添加与拖拽，49 项单测、全量门禁、桌面重新打包通过。
+- 2026-08-09：将画布（Board）相关需求同步进 PRD——新增“# 86. 画布（Board）需求增补”章节，记录大画布形态、board.yaml 单文件模型、标注挂靠组件、对象类型开放机制、Codex 模板 board 交付、画布命令与版本链、MCP 画布工具、HTML 导出与验收要点。

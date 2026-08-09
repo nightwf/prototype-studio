@@ -1,0 +1,43 @@
+{
+  "name": "@prototype-studio/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local stdio MCP server for a scoped Prototype Studio project",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "prototype-studio-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "build:sidecar:mac": "tsup --config tsup.sidecar.config.ts && pkg dist-sidecar/sidecar.cjs --targets node20-macos-arm64 --output ../desktop/src-tauri/bin/prototype-mcp",
+    "smoke:sidecar": "node scripts/sidecar-smoke.mjs",
+    "start": "node dist/index.js",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@prototype-studio/dsl-schema": "workspace:*",
+    "@prototype-studio/dsl-validator": "workspace:*",
+    "@prototype-studio/project-store": "workspace:*",
+    "ajv": "^8.17.1",
+    "chokidar": "^4.0.3",
+    "yaml": "^2.8.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@yao-pkg/pkg": "6.6.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

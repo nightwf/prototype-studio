@@ -1,0 +1,96 @@
+import { describe, expect, it } from "vitest";
+import { DSL_VERSION, type BoardDSL, type BoardNoteObject } from "@prototype-studio/dsl-schema";
+import { applyBoardCommands, BoardEngineError } from "./index";
+
+function board(): BoardDSL {
+  return {
+    dslVersion: DSL_VERSION,
+    id: "test-board",
+    revision: 3,
+    objects: [
+      {
+        id: "obj-home",
+        type: "page",
+        pageId: "home",
+        x: 120,
+        y: 80,
+        width: 960,
+        height: 640,
+        source: "default"
+      }
+    ],
+    links: []
+  };
+}
+
+describe("board command engine", () => {
+  it("adds, moves and links canvas objects with a new revision", () => {
+    const note: BoardNoteObject = {
+      id: "note-1",
+      type: "note",
+      x: 1200,
+      y: 100,
+      width: 280,
+      height: 90,
+      text: "批量分配上限 500 条",
+      source: "explicit"
+    };
+    const result = applyBoardCommands({
+      board: board(),
+      baseRevision: 3,
+      source: "manual",
+      operator: "jojo",
+      commands: [
+        { type: "ADD_BOARD_OBJECT", object: note },
+        { type: "MOVE_BOARD_OBJECT", target: "note-1", x: 1300, y: 200 },
+        { type: "ADD_BOARD_LINK", link: { id: "link-1", from: "obj-home", to: "note-1", label: "约束" } }
+      ]
+    });
+
+    expect(result.board.revision).toBe(4);
+    expect(result.revision.baseRevision).toBe(3);
+    expect(result.board.objects[1]).toMatchObject({ id: "note-1", x: 1300, y: 200 });
+    expect(result.board.links).toEqual([{ id: "link-1", from: "obj-home", to: "note-1", label: "约束" }]);
+    expect(result.revision.changedObjectIds.sort()).toEqual(["link-1", "note-1"]);
+  });
+
+  it("deleting an object removes links that reference it", () => {
+    const base = board();
+    base.links = [{ id: "link-1", from: "obj-home", to: "note-1" }];
+    const result = applyBoardCommands({
+      board: base,
+      baseRevision: 3,
+      source: "manual",
+      operator: "jojo",
+      commands: [{ type: "DELETE_BOARD_OBJECT", target: "obj-home" }]
+    });
+    expect(result.board.objects).toHaveLength(0);
+    expect(result.board.links).toHaveLength(0);
+  });
+
+  it("rejects stale revisions and dangling links", () => {
+    expect(() =>
+      applyBoardCommands({
+        board: board(),
+        baseRevision: 2,
+        source: "manual",
+        operator: "jojo",
+        commands: [{ type: "ADD_BOARD_LINK", link: { id: "l", from: "obj-home", to: "missing" } }]
+      })
+    ).toThrowError(BoardEngineError);
+
+    expect(() =>
+      applyBoardCommands({
+        board: board(),
+        baseRevision: 3,
+        source: "manual",
+        operator: "jojo",
+        commands: [{ type: "ADD_BOARD_LINK", link: { id: "l", from: "obj-home", to: "obj-home" } }]
+      })
+    ).toThrowError(BoardEngineError);
+
+    expect(() =>
+      applyBoardCommands({ board: board(), baseRevision: 3, source: "manual", operator: "jojo", commands: [] })
+    ).toThrowError(/commands 不能为空/);
+  });
+});

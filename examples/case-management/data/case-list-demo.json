@@ -1,0 +1,8 @@
+{
+  "items": [
+    { "id": "C-1042", "caseNo": "CA202607180042", "customer": "周颖", "amount": 128400, "status": "待分配", "owner": null, "locked": false },
+    { "id": "C-1041", "caseNo": "CA202607180041", "customer": "林川", "amount": 76200, "status": "跟进中", "owner": "陈骁", "locked": false },
+    { "id": "C-1038", "caseNo": "CA202607180038", "customer": "沈念", "amount": 45900, "status": "待分配", "owner": null, "locked": true }
+  ],
+  "total": 3
+}
