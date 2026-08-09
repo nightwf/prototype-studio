@@ -298,7 +298,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.post("/api/projects/:projectId/export", async (request, reply) => {
     const user = await requireUser(request, reply);
     const projectId = projectIdOf(request.params);
-    const body = request.body as { type?: string };
+    const body = request.body as { type?: string; mode?: string };
     if (body.type === "product-package") {
       return { ok: true, package: await options.spaces.productPackage(user.id, projectId) };
     }
@@ -308,7 +308,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       for (const summary of tree.pages) {
         pages[summary.id] = await options.spaces.getPageDsl(user.id, projectId, summary.id);
       }
-      const html = await renderBoardHtml(tree.board, pages, tree.manifest.name);
+      const mode = body.mode === "with-annotations" ? "with-annotations" : "content";
+      const html = await renderBoardHtml(tree.board, pages, tree.manifest.name, { mode });
       return { ok: true, html };
     }
     if (body.type === "zip") {

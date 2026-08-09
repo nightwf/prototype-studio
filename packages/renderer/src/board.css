@@ -1,6 +1,7 @@
-.board-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.board-canvas { position: absolute; min-width: 100%; min-height: 100%; }
 .board-canvas.is-picking .board-object--page { cursor: crosshair; }
 .board-canvas.is-picking .board-object--page .board-page-body [data-component-id] { cursor: pointer; }
+.board-grid-layer { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(15, 23, 42, 0.16) 1px, transparent 1px); }
 .board-links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .board-object { position: absolute; box-sizing: border-box; border: 1px solid #9aa7ad; border-radius: 9px; background: white; box-shadow: 0 10px 30px rgba(26, 35, 42, 0.14); }
 .board-object.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35); }
@@ -39,3 +40,15 @@
 .board-annotation-item.is-selected { background: #1a2f42; }
 .board-annotation-item i { position: static; display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; }
 .board-annotation-item span { font-size: 9px; line-height: 1.5; }
+.board-marquee { position: absolute; z-index: 70; border: 1px solid #3b82f6; background: rgba(59, 130, 246, 0.12); pointer-events: none; }
+.board-minimap { position: absolute; z-index: 65; right: 16px; bottom: 16px; width: 176px; height: 116px; border: 1px solid #3a4650; border-radius: 8px; background: rgba(20, 27, 33, 0.92); box-shadow: 0 12px 30px rgba(5, 11, 15, 0.35); cursor: pointer; overflow: hidden; }
+.board-minimap-object { position: absolute; display: block; border-radius: 2px; background: rgba(148, 163, 184, 0.55); }
+.board-minimap-object--page { background: rgba(96, 165, 250, 0.55); }
+.board-minimap-object--note { background: rgba(251, 191, 36, 0.6); }
+.board-minimap-object--flowchart, .board-minimap-object--er { background: rgba(167, 139, 250, 0.6); }
+.board-minimap-viewport { position: absolute; border: 1px solid #f59e0b; background: rgba(245, 158, 11, 0.12); pointer-events: none; }
+.board-context-menu { position: absolute; z-index: 80; min-width: 150px; padding: 5px; border: 1px solid #3a4650; border-radius: 8px; background: #141b21; box-shadow: 0 14px 40px rgba(5, 11, 15, 0.45); }
+.board-context-menu button { width: 100%; height: 30px; padding: 0 10px; display: flex; align-items: center; border: 0; border-radius: 5px; background: transparent; color: #cfd6da; font-size: 10px; text-align: left; cursor: pointer; }
+.board-context-menu button:hover { background: #1d2730; color: #fff; }
+.board-context-menu button.is-danger { color: #f87171; }
+.board-context-menu i { display: block; height: 1px; margin: 4px 0; background: #2b353d; }

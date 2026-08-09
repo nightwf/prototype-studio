@@ -299,7 +299,7 @@ button { color: inherit; }
 .board-tools { display: flex; gap: 6px; }
 .board-tools button { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #cfd7dc; border-radius: 6px; background: white; color: var(--ps-ink-600); font-size: 9px; cursor: pointer; }
 .board-tools button:hover { border-color: var(--ps-cobalt); color: var(--ps-cobalt); }
-.board-stage { overflow: hidden; }
+.board-stage { overflow: hidden; position: relative; padding: 0; }
 .board-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; background: #e6eaed; cursor: grab; touch-action: none; }
 .board-viewport:active { cursor: grabbing; }
 .board-viewport-inner { position: absolute; inset: 0; }
@@ -324,6 +324,12 @@ button { color: inherit; }
 .board-tool-pick { width: 100%; height: 32px; margin-bottom: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed #4a88c4; border-radius: 7px; background: rgba(59, 130, 246, 0.12); color: #8fc3f2; font-size: 10px; cursor: pointer; }
 .board-tool-pick:hover { background: rgba(59, 130, 246, 0.22); }
 .board-tool-hint { padding: 14px 12px; border: 1px dashed #4a88c4; border-radius: 7px; color: #9fc5e8; font-size: 10px; line-height: 1.6; background: rgba(59, 130, 246, 0.08); }
+.board-export-card { width: 380px; }
+.board-export-options { display: flex; flex-direction: column; gap: 10px; }
+.board-export-options button { padding: 13px 15px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; border: 1px solid #33424d; border-radius: 9px; background: #10171d; color: #dfe4e7; text-align: left; cursor: pointer; }
+.board-export-options button:hover { border-color: #2f6da3; background: #14222c; }
+.board-export-options strong { font-size: 11px; }
+.board-export-options small { color: #8b98a0; font-size: 9px; line-height: 1.5; }
 .board-tool-empty { padding: 10px; color: #7f8c94; font-size: 9px; text-align: center; }
 .board-inspector .board-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .board-fields label { display: block; }

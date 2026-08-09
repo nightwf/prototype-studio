@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent as ReactWheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   Box,
   Braces,
@@ -22,6 +22,7 @@ import {
   Link2,
   Maximize2,
   MapPin,
+  Magnet,
   Monitor,
   MousePointer2,
   MoreHorizontal,
@@ -65,7 +66,16 @@ import {
 } from "@prototype-studio/dsl-schema";
 import { applyBoardCommands, createRevertRevision, diffDsl, executeCommands, type DslDiffEntry } from "@prototype-studio/command-engine";
 import { collectComponentLocations, getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
-import { BoardRenderer } from "@prototype-studio/renderer";
+import {
+  ANNOTATION_PANEL_GAP,
+  ANNOTATION_PANEL_WIDTH,
+  CONTENT_PADDING,
+  BoardRenderer,
+  boardContentBounds,
+  snapValue,
+  type BoardRendererHandle,
+  type BoardView
+} from "@prototype-studio/renderer";
 import { EmptyState, Keycap, PanelHeader, StatusDot, ToolButton } from "@prototype-studio/design-system";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
@@ -456,14 +466,16 @@ export function App() {
   const [board, setBoard] = useState<BoardDSL>(() => defaultBoardFromPages([]));
   const [viewMode, setViewMode] = useState<"canvas" | "page">("page");
   const [boardSelectedId, setBoardSelectedId] = useState<string>();
-  const [boardZoom, setBoardZoom] = useState(0.82);
-  const [boardPan, setBoardPan] = useState({ x: 0, y: 0 });
+  const [boardSelectedIds, setBoardSelectedIds] = useState<string[]>([]);
+  const [boardZoom, setBoardZoom] = useState(1);
+  const [boardSnap, setBoardSnap] = useState(false);
+  const [boardExportOpen, setBoardExportOpen] = useState(false);
+  const boardViewRef = useRef<BoardRendererHandle>(null);
   const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
   const [markerPicking, setMarkerPicking] = useState(false);
   const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", text: "", tone: "orange" });
   const [boardDraft, setBoardDraft] = useState<Record<string, unknown>>({});
   const boardSeedDone = useRef(false);
-  const boardPanRef = useRef<{ x: number; y: number; startX: number; startY: number } | undefined>(undefined);
   const [webSession, setWebSession] = useState<WebUser>();
   const [webProjectId, setWebProjectId] = useState<string>();
   const [webBoot, setWebBoot] = useState(false);
@@ -1070,8 +1082,65 @@ export function App() {
     }
   };
 
+  const selectBoardObject = (id: string) => {
+    setBoardSelectedId(id);
+    setBoardSelectedIds((previous) => (previous.includes(id) ? previous : [id]));
+  };
+
+  const selectBoardMany = (ids: string[]) => {
+    setBoardSelectedIds(ids);
+    setBoardSelectedId(ids.length ? ids[ids.length - 1] : undefined);
+  };
+
+  const deleteBoardObjects = async (ids: string[]) => {
+    if (!ids.length) return;
+    if (await runBoardCommands(ids.map((id) => ({ type: "DELETE_BOARD_OBJECT", target: id })), `已删除 ${ids.length} 个对象`)) {
+      setBoardSelectedId(undefined);
+      setBoardSelectedIds([]);
+    }
+  };
+
+  const duplicateBoardObject = async (id: string) => {
+    const object = board.objects.find((item) => item.id === id);
+    if (!object || object.type === "marker") return;
+    const copy = {
+      ...structuredClone(object),
+      id: `${object.id}-copy-${Date.now().toString(36)}`,
+      x: object.x + 24,
+      y: object.y + 24
+    } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" }>;
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: copy }], "对象已复制")) {
+      setBoardSelectedId(copy.id);
+      setBoardSelectedIds([copy.id]);
+    }
+  };
+
+  const zOrderBoardObjects = async (ids: string[], position: "top" | "bottom") => {
+    if (!ids.length) return;
+    const maxZ = Math.max(0, ...board.objects.map((object) => object.z ?? 0));
+    const minZ = Math.min(0, ...board.objects.map((object) => object.z ?? 0));
+    const commands = ids.map((id) => ({
+      type: "UPDATE_BOARD_OBJECT" as const,
+      target: id,
+      changes: { z: position === "top" ? maxZ + 1 : minZ - 1 }
+    }));
+    await runBoardCommands(commands, position === "top" ? "已置顶" : "已置底");
+  };
+
   const moveBoardObject = (id: string, x: number, y: number) => {
     void runBoardCommands([{ type: "MOVE_BOARD_OBJECT", target: id, x, y }]);
+  };
+
+  const moveBoardObjects = (ids: string[], dx: number, dy: number) => {
+    const moves = board.objects
+      .filter((object): object is Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" }> => ids.includes(object.id) && object.type !== "marker")
+      .map((object) => ({
+        type: "MOVE_BOARD_OBJECT" as const,
+        target: object.id,
+        x: boardSnap ? snapValue(object.x + dx) : object.x + dx,
+        y: boardSnap ? snapValue(object.y + dy) : object.y + dy
+      }));
+    if (moves.length) void runBoardCommands(moves, "批量移动");
   };
 
   const moveBoardMarker = (id: string, offsetX: number, offsetY: number) => {
@@ -1118,9 +1187,19 @@ export function App() {
     setShowDsl(false);
   };
 
-  const exportBoardHtml = () => {
+  const exportBoardHtml = (mode: "content" | "with-annotations" = "content") => {
+    const bounds = boardContentBounds(board, {});
+    const showPanel = mode === "with-annotations" && board.objects.some((object) => object.type === "marker");
+    const panelReserve = showPanel ? ANNOTATION_PANEL_WIDTH + ANNOTATION_PANEL_GAP : 0;
+    const canvasWidth = bounds.maxX - bounds.minX + CONTENT_PADDING * 2 + panelReserve;
+    const canvasHeight = bounds.maxY - bounds.minY + CONTENT_PADDING * 2;
     const body = renderToStaticMarkup(
-      <BoardRenderer board={board} pages={boardPageMap} interactive={false} />
+      <BoardRenderer
+        board={board}
+        pages={boardPageMap}
+        interactive={false}
+        showAnnotationPanel={mode === "with-annotations"}
+      />
     );
     const html = `<!doctype html>
 <html lang="zh-CN">
@@ -1131,7 +1210,7 @@ export function App() {
 <style>${rendererExportCss}\n${boardExportCss}\nhtml,body{margin:0;background:#0f172a;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;}body{padding:24px;}</style>
 </head>
 <body>
-<div class="export-canvas" style="position:relative;min-height:100vh;">${body}</div>
+<div class="export-canvas" style="position:relative;width:${canvasWidth}px;height:${canvasHeight}px;">${body}</div>
 <script>
 window.addEventListener('DOMContentLoaded', function () {
   document.querySelectorAll('[data-board-marker]').forEach(function (pin) {
@@ -1146,17 +1225,20 @@ window.addEventListener('DOMContentLoaded', function () {
     if (!frame) return;
     var component = frame.querySelector('[data-component-id="' + componentId + '"]');
     if (!component) return;
-    var frameRect = frame.getBoundingClientRect();
+    var objectEl = document.querySelector('[data-board-object="' + pageObjectId + '"]');
+    var objectX = parseFloat(objectEl && objectEl.style ? objectEl.style.left : '0') || 0;
+    var objectY = parseFloat(objectEl && objectEl.style ? objectEl.style.top : '0') || 0;
+    var objectRect = objectEl.getBoundingClientRect();
     var componentRect = component.getBoundingClientRect();
-    pin.style.left = (componentRect.left - frameRect.left + frame.scrollLeft + offsetX) + 'px';
-    pin.style.top = (componentRect.top - frameRect.top + frame.scrollTop + offsetY) + 'px';
+    pin.style.left = (objectX + componentRect.left - objectRect.left + frame.scrollLeft + offsetX) + 'px';
+    pin.style.top = (objectY + componentRect.top - objectRect.top + frame.scrollTop + offsetY) + 'px';
   });
 });
 </script>
 </body>
 </html>`;
     if (webMode && webProjectId) {
-      void webSpace.exportHtml(webProjectId)
+      void webSpace.exportHtml(webProjectId, mode)
         .then((result) => {
           const blob = new Blob([result.html], { type: "text/html" });
           const url = URL.createObjectURL(blob);
@@ -1444,13 +1526,14 @@ window.addEventListener('DOMContentLoaded', function () {
               <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
               <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
               <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
-              <button onClick={exportBoardHtml}><Download size={13} />导出 HTML</button>
+              <button className={boardSnap ? "is-active" : ""} onClick={() => setBoardSnap((value) => !value)} title="拖动时按 10px 网格吸附"><Magnet size={13} />吸附</button>
+              <button onClick={() => setBoardExportOpen(true)}><Download size={13} />导出 HTML</button>
               {webMode && webProjectId ? <>
                 <button onClick={() => void shareWebProject()}><Share2 size={13} />分享</button>
                 <button onClick={() => void downloadWebZip()}><Save size={13} />整包</button>
               </> : null}
             </div>
-            <div className="zoom-control"><button onClick={() => setBoardZoom(Math.max(0.4, Math.round((boardZoom - 0.1) * 100) / 100))}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => setBoardZoom(Math.min(2, Math.round((boardZoom + 0.1) * 100) / 100))}>+</button><button onClick={() => { setBoardZoom(1); setBoardPan({ x: 0, y: 0 }); }}><Maximize2 size={13} /></button></div>
+            <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
           </>}
         </> : <>
           <div className="requirement-toolbar-title"><FileText size={14} /><span>Requirement Model</span></div>
@@ -1459,63 +1542,52 @@ window.addEventListener('DOMContentLoaded', function () {
         </>}
       </div>
       {activeWorkspace === "pages" ? viewMode === "canvas" ? <div className="canvas-stage board-stage">
-        <div
-          className="board-viewport"
-          onWheel={(event: ReactWheelEvent) => { event.preventDefault(); const factor = event.deltaY < 0 ? 1.1 : 0.9; setBoardZoom((zoom) => Math.min(2, Math.max(0.4, Math.round(zoom * factor * 100) / 100))); }}
-          onPointerDown={(event: ReactPointerEvent<HTMLDivElement>) => {
-            if ((event.target as HTMLElement).closest(".board-object, .board-tool-panel")) return;
-            boardPanRef.current = { x: boardPan.x, y: boardPan.y, startX: event.clientX, startY: event.clientY };
-            event.currentTarget.setPointerCapture(event.pointerId);
+        <BoardRenderer
+          ref={boardViewRef}
+          board={board}
+          pages={boardPageMap}
+          selectedId={boardSelectedId}
+          selectedIds={boardSelectedIds}
+          onSelectObject={selectBoardObject}
+          onSelectMany={selectBoardMany}
+          onOpenPage={openPageFromBoard}
+          onMoveObject={moveBoardObject}
+          onMoveObjects={moveBoardObjects}
+          onMoveMarker={moveBoardMarker}
+          picking={markerPicking}
+          onPickComponent={(pageObjectId, componentId, offsetX, offsetY) => {
+            setMarkerDraft((previous) => ({ ...previous, pageObjectId, componentId, offsetX, offsetY }));
+            setMarkerPicking(false);
+            toast("success", "已选中元素", componentId);
           }}
-          onPointerMove={(event: ReactPointerEvent<HTMLDivElement>) => {
-            const pan = boardPanRef.current;
-            if (!pan) return;
-            setBoardPan({ x: pan.x + (event.clientX - pan.startX), y: pan.y + (event.clientY - pan.startY) });
+          onViewChange={(view: BoardView) => setBoardZoom(view.zoom)}
+          onDuplicateObject={(id) => void duplicateBoardObject(id)}
+          onDeleteObjects={(ids) => void deleteBoardObjects(ids)}
+          onZOrder={(ids, position) => void zOrderBoardObjects(ids, position)}
+          snapToGrid={boardSnap}
+        />
+        {boardTool === "page" ? <div className="board-tool-panel">
+          <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
+          {pages.filter((page) => !board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)).map((page) => (
+            <button key={page.page.id} className="board-tool-row" onClick={() => void addBoardPageObject(page.page.id)}><Layers3 size={13} /><span>{page.page.title}<small>{page.page.id}</small></span></button>
+          ))}
+          {pages.every((page) => board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)) ? <div className="board-tool-empty">所有页面都已在画布上</div> : null}
+        </div> : null}
+        {boardTool === "marker" ? <MarkerPicker
+          boardPageObjects={boardPageObjects}
+          pages={boardPageMap}
+          draft={markerDraft}
+          picking={markerPicking}
+          onChange={setMarkerDraft}
+          onStartPick={() => { setMarkerPicking(true); setMarkerDraft((previous) => ({ ...previous, pageObjectId: boardPageObjects[0]?.id ?? "", componentId: "" })); }}
+          onCancel={() => { setBoardTool("none"); setMarkerPicking(false); }}
+          onAdd={async (pageObjectId, componentId, text, tone) => {
+            const offsets = markerDraft.pageObjectId === pageObjectId && markerDraft.componentId === componentId
+              ? { offsetX: markerDraft.offsetX, offsetY: markerDraft.offsetY }
+              : {};
+            await addBoardMarker(pageObjectId, componentId, text, tone, offsets.offsetX, offsets.offsetY);
           }}
-          onPointerUp={() => { boardPanRef.current = undefined; }}
-          onPointerCancel={() => { boardPanRef.current = undefined; }}
-        >
-          <div className="board-viewport-inner" style={{ transform: `translate(${boardPan.x}px, ${boardPan.y}px) scale(${boardZoom})`, transformOrigin: "0 0" }}>
-            <BoardRenderer
-              board={board}
-              pages={boardPageMap}
-              selectedId={boardSelectedId}
-              scale={boardZoom}
-              onSelectObject={setBoardSelectedId}
-              onOpenPage={openPageFromBoard}
-              onMoveObject={moveBoardObject}
-              onMoveMarker={moveBoardMarker}
-              picking={markerPicking}
-              onPickComponent={(pageObjectId, componentId, offsetX, offsetY) => {
-                setMarkerDraft((previous) => ({ ...previous, pageObjectId, componentId, offsetX, offsetY }));
-                setMarkerPicking(false);
-                toast("success", "已选中元素", componentId);
-              }}
-            />
-          </div>
-          {boardTool === "page" ? <div className="board-tool-panel">
-            <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
-            {pages.filter((page) => !board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)).map((page) => (
-              <button key={page.page.id} className="board-tool-row" onClick={() => void addBoardPageObject(page.page.id)}><Layers3 size={13} /><span>{page.page.title}<small>{page.page.id}</small></span></button>
-            ))}
-            {pages.every((page) => board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)) ? <div className="board-tool-empty">所有页面都已在画布上</div> : null}
-          </div> : null}
-          {boardTool === "marker" ? <MarkerPicker
-            boardPageObjects={boardPageObjects}
-            pages={boardPageMap}
-            draft={markerDraft}
-            picking={markerPicking}
-            onChange={setMarkerDraft}
-            onStartPick={() => { setMarkerPicking(true); setMarkerDraft((previous) => ({ ...previous, pageObjectId: boardPageObjects[0]?.id ?? "", componentId: "" })); }}
-            onCancel={() => { setBoardTool("none"); setMarkerPicking(false); }}
-            onAdd={async (pageObjectId, componentId, text, tone) => {
-              const offsets = markerDraft.pageObjectId === pageObjectId && markerDraft.componentId === componentId
-                ? { offsetX: markerDraft.offsetX, offsetY: markerDraft.offsetY }
-                : {};
-              await addBoardMarker(pageObjectId, componentId, text, tone, offsets.offsetX, offsets.offsetY);
-            }}
-          /> : null}
-        </div>
+        /> : null}
       </div> : currentPage ? <>
         <div className="canvas-stage">
           <div className="preview-device" style={{ width: `${100 / (previewScale / 100)}%`, height: `${100 / (previewScale / 100)}%`, transform: `scale(${previewScale / 100})` }}>
@@ -1667,6 +1739,25 @@ window.addEventListener('DOMContentLoaded', function () {
           <button onClick={() => setAppModal(undefined)}>取消</button>
           <button className={appModal.kind === "confirm" && appModal.danger ? "is-danger" : "is-primary"} onClick={confirmModal}>{appModal.confirmText}</button>
         </footer>
+      </section>
+    </div> : null}
+
+    {boardExportOpen ? <div className="settings-overlay" onClick={() => setBoardExportOpen(false)}>
+      <section className="settings-card board-export-card" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div><span>EXPORT</span><h2>导出画布 HTML</h2></div>
+          <button onClick={() => setBoardExportOpen(false)} aria-label="关闭导出"><X size={14} /></button>
+        </header>
+        <div className="board-export-options">
+          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("content"); }}>
+            <strong>仅内容</strong>
+            <small>按画布内容边界裁剪，不含标注汇总栏，适合嵌入文档或直接展示。</small>
+          </button>
+          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("with-annotations"); }}>
+            <strong>含标注栏</strong>
+            <small>内容 + 右侧标注汇总面板，适合评审沟通。</small>
+          </button>
+        </div>
       </section>
     </div> : null}
 

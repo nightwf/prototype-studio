@@ -135,10 +135,10 @@ export const webSpace = {
   revisions(projectId: string) {
     return request<{ ok: true; revisions: Array<{ object: string; revision: number }> }>(`/api/projects/${projectId}/revisions`);
   },
-  exportHtml(projectId: string) {
+  exportHtml(projectId: string, mode: "content" | "with-annotations" = "content") {
     return request<{ ok: true; html: string }>(`/api/projects/${projectId}/export`, {
       method: "POST",
-      body: JSON.stringify({ type: "html" })
+      body: JSON.stringify({ type: "html", mode })
     });
   },
   exportZip(projectId: string) {

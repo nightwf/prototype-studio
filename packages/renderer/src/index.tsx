@@ -121,7 +121,30 @@ function Selectable({ component, selectedId, onSelect, className = "", children,
 }
 
 export { BoardRenderer } from "./BoardRenderer";
-export type { BoardRendererProps } from "./BoardRenderer";
+export type { BoardRendererHandle, BoardRendererProps } from "./BoardRenderer";
+export {
+  ANNOTATION_PANEL_GAP,
+  ANNOTATION_PANEL_WIDTH,
+  CONTENT_PADDING,
+  GRID_STEP,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  SNAP_STEP,
+  ZOOM_STEP,
+  type BoardBounds,
+  type BoardView,
+  type Point,
+  boardContentBounds,
+  fitView,
+  objectRect,
+  rectsIntersect,
+  screenToWorld,
+  snapValue,
+  viewWorldRect,
+  visibleWorldRect,
+  worldToScreen,
+  zoomAtCursor
+} from "./boardGeometry";
 
 function Field({ component, value, error, onValue, selectedId, onSelect }: {
   component: UIComponent;
