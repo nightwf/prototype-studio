@@ -1612,7 +1612,7 @@ window.addEventListener('DOMContentLoaded', function () {
           <button onClick={() => setShowSettings(false)} aria-label="关闭设置"><X size={14} /></button>
         </header>
         <div className="settings-body">
-          {!isDesktopRuntime() ? <div className="settings-note">{webMode ? "网页端连接 Codex：回到“我的项目”页复制 API Token，再在 ~/.codex/config.toml 配置 url = http://127.0.0.1:8787/mcp 与 bearer_token_env_var = PROTOTYPE_STUDIO_TOKEN。" : "当前是浏览器体验模式，不能读写本地项目。请在桌面 App 中打开或创建项目后连接 Codex。"}</div>
+          {!isDesktopRuntime() ? <div className="settings-note">{webMode ? `网页端连接 Codex：回到“我的项目”页复制 API Token，再在 ~/.codex/config.toml 配置 url = ${window.location.origin}/mcp 与 bearer_token_env_var = PROTOTYPE_STUDIO_TOKEN。` : "当前是浏览器体验模式，不能读写本地项目。请在桌面 App 中打开或创建项目后连接 Codex。"}</div>
             : !mcpConnection ? <div className="settings-note">正在读取连接信息…</div>
             : <>
                 <div className="settings-row"><span>项目目录</span><code>{mcpConnection.projectRoot ?? "未打开项目"}</code></div>

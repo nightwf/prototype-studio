@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
 import type { BoardCommand, Command, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
@@ -47,6 +50,13 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   const baseUrl = options.baseUrl ?? "http://127.0.0.1:8787";
   await app.register(cookie);
   await app.register(cors, { origin: true, credentials: true, allowedHeaders: ["content-type", "authorization"] });
+
+  const staticRoot = process.env.WEB_STATIC_DIR
+    ? resolve(process.env.WEB_STATIC_DIR)
+    : resolve(process.cwd(), "apps", "studio", "dist");
+  if (existsSync(resolve(staticRoot, "index.html"))) {
+    await app.register(fastifyStatic, { root: staticRoot });
+  }
 
   for (const code of options.inviteCodes ?? ["PROTOTYPE-DEV"]) {
     await options.metadata.createInvite(code);
@@ -319,6 +329,17 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       });
     }
   });
+
+  if (existsSync(resolve(staticRoot, "index.html"))) {
+    app.setNotFoundHandler((request, reply) => {
+      const wantsHtml = request.method === "GET" && (request.headers.accept ?? "").includes("text/html");
+      const isApi = request.url.startsWith("/api/") || request.url === "/api" || request.url === "/mcp";
+      if (wantsHtml && !isApi) {
+        return reply.type("text/html").sendFile("index.html");
+      }
+      reply.code(404).send({ message: "Route not found", error: "Not Found", statusCode: 404 });
+    });
+  }
 
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof Error && error.message === "unauthorized") return;
