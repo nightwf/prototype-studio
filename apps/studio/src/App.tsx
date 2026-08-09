@@ -512,6 +512,17 @@ export function App() {
     }
   }, [toast]);
 
+  const handleAuthenticated = useCallback(async (user: WebUser) => {
+    setWebSession(user);
+    try {
+      const listed = await webProjects.list();
+      const latest = [...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+      if (latest) void loadWebProject(latest.id);
+    } catch {
+      // 拉取项目失败时停留在项目列表，用户可手动选择或刷新
+    }
+  }, [loadWebProject]);
+
   const copyText = useCallback(async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -1324,7 +1335,7 @@ window.addEventListener('DOMContentLoaded', function () {
   ].filter(() => Boolean(currentPage));
 
   if (webMode && !webBoot) return <div className="web-screen"><div className="web-card"><div className="web-empty">正在打开…</div></div></div>;
-  if (webMode && !webSession) return <AuthScreen onAuthenticated={setWebSession} />;
+  if (webMode && !webSession) return <AuthScreen onAuthenticated={(user) => void handleAuthenticated(user)} />;
   if (webMode && webSession && !webProjectId) {
     return <ProjectsScreen
       user={webSession}
