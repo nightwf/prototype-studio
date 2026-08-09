@@ -1133,6 +1133,36 @@ window.addEventListener('DOMContentLoaded', function () {
     }
   };
 
+  const shareWebProject = async () => {
+    if (!webProjectId) return;
+    try {
+      const share = await webSpace.shareCreate(webProjectId);
+      await copyText(share.url);
+      toast("success", "分享链接已复制", share.url);
+    } catch (error) {
+      toast("danger", "创建分享链接失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
+  const downloadWebZip = async () => {
+    if (!webProjectId) return;
+    try {
+      const result = await webSpace.exportZip(webProjectId);
+      const binary = atob(result.zip);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/zip" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "prototype-project.zip";
+      link.click();
+      URL.revokeObjectURL(url);
+      toast("success", "整包已下载", "prototype-project.zip");
+    } catch (error) {
+      toast("danger", "下载失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
   useEffect(() => {
     if (!webMode) return;
     void webAuth.me().then((result) => {
@@ -1355,6 +1385,10 @@ window.addEventListener('DOMContentLoaded', function () {
               <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
               <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
               <button onClick={exportBoardHtml}><Download size={13} />导出 HTML</button>
+              {webMode && webProjectId ? <>
+                <button onClick={() => void shareWebProject()}><Share2 size={13} />分享</button>
+                <button onClick={() => void downloadWebZip()}><Save size={13} />整包</button>
+              </> : null}
             </div>
             <div className="zoom-control"><button onClick={() => setBoardZoom(Math.max(0.4, Math.round((boardZoom - 0.1) * 100) / 100))}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => setBoardZoom(Math.min(2, Math.round((boardZoom + 0.1) * 100) / 100))}>+</button><button onClick={() => { setBoardZoom(1); setBoardPan({ x: 0, y: 0 }); }}><Maximize2 size={13} /></button></div>
           </>}

@@ -82,6 +82,12 @@ export const webProjects = {
       method: "POST",
       body: JSON.stringify({ name, description })
     });
+  },
+  import(name: string, zipBase64: string) {
+    return request<{ ok: boolean; project: WebProject }>("/api/projects/import", {
+      method: "POST",
+      body: JSON.stringify({ name, zip: zipBase64 })
+    });
   }
 };
 
@@ -129,6 +135,18 @@ export const webSpace = {
     return request<{ ok: true; html: string }>(`/api/projects/${projectId}/export`, {
       method: "POST",
       body: JSON.stringify({ type: "html" })
+    });
+  },
+  exportZip(projectId: string) {
+    return request<{ ok: true; zip: string; bytes: number }>(`/api/projects/${projectId}/export`, {
+      method: "POST",
+      body: JSON.stringify({ type: "zip" })
+    });
+  },
+  shareCreate(projectId: string, expiresInSeconds?: number) {
+    return request<{ ok: true; token: string; url: string }>(`/api/projects/${projectId}/share`, {
+      method: "POST",
+      body: JSON.stringify(expiresInSeconds ? { expires_in_seconds: expiresInSeconds } : {})
     });
   }
 };

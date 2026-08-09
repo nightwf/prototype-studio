@@ -135,6 +135,8 @@ audit_index(id bigserial pk, project_id uuid fk, object_type text, revision_id t
 - HTML 导出、Product Package、整包下载/导入；
 - 权限与分享失效逻辑测试。
 
+> ✅ 已完成：`POST /api/projects/:id/share`（可设过期）、`DELETE .../share/:token` 撤销、匿名 `GET /api/share/:token`（数据）与 `GET /share/:token`（服务端渲染 HTML 分享页）；整包下载（zip 接口 + 前端“整包”按钮）、Product Package 与 HTML 导出；`POST /api/projects/import`（base64 zip、路径穿越防护、project.yaml 校验、64 MiB 限制）+ 前端“导入整包”；测试覆盖创建/匿名访问/HTML 分享/撤销 404/过期 404/导出-导入往返。
+
 ### Phase 5：验收与上线（1 天）
 
 - 全量单测、网页端 E2E、云端 MCP 烟测、构建与 Docker 部署验证；

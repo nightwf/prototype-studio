@@ -142,6 +142,17 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     reply.code(201).send({ ok: true, project: row });
   });
 
+  app.post("/api/projects/import", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { name?: string; zip?: string };
+    if (!body.zip) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "zip 为必填。" });
+      return;
+    }
+    const project = await options.spaces.importZip(user.id, body.name ?? "导入项目", body.zip);
+    reply.code(201).send({ ok: true, project });
+  });
+
   app.patch("/api/projects/:projectId", async (request, reply) => {
     const user = await requireUser(request, reply);
     const projectId = projectIdOf(request.params);
@@ -151,6 +162,31 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return;
     }
     return { ok: true, project: await options.spaces.renameSpace(user.id, projectId, body.name.trim()) };
+  });
+
+  app.post("/api/projects/:projectId/share", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { expires_in_seconds?: number };
+    const share = await options.spaces.createShare(user.id, projectIdOf(request.params), baseUrl, body.expires_in_seconds);
+    reply.code(201).send({ ok: true, ...share });
+  });
+
+  app.delete("/api/projects/:projectId/share/:token", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { token?: string };
+    await options.spaces.revokeShare(user.id, projectIdOf(request.params), params.token ?? "");
+    return { ok: true };
+  });
+
+  app.get("/api/share/:token", async (request) => {
+    const params = request.params as { token?: string };
+    return { ok: true, ...(await options.spaces.shareData(params.token ?? "")) };
+  });
+
+  app.get("/share/:token", async (request, reply) => {
+    const params = request.params as { token?: string };
+    const html = await options.spaces.shareHtml(params.token ?? "");
+    reply.type("text/html; charset=utf-8").send(html);
   });
 
   app.delete("/api/projects/:projectId", async (request, reply) => {

@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { FolderOpen, Plus, Sparkles } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { FolderOpen, Plus, Sparkles, Upload } from "lucide-react";
 import { webAuth, webProjects, type WebProject, type WebUser } from "./webBridge";
 
 export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: WebUser) => void }) {
@@ -57,6 +57,7 @@ export function ProjectsScreen({ user, onOpenProject, onLogout }: {
   const [projects, setProjects] = useState<WebProject[]>([]);
   const [name, setName] = useState("");
   const [error, setError] = useState<string>();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     try {
@@ -79,6 +80,21 @@ export function ProjectsScreen({ user, onOpenProject, onLogout }: {
     }
   }
 
+  async function importProject(file: File) {
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.onerror = () => reject(new Error("读取文件失败"));
+        reader.readAsDataURL(file);
+      });
+      const result = await webProjects.import(file.name.replace(/\.zip$/i, ""), base64);
+      onOpenProject(result.project.id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "导入失败");
+    }
+  }
+
   return (
     <div className="web-screen">
       <section className="web-card web-projects">
@@ -89,6 +105,8 @@ export function ProjectsScreen({ user, onOpenProject, onLogout }: {
         <div className="web-create-row">
           <input value={name} onChange={(event) => setName(event.target.value)} placeholder="新项目名称" onKeyDown={(event) => { if (event.key === "Enter") void createProject(); }} />
           <button className="web-primary" disabled={!name.trim()} onClick={() => void createProject()}><Plus size={14} />新建项目</button>
+          <input ref={fileRef} type="file" accept=".zip" style={{ display: "none" }} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProject(file); }} />
+          <button className="web-ghost" onClick={() => fileRef.current?.click()}><Upload size={14} />导入整包</button>
         </div>
         {error ? <div className="web-error">{error}</div> : null}
         <div className="web-project-list">

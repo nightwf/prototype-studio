@@ -27,6 +27,7 @@
     "pg": "^8.23.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "unzipper": "^0.12.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {

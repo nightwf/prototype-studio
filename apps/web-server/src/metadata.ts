@@ -31,6 +31,16 @@ export interface ProjectMemberRow {
   role: string;
 }
 
+export interface ShareLinkRow {
+  id: string;
+  projectId: string;
+  token: string;
+  mode: string;
+  createdBy: string;
+  expiresAt?: string;
+  createdAt: string;
+}
+
 export interface MetadataStore {
   createUser(name: string, email: string, passwordHash: string, id?: string): Promise<User>;
   getUserByEmail(email: string): Promise<User | undefined>;
@@ -48,6 +58,9 @@ export interface MetadataStore {
   updateProject(id: string, patch: Partial<Pick<ProjectRow, "name" | "description" | "status">>): Promise<void>;
   addProjectMember(projectId: string, userId: string, role: string): Promise<void>;
   hasProjectMember(projectId: string, userId: string): Promise<boolean>;
+  createShareLink(row: ShareLinkRow): Promise<void>;
+  getShareLinkByToken(token: string): Promise<ShareLinkRow | undefined>;
+  deleteShareLink(token: string): Promise<void>;
 }
 
 export class MemoryMetadataStore implements MetadataStore {
@@ -57,6 +70,7 @@ export class MemoryMetadataStore implements MetadataStore {
   private invites = new Map<string, string | undefined>();
   private projects = new Map<string, ProjectRow>();
   private members = new Map<string, ProjectMemberRow>();
+  private shareLinks = new Map<string, ShareLinkRow>();
 
   async createUser(name: string, email: string, passwordHash: string, id?: string): Promise<User> {
     const user: User = { id: id ?? randomUUID(), name, email, passwordHash, createdAt: new Date().toISOString() };
@@ -139,6 +153,18 @@ export class MemoryMetadataStore implements MetadataStore {
 
   async hasProjectMember(projectId: string, userId: string): Promise<boolean> {
     return this.members.has(`${projectId}:${userId}`);
+  }
+
+  async createShareLink(row: ShareLinkRow): Promise<void> {
+    this.shareLinks.set(row.token, row);
+  }
+
+  async getShareLinkByToken(token: string): Promise<ShareLinkRow | undefined> {
+    return this.shareLinks.get(token);
+  }
+
+  async deleteShareLink(token: string): Promise<void> {
+    this.shareLinks.delete(token);
   }
 }
 

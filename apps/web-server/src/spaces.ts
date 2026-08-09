@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { join, resolve, sep } from "node:path";
-import { mkdir, readdir, readFile, rename } from "node:fs/promises";
+import { join, normalize, resolve, sep } from "node:path";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import { ZipArchive } from "archiver";
+import unzipper from "unzipper";
 import {
   buildProductPackage,
   createProject,
@@ -21,6 +22,8 @@ import { validateDSL } from "@prototype-studio/dsl-validator";
 import type { PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, ProjectRow, User } from "./metadata";
 import { MetadataError } from "./metadata";
+import { newToken } from "./auth";
+import { renderBoardHtml } from "./export";
 
 export class SpaceError extends Error {
   constructor(
@@ -194,6 +197,81 @@ export class ProjectSpaceManager {
     archive.directory(row.spacePath, false);
     await archive.finalize();
     return output;
+  }
+
+  async createShare(userId: string, projectId: string, baseUrl: string, expiresInSeconds?: number) {
+    await this.requireProject(userId, projectId);
+    const token = newToken();
+    await this.metadata.createShareLink({
+      id: randomUUID(),
+      projectId,
+      token,
+      mode: "read",
+      createdBy: userId,
+      ...(expiresInSeconds ? { expiresAt: new Date(Date.now() + expiresInSeconds * 1000).toISOString() } : {}),
+      createdAt: new Date().toISOString()
+    });
+    return { token, url: `${baseUrl}/share/${token}` };
+  }
+
+  async revokeShare(userId: string, projectId: string, token: string): Promise<void> {
+    await this.requireProject(userId, projectId);
+    await this.metadata.deleteShareLink(token);
+  }
+
+  async shareData(token: string) {
+    const link = await this.metadata.getShareLinkByToken(token);
+    if (!link) throw new SpaceError("NOT_FOUND", "分享链接不存在。");
+    if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) {
+      throw new SpaceError("NOT_FOUND", "分享链接已过期。");
+    }
+    const row = await this.metadata.getProjectById(link.projectId);
+    if (!row || row.status !== "active") throw new SpaceError("NOT_FOUND", "项目不可访问。");
+    const opened = await openProject(row.spacePath);
+    const pages: Array<{ id: string; title: string }> = [];
+    for (const summary of opened.pages) {
+      pages.push({ id: summary.id, title: summary.title });
+    }
+    return { project: { id: row.id, name: row.name, description: row.description }, pages, board: opened.board };
+  }
+
+  async shareHtml(token: string): Promise<string> {
+    const data = await this.shareData(token);
+    const row = await this.metadata.getProjectById(data.project.id);
+    const pages: Record<string, PageDSL> = {};
+    for (const summary of data.pages) {
+      pages[summary.id] = await getPage(row!.spacePath, summary.id);
+    }
+    return renderBoardHtml(data.board, pages, data.project.name);
+  }
+
+  async importZip(userId: string, name: string, zipBase64: string): Promise<ProjectRow> {
+    const user = await this.metadata.getUserById(userId);
+    if (!user) throw new SpaceError("FORBIDDEN", "用户不存在。");
+    const buffer = Buffer.from(zipBase64, "base64");
+    if (buffer.length > 64 * 1024 * 1024) throw new SpaceError("INVALID_INPUT", "导入包超过 64 MiB 限制。");
+    const directory = await unzipper.Open.buffer(buffer);
+    const files: Array<{ path: string; buffer: Buffer }> = [];
+    for (const entry of directory.files) {
+      if (entry.type === "Directory") continue;
+      const normalized = normalize(entry.path).replace(/\\/g, "/");
+      if (normalized.startsWith("../") || normalized.includes("/../") || normalized.startsWith("/") || normalized.match(/^[a-zA-Z]:/)) {
+        throw new SpaceError("INVALID_INPUT", "导入包包含不安全路径。");
+      }
+      files.push({ path: normalized, buffer: await entry.buffer() });
+    }
+    if (!files.some((file) => file.path === "project.yaml")) {
+      throw new SpaceError("INVALID_INPUT", "导入包缺少 project.yaml，不是有效项目。");
+    }
+    const row = await this.createSpace(user, name, "从项目整包导入恢复");
+    for (const file of files) {
+      const target = resolve(row.spacePath, file.path);
+      if (target === row.spacePath || !target.startsWith(`${row.spacePath}${sep}`)) continue;
+      await mkdir(resolve(target, ".."), { recursive: true });
+      await writeFile(target, file.buffer);
+    }
+    await openProject(row.spacePath);
+    return row;
   }
 }
 
