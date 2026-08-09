@@ -22,7 +22,7 @@ echo "PUBLIC_URL=${PUBLIC_URL}"
 echo "INVITE_CODES=${INVITE_CODES}"
 
 echo "== 3/4 构建并启动（PostgreSQL + 应用）=="
-PUBLIC_URL="$PUBLIC_URL" INVITE_CODES="$INVITE_CODES" docker compose up -d --build
+BASE_URL="$PUBLIC_URL" INVITE_CODES="$INVITE_CODES" docker compose up -d --build
 
 echo "== 4/4 等待就绪并健康检查 =="
 for i in $(seq 1 30); do
