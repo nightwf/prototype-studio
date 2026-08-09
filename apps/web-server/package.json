@@ -10,5 +10,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config ../../vitest.config.ts"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "@prototype-studio/command-engine": "workspace:^",
+    "@prototype-studio/dsl-schema": "workspace:^",
+    "@prototype-studio/dsl-validator": "workspace:^",
+    "@prototype-studio/project-store": "workspace:^",
+    "@prototype-studio/renderer": "workspace:^",
+    "archiver": "^8.0.0",
+    "fastify": "^5.11.3",
+    "pg": "^8.23.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/archiver": "^8.0.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6"
+  }
 }
