@@ -4,6 +4,20 @@ Prototype Studio 是面向后台管理类 Web 系统的本地优先需求与原�
 
 > 当前阶段：Local-first MVP 持续实现中。DSL、Validator、Command/Revision、Project Store、Requirement Engine、Renderer、Preview Runtime 与 Studio 编辑闭环已经可运行；桌面与 MCP 集成在同一仓库内继续收口。
 
+> **网页端**：本仓库是纯网页端版本（云托管、多项目空间、浏览器编辑、云端 MCP、只读分享、导出导入）。原桌面项目在 `prototype studio` 目录，保持可构建、随时可用。
+
+## 网页端快速启动
+
+```bash
+pnpm install
+pnpm --filter @prototype-studio/web-server build
+PORT=8787 SPACES_DIR=./data/spaces INVITE_CODES=PROTOTYPE-DEV node apps/web-server/dist/main.cjs
+# 另开终端
+VITE_WEB_API=http://127.0.0.1:8787 pnpm --filter @prototype-studio/studio dev
+```
+
+浏览器打开 vite 输出端口，用邀请码 `PROTOTYPE-DEV` 注册登录。生产部署：`docker compose up -d`（自动迁移 PostgreSQL 元数据，项目文件存数据卷）。验收清单见 `docs/WEB_ACCEPTANCE.md`。
+
 ## 现在可以体验什么
 
 - 打开专业桌面工作台和独立 iframe Preview。
