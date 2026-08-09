@@ -64,7 +64,7 @@ import {
   type RevisionRecord,
   type UIComponent
 } from "@prototype-studio/dsl-schema";
-import { applyBoardCommands, createRevertRevision, diffDsl, executeCommands, type DslDiffEntry } from "@prototype-studio/command-engine";
+import { applyBoardCommands, createRevertRevision, diffDsl, executeCommands, type ApplyBoardCommandsResult, type DslDiffEntry } from "@prototype-studio/command-engine";
 import { collectComponentLocations, getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ANNOTATION_PANEL_GAP,
@@ -471,6 +471,10 @@ export function App() {
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
   const boardViewRef = useRef<BoardRendererHandle>(null);
+  const boardRef = useRef(board);
+  const boardRevisionRef = useRef(board.revision);
+  const boardQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
+  const boardQueueBaseRef = useRef<number | null>(null);
   const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
   const [markerPicking, setMarkerPicking] = useState(false);
   const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", text: "", tone: "orange" });
@@ -913,41 +917,84 @@ export function App() {
     }
   }, [dsl, persistDesktopPage, toast, webProjectId]);
 
-  const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新"): Promise<boolean> => {
+  useEffect(() => {
+    boardRef.current = board;
+    boardRevisionRef.current = board.revision;
+  }, [board]);
+
+  const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新", silent = false): Promise<boolean> => {
+    // 1) 本地乐观应用：基于 ref 链，保证连续快速调用（如拖拽）不会版本回退。
+    let applied: ApplyBoardCommandsResult;
     try {
       const result = applyBoardCommands({
-        board,
-        baseRevision: board.revision,
+        board: boardRef.current,
+        baseRevision: boardRevisionRef.current,
         commands,
         source: "manual",
         operator: "jojo"
       });
-      // 先本地乐观更新，保证画布拖拽等交互即时反馈；
-      // 服务端成功后以服务端返回为准，失败时重新读取恢复一致。
+      applied = result;
+      boardRef.current = result.board;
+      boardRevisionRef.current = result.board.revision;
       setBoard(result.board);
-      if (webMode && webProjectId) {
-        await webSpace.boardCommands(webProjectId, board.revision, commands, "manual", "jojo");
-        const fresh = await webSpace.board(webProjectId);
-        setBoard(fresh.board);
-      } else if (projectRoot && isDesktopRuntime()) {
-        await persistDesktopBoardRevision(stringifyYaml(result.board, { lineWidth: 0 }), result.revision);
-      }
-      toast("success", message, `画布 Revision ${result.board.revision}`);
-      return true;
     } catch (error) {
-      // 画布可能已被其他会话（另一个标签页 / Codex）修改：先重新读取最新画布，
-      // 避免本地乐观状态与服务端版本继续偏离。
-      if (webMode && webProjectId) {
-        try {
-          const fresh = await webSpace.board(webProjectId);
-          setBoard(fresh.board);
-        } catch { /* 忽略重新读取失败，保留当前状态 */ }
-      }
-      const detail = error instanceof Error ? error.message : "未知错误";
-      toast("danger", "画布修改未执行", `${detail} 已自动重新读取画布，请重试刚才的操作。`);
+      toast("danger", "画布修改未执行", error instanceof Error ? error.message : "未知错误");
       return false;
     }
-  }, [board, projectRoot, toast, webProjectId]);
+    // 2) 服务端提交串行化：一次只发一个命令，base revision 沿队列递增，
+    //    彻底避免并发命令互相踩踏导致的 revision 冲突。
+    const task = boardQueueRef.current.then(async (): Promise<boolean> => {
+      try {
+        const base = boardQueueBaseRef.current ?? applied.board.revision - 1;
+        if (webMode && webProjectId) {
+          await webSpace.boardCommands(webProjectId, base, commands, "manual", "jojo");
+        } else if (projectRoot && isDesktopRuntime()) {
+          await persistDesktopBoardRevision(stringifyYaml(applied.board, { lineWidth: 0 }), applied.revision);
+        }
+        boardQueueBaseRef.current = base + 1;
+        if (!silent) toast("success", message, `画布 Revision ${boardRevisionRef.current}`);
+        return true;
+      } catch (error) {
+        // 画布可能已被其他会话（另一个标签页 / Codex）修改：重新读取最新画布，
+        // 重置版本链，避免本地乐观状态与服务端继续偏离。
+        boardQueueBaseRef.current = null;
+        if (webMode && webProjectId) {
+          try {
+            const fresh = await webSpace.board(webProjectId);
+            boardRef.current = fresh.board;
+            boardRevisionRef.current = fresh.board.revision;
+            setBoard(fresh.board);
+          } catch { /* 忽略重新读取失败，保留当前状态 */ }
+        }
+        const detail = error instanceof Error ? error.message : "未知错误";
+        toast("danger", "画布修改未执行", `${detail} 已自动重新读取画布，请重试刚才的操作。`);
+        return false;
+      }
+    });
+    boardQueueRef.current = task;
+    return task;
+  }, [projectRoot, toast, webProjectId]);
+
+  // 拖拽移动按帧合并：一帧内只发一次 MOVE 命令（取最新位置），避免拖动时命令洪泛。
+  const pendingMovesRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const pendingFlushRef = useRef<number>(0);
+
+  const scheduleBoardMoveFlush = useCallback(() => {
+    if (pendingFlushRef.current) return;
+    pendingFlushRef.current = requestAnimationFrame(() => {
+      pendingFlushRef.current = 0;
+      const moves = pendingMovesRef.current;
+      pendingMovesRef.current = new Map();
+      if (!moves.size) return;
+      const commands: BoardCommand[] = [...moves.entries()].map(([target, position]) => ({
+        type: "MOVE_BOARD_OBJECT",
+        target,
+        x: position.x,
+        y: position.y
+      }));
+      void runBoardCommands(commands, moves.size > 1 ? "批量移动" : "移动", true);
+    });
+  }, [runBoardCommands]);
 
   const boardPageMap = useMemo(() => {
     const map: Record<string, PageDSL> = {};
@@ -1128,19 +1175,19 @@ export function App() {
   };
 
   const moveBoardObject = (id: string, x: number, y: number) => {
-    void runBoardCommands([{ type: "MOVE_BOARD_OBJECT", target: id, x, y }]);
+    pendingMovesRef.current.set(id, { x, y });
+    scheduleBoardMoveFlush();
   };
 
   const moveBoardObjects = (ids: string[], dx: number, dy: number) => {
-    const moves = board.objects
-      .filter((object): object is Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" }> => ids.includes(object.id) && object.type !== "marker")
-      .map((object) => ({
-        type: "MOVE_BOARD_OBJECT" as const,
-        target: object.id,
+    board.objects.forEach((object) => {
+      if (!ids.includes(object.id) || object.type === "marker") return;
+      pendingMovesRef.current.set(object.id, {
         x: boardSnap ? snapValue(object.x + dx) : object.x + dx,
         y: boardSnap ? snapValue(object.y + dy) : object.y + dy
-      }));
-    if (moves.length) void runBoardCommands(moves, "批量移动");
+      });
+    });
+    scheduleBoardMoveFlush();
   };
 
   const moveBoardMarker = (id: string, offsetX: number, offsetY: number) => {
