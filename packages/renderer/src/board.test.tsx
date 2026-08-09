@@ -69,4 +69,12 @@ describe("BoardRenderer", () => {
     expect(first).toContain("勾选案件");
     expect(first).toContain("案件");
   });
+
+  it("marks the canvas as picking so page frames become click-to-pick targets", () => {
+    const markup = renderToStaticMarkup(
+      <BoardRenderer board={board} pages={{ "case-list": caseListExample }} interactive picking />
+    );
+    expect(markup).toContain('class="board-canvas is-picking"');
+    expect(markup).toMatch(/board-object--page\s+is-picking/);
+  });
 });

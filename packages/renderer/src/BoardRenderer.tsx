@@ -8,11 +8,13 @@ export interface BoardRendererProps {
   pages: Record<string, PageDSL>;
   selectedId?: string;
   interactive?: boolean;
+  picking?: boolean;
   onSelectObject?: (id: string) => void;
   onOpenPage?: (pageId: string) => void;
   scale?: number;
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveMarker?: (id: string, offsetX: number, offsetY: number) => void;
+  onPickComponent?: (pageObjectId: string, componentId: string, offsetX: number, offsetY: number) => void;
 }
 
 interface Point {
@@ -132,11 +134,13 @@ export function BoardRenderer({
   pages,
   selectedId,
   interactive = true,
+  picking = false,
   onSelectObject,
   onOpenPage,
   scale = 1,
   onMoveObject,
-  onMoveMarker
+  onMoveMarker,
+  onPickComponent
 }: BoardRendererProps) {
   const frameRefs = useRef(new Map<string, HTMLDivElement>());
   const [pins, setPins] = useState<Record<string, Point>>({});
@@ -222,7 +226,7 @@ export function BoardRenderer({
       );
     }
     const startDrag = (event: PointerEvent<HTMLDivElement>) => {
-      if (!interactive) return;
+      if (!interactive || picking) return;
       event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       dragRef.current = { id: object.id, startX: event.clientX, startY: event.clientY, originX: object.x, originY: object.y };
@@ -238,7 +242,7 @@ export function BoardRenderer({
     return (
       <div
         key={object.id}
-        className={`board-object board-object--${object.type} ${selected ? "is-selected" : ""}`}
+        className={`board-object board-object--${object.type} ${selected ? "is-selected" : ""} ${picking ? "is-picking" : ""}`}
         style={{ left: object.x, top: object.y, width: object.width, height: object.height }}
         data-board-object={object.id}
         data-object-type={object.type}
@@ -255,7 +259,20 @@ export function BoardRenderer({
         {object.type === "page" ? (
           <>
             <div className="board-page-head"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>{object.pageId}</small></div>
-            <div className="board-page-body" ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}>
+            <div
+              className="board-page-body"
+              ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}
+              onClick={(event) => {
+                if (!picking) return;
+                event.stopPropagation();
+                const target = (event.target as HTMLElement).closest?.("[data-component-id]") as HTMLElement | null;
+                if (!target) return;
+                const componentRect = target.getBoundingClientRect();
+                const offsetX = Math.round((event.clientX - componentRect.left) / scale);
+                const offsetY = Math.round((event.clientY - componentRect.top) / scale);
+                onPickComponent?.(object.id, target.getAttribute("data-component-id") ?? "", offsetX, offsetY);
+              }}
+            >
               {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={false} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
             </div>
           </>
@@ -277,7 +294,7 @@ export function BoardRenderer({
   board.objects.forEach((object) => centers.set(object.id, objectCenter(object, pins)));
 
   return (
-    <div className="board-canvas" style={{ width: content.width + 420, height: content.height + 120 }}>
+    <div className={`board-canvas ${picking ? "is-picking" : ""}`} style={{ width: content.width + 420, height: content.height + 120 }}>
       <svg className="board-links" width={content.width + 420} height={content.height + 120}>
         <defs>
           <marker id="board-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">

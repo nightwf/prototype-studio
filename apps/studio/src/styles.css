@@ -321,6 +321,9 @@ button { color: inherit; }
 .board-tool-actions button { height: 28px; padding: 0 14px; border: 1px solid #3a4650; border-radius: 6px; background: #1f2a31; color: #cfd6da; font-size: 10px; cursor: pointer; }
 .board-tool-actions button.is-primary { border-color: #2f6da3; background: #1d4a72; color: #eaf4fb; }
 .board-tool-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+.board-tool-pick { width: 100%; height: 32px; margin-bottom: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px dashed #4a88c4; border-radius: 7px; background: rgba(59, 130, 246, 0.12); color: #8fc3f2; font-size: 10px; cursor: pointer; }
+.board-tool-pick:hover { background: rgba(59, 130, 246, 0.22); }
+.board-tool-hint { padding: 14px 12px; border: 1px dashed #4a88c4; border-radius: 7px; color: #9fc5e8; font-size: 10px; line-height: 1.6; background: rgba(59, 130, 246, 0.08); }
 .board-tool-empty { padding: 10px; color: #7f8c94; font-size: 9px; text-align: center; }
 .board-inspector .board-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .board-fields label { display: block; }

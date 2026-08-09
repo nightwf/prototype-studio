@@ -23,6 +23,7 @@ import {
   Maximize2,
   MapPin,
   Monitor,
+  MousePointer2,
   MoreHorizontal,
   Pencil,
   PanelRight,
@@ -167,6 +168,15 @@ function createMinimalPage(id: string, title: string, type: CreatablePageType): 
 
 const markerTones: MarkerTone[] = ["orange", "blue", "green", "red", "purple"];
 
+interface MarkerDraft {
+  pageObjectId: string;
+  componentId: string;
+  offsetX?: number;
+  offsetY?: number;
+  text: string;
+  tone: MarkerTone;
+}
+
 function defaultBoardFromPages(pages: PageDSL[], id = "web-board"): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
@@ -186,41 +196,55 @@ function defaultBoardFromPages(pages: PageDSL[], id = "web-board"): BoardDSL {
   };
 }
 
-function MarkerPicker({ boardPageObjects, pages, onCancel, onAdd }: {
+function MarkerPicker({ boardPageObjects, pages, draft, picking, onChange, onStartPick, onCancel, onAdd }: {
   boardPageObjects: Array<Extract<BoardObject, { type: "page" }>>;
   pages: Record<string, PageDSL>;
+  draft: MarkerDraft;
+  picking: boolean;
+  onChange: (draft: MarkerDraft) => void;
+  onStartPick: () => void;
   onCancel: () => void;
   onAdd: (pageObjectId: string, componentId: string, text: string, tone: MarkerTone) => void;
 }) {
-  const [pageObjectId, setPageObjectId] = useState(boardPageObjects[0]?.id ?? "");
-  const [componentId, setComponentId] = useState("");
-  const [text, setText] = useState("");
-  const [tone, setTone] = useState<MarkerTone>("orange");
+  const pageObjectId = draft.pageObjectId;
+  const componentId = draft.componentId;
   const pageDsl = pageObjectId ? pages[boardPageObjects.find((object) => object.id === pageObjectId)?.pageId ?? ""] : undefined;
   const components = pageDsl ? collectComponentLocations(pageDsl).map(({ component }) => component.id) : [];
+  if (picking) {
+    return (
+      <div className="board-tool-panel board-tool-panel--picking">
+        <div className="board-tool-head"><span>ADD MARKER</span><strong>点选页面元素</strong><button onClick={onCancel} aria-label="取消点选"><X size={13} /></button></div>
+        <div className="board-tool-hint">点击画布中页面上的任意元素，标注会自动挂靠到该元素。</div>
+        <div className="board-tool-actions">
+          <button onClick={onCancel}>取消</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="board-tool-panel">
       <div className="board-tool-head"><span>ADD MARKER</span><strong>添加标注</strong><button onClick={onCancel} aria-label="关闭标注面板"><X size={13} /></button></div>
+      <button className="board-tool-pick" onClick={onStartPick}><MousePointer2 size={13} />在画布上点选页面元素</button>
       <label><span>挂靠页面</span>
-        <select value={pageObjectId} onChange={(event) => { setPageObjectId(event.target.value); setComponentId(""); }}>
+        <select value={pageObjectId} onChange={(event) => onChange({ ...draft, pageObjectId: event.target.value, componentId: "" })}>
           {boardPageObjects.map((object) => <option key={object.id} value={object.id}>{pages[object.pageId]?.page.title ?? object.pageId}</option>)}
         </select>
       </label>
       <label><span>挂靠组件</span>
-        <select value={componentId} onChange={(event) => setComponentId(event.target.value)} disabled={!pageDsl}>
+        <select value={componentId} onChange={(event) => onChange({ ...draft, componentId: event.target.value })} disabled={!pageDsl}>
           <option value="">选择组件</option>
           {components.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
       </label>
       <label><span>颜色</span>
-        <select value={tone} onChange={(event) => setTone(event.target.value as MarkerTone)}>
+        <select value={draft.tone} onChange={(event) => onChange({ ...draft, tone: event.target.value as MarkerTone })}>
           {markerTones.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
-      <label><span>说明文字</span><input value={text} onChange={(event) => setText(event.target.value)} placeholder="标注内容…" /></label>
+      <label><span>说明文字</span><input value={draft.text} onChange={(event) => onChange({ ...draft, text: event.target.value })} placeholder="标注内容…" /></label>
       <div className="board-tool-actions">
         <button onClick={onCancel}>取消</button>
-        <button className="is-primary" disabled={!pageObjectId || !componentId} onClick={() => onAdd(pageObjectId, componentId, text, tone)}>添加</button>
+        <button className="is-primary" disabled={!pageObjectId || !componentId} onClick={() => onAdd(pageObjectId, componentId, draft.text, draft.tone)}>添加</button>
       </div>
     </div>
   );
@@ -435,6 +459,8 @@ export function App() {
   const [boardZoom, setBoardZoom] = useState(0.82);
   const [boardPan, setBoardPan] = useState({ x: 0, y: 0 });
   const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
+  const [markerPicking, setMarkerPicking] = useState(false);
+  const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", text: "", tone: "orange" });
   const [boardDraft, setBoardDraft] = useState<Record<string, unknown>>({});
   const boardSeedDone = useRef(false);
   const boardPanRef = useRef<{ x: number; y: number; startX: number; startY: number } | undefined>(undefined);
@@ -935,7 +961,7 @@ export function App() {
     }
   };
 
-  const addBoardMarker = async (pageObjectId: string, componentId: string, text: string, tone: MarkerTone) => {
+  const addBoardMarker = async (pageObjectId: string, componentId: string, text: string, tone: MarkerTone, offsetX?: number, offsetY?: number) => {
     const object: BoardMarkerObject = {
       id: `marker-${Date.now()}`,
       type: "marker",
@@ -943,11 +969,12 @@ export function App() {
       tone,
       text: text.trim() || `标注 ${nextMarkerNumber()}`,
       source: "explicit",
-      anchor: { pageObjectId, componentId }
+      anchor: { pageObjectId, componentId, ...(offsetX !== undefined ? { offsetX } : {}), ...(offsetY !== undefined ? { offsetY } : {}) }
     };
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "标注已添加")) {
       setBoardSelectedId(object.id);
       setBoardTool("none");
+      setMarkerPicking(false);
     }
   };
 
@@ -1392,7 +1419,7 @@ window.addEventListener('DOMContentLoaded', function () {
             <div className="board-tools">
               <button onClick={() => setBoardTool(boardTool === "page" ? "none" : "page")}><Plus size={13} />页面</button>
               <button onClick={() => void addBoardNote()}><StickyNote size={13} />说明</button>
-              <button onClick={() => setBoardTool(boardTool === "marker" ? "none" : "marker")}><MapPin size={13} />标注</button>
+              <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
               <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
               <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
               <button onClick={exportBoardHtml}><Download size={13} />导出 HTML</button>
@@ -1436,6 +1463,12 @@ window.addEventListener('DOMContentLoaded', function () {
               onOpenPage={openPageFromBoard}
               onMoveObject={moveBoardObject}
               onMoveMarker={moveBoardMarker}
+              picking={markerPicking}
+              onPickComponent={(pageObjectId, componentId, offsetX, offsetY) => {
+                setMarkerDraft((previous) => ({ ...previous, pageObjectId, componentId, offsetX, offsetY }));
+                setMarkerPicking(false);
+                toast("success", "已选中元素", componentId);
+              }}
             />
           </div>
           {boardTool === "page" ? <div className="board-tool-panel">
@@ -1448,8 +1481,17 @@ window.addEventListener('DOMContentLoaded', function () {
           {boardTool === "marker" ? <MarkerPicker
             boardPageObjects={boardPageObjects}
             pages={boardPageMap}
-            onCancel={() => setBoardTool("none")}
-            onAdd={async (pageObjectId, componentId, text, tone) => { await addBoardMarker(pageObjectId, componentId, text, tone); }}
+            draft={markerDraft}
+            picking={markerPicking}
+            onChange={setMarkerDraft}
+            onStartPick={() => { setMarkerPicking(true); setMarkerDraft((previous) => ({ ...previous, pageObjectId: boardPageObjects[0]?.id ?? "", componentId: "" })); }}
+            onCancel={() => { setBoardTool("none"); setMarkerPicking(false); }}
+            onAdd={async (pageObjectId, componentId, text, tone) => {
+              const offsets = markerDraft.pageObjectId === pageObjectId && markerDraft.componentId === componentId
+                ? { offsetX: markerDraft.offsetX, offsetY: markerDraft.offsetY }
+                : {};
+              await addBoardMarker(pageObjectId, componentId, text, tone, offsets.offsetX, offsets.offsetY);
+            }}
           /> : null}
         </div>
       </div> : currentPage ? <>

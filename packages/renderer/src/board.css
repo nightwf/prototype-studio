@@ -1,4 +1,6 @@
 .board-canvas { position: relative; min-width: 100%; min-height: 100%; }
+.board-canvas.is-picking .board-object--page { cursor: crosshair; }
+.board-canvas.is-picking .board-object--page .board-page-body [data-component-id] { cursor: pointer; }
 .board-links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
 .board-object { position: absolute; box-sizing: border-box; border: 1px solid #9aa7ad; border-radius: 9px; background: white; box-shadow: 0 10px 30px rgba(26, 35, 42, 0.14); }
 .board-object.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35); }
