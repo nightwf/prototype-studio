@@ -61,3 +61,16 @@ studio.example.com {
 - 上线前务必修改 `INVITE_CODES` 并妥善分发；
 - `/mcp` 需要有效的 Bearer Token（来自登录响应），无效 token 返回 UNAUTHORIZED；
 - 建议在反向代理层启用 HTTPS，并按需限制来源 IP。
+
+## 自动部署与持续更新
+
+支持“push 即部署”：仓库推送到 GitHub（私有仓库）后，GitHub Actions 自动 SSH 到服务器执行 `git pull && docker compose up -d --build`。
+
+首次配置：
+
+1. 把本仓库推到 GitHub 私有仓库；
+2. 在服务器上执行 `scripts/server-init.sh`（需先设置 `REPO_URL`/`PUBLIC_URL`/`INVITE_CODES` 环境变量）；
+3. 在 GitHub 仓库 Settings → Secrets and variables → Actions 配置：`SSH_HOST`、`SSH_USERNAME`、`SSH_KEY`（服务器 SSH 私钥）、`PUBLIC_URL`、`INVITE_CODES`；
+4. 之后每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
+
+腾讯云（Gitee 等）平台同理：换成对应 CI 配置（如 Gitee Go），把同一套 SSH 部署命令接入即可。

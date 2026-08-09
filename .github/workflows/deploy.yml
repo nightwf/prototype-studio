@@ -1,0 +1,23 @@
+name: Deploy Prototype Studio Web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            cd /srv/prototype-studio-web || exit 1
+            git pull --ff-only
+            BASE_URL="${{ secrets.PUBLIC_URL }}" INVITE_CODES="${{ secrets.INVITE_CODES }}" sudo docker compose up -d --build
+            curl -sS -o /dev/null -w 'health:%{http_code}\n' http://127.0.0.1:8787/api/me
