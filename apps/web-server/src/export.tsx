@@ -30,7 +30,7 @@ export async function renderBoardHtml(board: BoardDSL, pages: Record<string, Pag
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title} · 画布</title>
-<style>${rendererCss}\n${boardCss}\nhtml,body{margin:0;background:#0f172a;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;}body{padding:24px;}</style>
+<style>${rendererCss}\n${boardCss}\nhtml,body{margin:0;background:#e6eaed;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;}body{padding:24px;}</style>
 </head>
 <body>
 <div class="export-canvas" style="position:relative;width:${canvasWidth}px;height:${canvasHeight}px;">${body}</div>

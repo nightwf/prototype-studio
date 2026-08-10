@@ -1303,7 +1303,7 @@ export function App() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${projectName} · 画布</title>
-<style>${rendererExportCss}\n${boardExportCss}\nhtml,body{margin:0;background:#0f172a;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;}body{padding:24px;}</style>
+<style>${rendererExportCss}\n${boardExportCss}\nhtml,body{margin:0;background:#e6eaed;font-family:system-ui,-apple-system,'PingFang SC',sans-serif;}body{padding:24px;}</style>
 </head>
 <body>
 <div class="export-canvas" style="position:relative;width:${canvasWidth}px;height:${canvasHeight}px;">${body}</div>

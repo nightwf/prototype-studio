@@ -109,6 +109,7 @@ describe("web server project spaces", () => {
     expect(exported.statusCode).toBe(200);
     expect(exported.json().html).toContain("data-board-object");
     expect(exported.json().html).toContain("data-board-marker");
+    expect(exported.json().html).toContain("html,body{margin:0;background:#e6eaed");
 
     const zip = await app.inject({ method: "POST", url: `/api/projects/${projectId}/export`, payload: { type: "zip" }, headers: auth });
     if (zip.statusCode !== 200) throw new Error(`zip 导出失败：${zip.statusCode} ${zip.body}`);
