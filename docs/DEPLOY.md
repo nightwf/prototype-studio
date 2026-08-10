@@ -79,7 +79,8 @@ studio.example.com {
 2. 在服务器上设置 `REPO_URL` 后执行 `scripts/server-init.sh`，再填写生成的 `.env.production`；
 3. 给服务器配置 GitHub 私有仓库的只读 Deploy Key；
 4. 在 GitHub 仓库 Settings → Environments 创建 `production`，配置：`SSH_HOST`、`SSH_PORT`、`SSH_USERNAME`、`SSH_KEY`、`SSH_FINGERPRINT`；
-5. 之后每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
+5. 完成服务器备份、Deploy Key 和 `.env.production` 后，在仓库 Settings → Secrets and variables → Actions → Variables 增加 `ENABLE_TENCENT_DEPLOY=true`；未设置时只运行质量检查，部署任务会安全跳过；
+6. 之后每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
 
 已有 PostgreSQL 数据卷时，不要只修改 `.env.production` 中的密码：先在数据库内修改角色密码，再同步更新 `POSTGRES_PASSWORD` 和 `DATABASE_URL`。任何维护操作都不要执行 `docker compose down -v`。
 

@@ -24,6 +24,7 @@ jobs:
       - run: pnpm build
 
   deploy:
+    if: ${{ vars.ENABLE_TENCENT_DEPLOY == 'true' }}
     needs: quality
     runs-on: ubuntu-latest
     environment: production
