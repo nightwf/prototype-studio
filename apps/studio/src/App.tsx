@@ -3,6 +3,7 @@ import {
   Box,
   Braces,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Clock3,
@@ -471,6 +472,8 @@ export function App() {
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
   const [boardMoreOpen, setBoardMoreOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_left") === "1");
+  const [rightCollapsed, setRightCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_right") === "1");
   const boardViewRef = useRef<BoardRendererHandle>(null);
   const boardRef = useRef(board);
   const boardRevisionRef = useRef(board.revision);
@@ -931,6 +934,14 @@ export function App() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [boardMoreOpen]);
+
+  useEffect(() => {
+    localStorage.setItem("ps_panel_left", leftCollapsed ? "1" : "0");
+  }, [leftCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem("ps_panel_right", rightCollapsed ? "1" : "0");
+  }, [rightCollapsed]);
 
   const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新", silent = false): Promise<boolean> => {
     // 1) 本地乐观应用：基于 ref 链，保证连续快速调用（如拖拽）不会版本回退。
@@ -1501,7 +1512,7 @@ window.addEventListener('DOMContentLoaded', function () {
     </div>
   );
 
-  return <div className="studio-shell">
+  return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
       <div className="project-switcher-wrap">
@@ -1569,6 +1580,9 @@ window.addEventListener('DOMContentLoaded', function () {
         </div> : <EmptyState icon={<FileText size={17} />} title="等待 Codex 结果" description="Codex 同步结构化页面模板或规范化需求后，Studio 再按声明生成页面计划。" />}
         <div className="left-footer"><FileCheck2 size={13} /><span>requirements/REQ-001.md</span><StatusDot tone="success">本地</StatusDot></div>
       </>}
+      <button className="panel-toggle panel-toggle--left" onClick={() => setLeftCollapsed((value) => !value)} title={leftCollapsed ? "展开左侧面板" : "收起左侧面板"} aria-label={leftCollapsed ? "展开左侧面板" : "收起左侧面板"}>
+        {leftCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+      </button>
     </aside>
 
     <main className="studio-canvas">
@@ -1698,6 +1712,7 @@ window.addEventListener('DOMContentLoaded', function () {
     </main>
 
     <aside className="studio-right">
+      <div className="studio-right-content">
       {activeWorkspace === "requirements" ? <>
         <PanelHeader eyebrow="TRACEABLE MODEL" title="需求解析结果" action={<ToolButton compact><MoreHorizontal size={14} /></ToolButton>} />
         {!requirementModel ? <EmptyState icon={<Sparkles size={18} />} title="等待 Requirement Model" description="解析后可在这里检查每一项来自原文、AI 推断还是系统默认。" /> : <div className="requirement-inspector">
@@ -1797,6 +1812,10 @@ window.addEventListener('DOMContentLoaded', function () {
         </div>
         <div className="inspector-footer"><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
       </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" />}
+      </div>
+      <button className="panel-toggle panel-toggle--right" onClick={() => setRightCollapsed((value) => !value)} title={rightCollapsed ? "展开右侧面板" : "收起右侧面板"} aria-label={rightCollapsed ? "展开右侧面板" : "收起右侧面板"}>
+        {rightCollapsed ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
+      </button>
     </aside>
 
     {appModal ? <div className="settings-overlay" onClick={() => setAppModal(undefined)}>
