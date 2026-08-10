@@ -1838,7 +1838,7 @@ ${boardExportRuntimeScript}
                   </div> : null}
                 </div>
               </div>
-              <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
+              <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><input type="range" className="zoom-slider" min={20} max={400} step={5} value={Math.round(boardZoom * 100)} onChange={(event) => boardViewRef.current?.setZoom(Number(event.target.value) / 100)} aria-label="缩放比例" /><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
             </div>
         </>}
       </div>

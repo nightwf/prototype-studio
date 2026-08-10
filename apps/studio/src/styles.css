@@ -135,6 +135,7 @@ button { color: inherit; }
 .zoom-control button:first-child { border-radius: 5px 0 0 5px; }
 .zoom-control button:last-child { border-radius: 0 5px 5px 0; }
 .zoom-control span { min-width: 42px; border-left: 0; border-right: 0; font: 9px/1 var(--ps-font-mono); }
+.zoom-slider { width: 96px; height: 4px; margin: 0 8px; accent-color: #2563eb; cursor: pointer; }
 .canvas-stage { min-height: 0; overflow: auto; padding: 28px 25px 112px; background-color: #dfe3e3; background-image: radial-gradient(#bcc4c7 1px, transparent 1px); background-size: 16px 16px; }
 .canvas-empty { min-height: 0; display: grid; place-items: center; padding: 32px; background-color: #dfe3e3; background-image: radial-gradient(#bcc4c7 1px, transparent 1px); background-size: 16px 16px; }
 .canvas-empty .ps-empty-state { max-width: 350px; padding: 30px; border: 1px solid #c8cfd1; border-radius: 10px; background: rgba(247,248,245,.92); box-shadow: 0 14px 40px rgba(25,35,42,.1); }

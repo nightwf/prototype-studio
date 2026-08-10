@@ -70,6 +70,7 @@ export interface BoardRendererProps {
 export interface BoardRendererHandle {
   zoomIn(): void;
   zoomOut(): void;
+  setZoom(zoom: number): void;
   resetView(): void;
   fitToContent(): void;
 }
@@ -384,6 +385,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   useImperativeHandle(ref, () => ({
     zoomIn: () => setView((v) => zoomAtCursor(v, ZOOM_STEP, containerSize.width / 2, containerSize.height / 2)),
     zoomOut: () => setView((v) => zoomAtCursor(v, 1 / ZOOM_STEP, containerSize.width / 2, containerSize.height / 2)),
+    setZoom: (zoom) => setView((v) => zoomAtCursor(v, Math.min(4, Math.max(0.2, zoom)) / v.zoom, containerSize.width / 2, containerSize.height / 2)),
     resetView: () => setView({ x: 0, y: 0, zoom: 1 }),
     fitToContent
   }), [containerSize, fitToContent]);
