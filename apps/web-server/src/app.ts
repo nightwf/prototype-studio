@@ -391,6 +391,32 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return { ok: true, revisions: await options.spaces.revisions(user.id, projectIdOf(request.params)) };
   });
 
+  app.get("/api/projects/:projectId/versions", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, versions: await options.spaces.versions(user.id, projectIdOf(request.params)) };
+  });
+
+  app.post("/api/projects/:projectId/versions", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { label?: string };
+    const label = String(body.label ?? "").trim();
+    if (!label) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "版本编号不能为空。" });
+      return;
+    }
+    return { ok: true, version: await options.spaces.saveVersion(user.id, projectIdOf(request.params), label) };
+  });
+
+  app.post("/api/projects/:projectId/versions/:versionId/restore", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { versionId?: string };
+    if (!params.versionId) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "版本 ID 无效。" });
+      return;
+    }
+    return { ok: true, version: await options.spaces.restoreVersion(user.id, projectIdOf(request.params), params.versionId) };
+  });
+
   app.post("/api/projects/:projectId/export", async (request, reply) => {
     const user = await requireUser(request, reply);
     const projectId = projectIdOf(request.params);

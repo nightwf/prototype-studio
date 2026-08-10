@@ -195,6 +195,12 @@ export function validateBoard(value: unknown): BoardValidationResult {
       if (record.color && !/^#[0-9a-f]{6}$/i.test(record.color)) {
         errors.push(boardIssue("SCHEMA_INVALID", "连线颜色必须是 6 位十六进制颜色。", `${path}.color`));
       }
+      if (record.labelSize !== undefined && (!Number.isFinite(record.labelSize) || record.labelSize < 6 || record.labelSize > 48)) {
+        errors.push(boardIssue("SCHEMA_INVALID", "连线说明字号必须在 6–48 之间。", `${path}.labelSize`));
+      }
+      if (record.labelColor && !/^#[0-9a-f]{6}$/i.test(record.labelColor)) {
+        errors.push(boardIssue("SCHEMA_INVALID", "连线说明颜色必须是 6 位十六进制颜色。", `${path}.labelColor`));
+      }
       if (record.waypoint !== undefined) {
         const waypoint = record.waypoint as { x?: unknown; y?: unknown };
         if (typeof waypoint !== "object" || waypoint === null || !Number.isFinite(waypoint.x) || !Number.isFinite(waypoint.y)) {

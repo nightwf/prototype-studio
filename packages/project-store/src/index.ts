@@ -888,6 +888,67 @@ export async function removeRebuildableCache(root: string): Promise<void> {
   await mkdir(cache, { recursive: true });
 }
 
+export interface ProjectVersion {
+  id: string;
+  label: string;
+  createdAt: string;
+  pages: Record<string, PageDSL>;
+  boards: Record<string, BoardDSL>;
+}
+
+function versionsFilePath(root: string): string {
+  return projectPath(root, ".prototype/versions.json");
+}
+
+export async function listProjectVersions(root: string): Promise<ProjectVersion[]> {
+  try {
+    const parsed = JSON.parse(await readFile(versionsFilePath(root), "utf8")) as { versions?: ProjectVersion[] };
+    return Array.isArray(parsed.versions) ? parsed.versions : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 保存当前项目状态（所有页面与画布）为一个命名版本。 */
+export async function saveProjectVersion(root: string, label: string): Promise<ProjectVersion> {
+  const manifest = await getManifest(root);
+  const pages: Record<string, PageDSL> = {};
+  for (const summary of await listPages(root)) pages[summary.id] = await getPage(root, summary.id);
+  const boardIds = new Set<string>([
+    ...(manifest.defaultBoardId ? [manifest.defaultBoardId] : []),
+    ...(await listBoards(root)).map((board) => board.id)
+  ]);
+  const boards: Record<string, BoardDSL> = {};
+  for (const boardId of boardIds) boards[boardId] = await readBoard(root, boardId);
+  const version: ProjectVersion = {
+    id: randomUUID(),
+    label,
+    createdAt: new Date().toISOString(),
+    pages,
+    boards
+  };
+  const versions = await listProjectVersions(root);
+  versions.push(version);
+  await atomicWrite(versionsFilePath(root), JSON.stringify({ versions }, null, 2));
+  return version;
+}
+
+/** 把项目恢复到某个命名版本（页面与画布文件均还原为该版本快照）。 */
+export async function restoreProjectVersion(root: string, versionId: string): Promise<ProjectVersion> {
+  const versions = await listProjectVersions(root);
+  const version = versions.find((item) => item.id === versionId);
+  if (!version) throw new ProjectStoreError("PROJECT_NOT_FOUND", `找不到版本“${versionId}”。`);
+  for (const pageId of Object.keys(version.pages)) {
+    const dsl = version.pages[pageId];
+    if (dsl) await writePage(root, dsl, { overwrite: true });
+  }
+  for (const boardId of Object.keys(version.boards)) {
+    const board = version.boards[boardId];
+    if (board) await writeBoard(root, board);
+  }
+  return version;
+}
+
 export type ProjectCommandInput = {
   baseRevision: number;
   commands: Command[];

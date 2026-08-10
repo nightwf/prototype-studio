@@ -179,6 +179,20 @@ export const webSpace = {
   revisions(projectId: string) {
     return request<{ ok: true; revisions: Array<{ object: string; revision: number }> }>(`/api/projects/${projectId}/revisions`);
   },
+  versionList(projectId: string) {
+    return request<{ ok: true; versions: Array<{ id: string; label: string; createdAt: string }> }>(`/api/projects/${projectId}/versions`);
+  },
+  versionSave(projectId: string, label: string) {
+    return request<{ ok: true; version: { id: string; label: string; createdAt: string } }>(`/api/projects/${projectId}/versions`, {
+      method: "POST",
+      body: JSON.stringify({ label })
+    });
+  },
+  versionRestore(projectId: string, versionId: string) {
+    return request<{ ok: true; version: { id: string; label: string; createdAt: string } }>(`/api/projects/${projectId}/versions/${encodeURIComponent(versionId)}/restore`, {
+      method: "POST"
+    });
+  },
   exportHtml(projectId: string, mode: "content" | "with-annotations" = "content", scope: "current" | "all" = "current", boardId?: string) {
     return request<{ ok: true; html: string }>(`/api/projects/${projectId}/export`, {
       method: "POST",

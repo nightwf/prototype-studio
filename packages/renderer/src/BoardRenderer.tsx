@@ -55,6 +55,7 @@ export interface BoardRendererProps {
   onOpenDiagram?: (id: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveObjects?: (ids: string[], dx: number, dy: number) => void;
+  onResizeObject?: (id: string, x: number, y: number, width: number, height: number) => void;
   onMoveMarker?: (id: string, offsetX: number, offsetY: number) => void;
   onMoveMarkerNote?: (id: string, x: number, y: number) => void;
   onPickComponent?: (pageObjectId: string, componentId: string, offsetX: number, offsetY: number) => void;
@@ -96,6 +97,10 @@ function objectCenter(object: BoardObject, pins: Record<string, Point>, canvasX:
     return pin ? { x: pin.x - canvasX + 14, y: pin.y - canvasY + 14 } : { x: 0, y: 0 };
   }
   return { x: object.x - canvasX + object.width / 2, y: object.y - canvasY + object.height / 2 };
+}
+
+function isModuleDescriptionPage(dsl: PageDSL | undefined): boolean {
+  return Boolean(dsl && dsl.page.title.includes("模块说明"));
 }
 
 function linkPath(from: Point, to: Point, type: BoardLink["lineType"] = "curve", waypoint?: { x: number; y: number }): string {
@@ -260,6 +265,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onOpenDiagram,
   onMoveObject,
   onMoveObjects,
+  onResizeObject,
   onMoveMarker,
   onMoveMarkerNote,
   onPickComponent,
@@ -302,6 +308,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   } | undefined>(undefined);
   const markerDragRef = useRef<{ id: string; startX: number; startY: number; offsetX: number; offsetY: number } | undefined>(undefined);
   const markerNoteDragRef = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | undefined>(undefined);
+  const resizeRef = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number; originWidth: number; originHeight: number } | undefined>(undefined);
   const rafRef = useRef<number>(0);
 
   const bounds = useMemo(() => boardContentBounds(board, pins), [board, pins]);
@@ -687,7 +694,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     return (
       <div
         key={object.id}
-        className={`board-object board-object--${object.type} ${selected ? "is-selected" : ""} ${picking ? "is-picking" : ""}`}
+        className={`board-object board-object--${object.type} ${object.type === "page" && isModuleDescriptionPage(pages[object.pageId]) ? "is-module" : ""} ${selected ? "is-selected" : ""} ${picking ? "is-picking" : ""}`}
         style={{ left: visualX, top: visualY, width: object.width, height: object.height }}
         data-board-object={object.id}
         data-object-type={object.type}
@@ -704,8 +711,27 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
         }}
       >
         {object.type === "page" ? (
-          <>
-            <div className="board-page-head"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>{object.pageId}</small></div>
+          isModuleDescriptionPage(pages[object.pageId]) ? (
+            <>
+              <div className="board-page-head board-page-head--module"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>模块说明</small></div>
+              <div className="board-page-module-body">
+                {(pages[object.pageId]?.sections ?? []).filter((section) => section.type === "card").map((section) => (
+                  <div className="board-module-block" key={section.id}>
+                    {section.title ? <strong>{section.title}</strong> : null}
+                    {section.description ? <p>{section.description}</p> : null}
+                    {(section.children ?? []).filter((child) => child.type === "card").map((child) => (
+                      <div className="board-module-item" key={child.id}>
+                        {child.title ? <b>{child.title}</b> : null}
+                        {child.description ? <p>{child.description}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="board-page-head"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>{object.pageId}</small></div>
             <div
               className="board-page-body"
               ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}
@@ -756,7 +782,8 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                 />
               ) : null}
             </div>
-          </>
+            </>
+          )
         ) : object.type === "note" ? (
           <div className="board-note-text">{object.text}</div>
         ) : boardObjectViews.has(object.type) ? (
@@ -776,6 +803,36 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             onPointerMove={moveCreateLink}
             onPointerUp={endCreateLink}
             onPointerCancel={() => { createLinkRef.current = undefined; setCreateLink(undefined); }}
+          />
+        ) : null}
+        {interactive && selected ? (
+          <span
+            className="board-resize-handle"
+            title="拖动调整大小"
+            onPointerDown={(event) => {
+              if (!interactive) return;
+              event.stopPropagation();
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              resizeRef.current = {
+                id: object.id,
+                startX: event.clientX,
+                startY: event.clientY,
+                originX: object.x,
+                originY: object.y,
+                originWidth: object.width,
+                originHeight: object.height
+              };
+            }}
+            onPointerMove={(event) => {
+              const drag = resizeRef.current;
+              if (!drag || drag.id !== object.id) return;
+              const width = Math.max(40, Math.round(drag.originWidth + (event.clientX - drag.startX) / view.zoom));
+              const height = Math.max(40, Math.round(drag.originHeight + (event.clientY - drag.startY) / view.zoom));
+              onResizeObject?.(drag.id, drag.originX, drag.originY, snapToGrid ? snapValue(width) : width, snapToGrid ? snapValue(height) : height);
+            }}
+            onPointerUp={() => { resizeRef.current = undefined; }}
+            onPointerCancel={() => { resizeRef.current = undefined; }}
           />
         ) : null}
       </div>
@@ -851,7 +908,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               <path className="board-link-line" d={path} fill="none" stroke={color} strokeWidth={width} markerEnd={`url(#${markerId})`} />
               {interactive ? <path className="board-link-hit" d={path} fill="none" stroke="transparent" strokeWidth={Math.max(20, width + 14)} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onSelectLink?.(link.id); }} onClick={(event) => event.stopPropagation()} /> : null}
               {link.label ? (
-                <text className="board-link-label" x={labelPoint.x} y={labelPoint.y - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
+                <text className="board-link-label" x={labelPoint.x} y={labelPoint.y - 8} fill={link.labelColor ?? color} fontSize={link.labelSize ?? 10} fontWeight={700} textAnchor="middle">
                   {link.label}
                 </text>
               ) : null}
@@ -1034,6 +1091,19 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           />
         ))}
       </div>
+      <input
+        type="range"
+        className="board-zoom-slider"
+        min={20}
+        max={400}
+        step={5}
+        value={Math.round(view.zoom * 100)}
+        onChange={(event) => {
+          const zoom = Number(event.target.value) / 100;
+          setView((v) => zoomAtCursor(v, zoom / v.zoom, containerSize.width / 2, containerSize.height / 2));
+        }}
+        aria-label="缩放比例"
+      />
       {contextMenu ? (
         <div className="board-context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
           {contextMenu.objectIds.length ? (

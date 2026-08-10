@@ -385,6 +385,10 @@ export interface BoardLink {
   lineType?: BoardLinkType;
   strokeWidth?: number;
   color?: string;
+  /** 连线说明字号（px），默认 10。 */
+  labelSize?: number;
+  /** 连线说明颜色（6 位十六进制），默认跟随线色。 */
+  labelColor?: string;
   /** 中间节点（世界坐标）：连线经过该点，可拖动改变形状。 */
   waypoint?: { x: number; y: number };
 }

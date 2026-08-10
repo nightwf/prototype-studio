@@ -13,10 +13,13 @@ import {
   getPage,
   listBoards,
   listTrashedBoards,
+  listProjectVersions,
   openProject,
   deletePage,
   readBoard,
   restoreBoard,
+  restoreProjectVersion,
+  saveProjectVersion,
   persistPageSnapshot,
   writePage,
   updateBoard,
@@ -158,6 +161,25 @@ export class ProjectSpaceManager {
   async getBoard(userId: string, projectId: string, boardId?: string) {
     const row = await this.requireProject(userId, projectId);
     return readBoard(row.spacePath, boardId);
+  }
+
+  async versions(userId: string, projectId: string) {
+    const row = await this.requireProject(userId, projectId);
+    return listProjectVersions(row.spacePath);
+  }
+
+  async saveVersion(userId: string, projectId: string, label: string) {
+    const row = await this.requireProject(userId, projectId);
+    const version = await saveProjectVersion(row.spacePath, label);
+    await this.touchProject(projectId);
+    return version;
+  }
+
+  async restoreVersion(userId: string, projectId: string, versionId: string) {
+    const row = await this.requireProject(userId, projectId);
+    const version = await restoreProjectVersion(row.spacePath, versionId);
+    await this.touchProject(projectId);
+    return version;
   }
 
   async createBoard(userId: string, projectId: string, input: CreateBoardInput): Promise<BoardDSL> {

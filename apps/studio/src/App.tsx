@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
-  Clock3,
   Copy,
   Database,
   Download,
@@ -17,7 +16,7 @@ import {
   Layers3,
   LayoutPanelLeft,
   LayoutGrid,
-  Link2,
+  LogOut,
   Maximize2,
   MapPin,
   Magnet,
@@ -38,7 +37,6 @@ import {
   Trash2,
   Undo2,
   ArrowDown,
-  ArrowRight,
   ArrowUp,
   X,
   Zap
@@ -62,7 +60,7 @@ import {
   type RevisionRecord,
   type UIComponent
 } from "@prototype-studio/dsl-schema";
-import { applyBoardCommands, createRevertRevision, diffDsl, executeCommands, type ApplyBoardCommandsResult, type DslDiffEntry } from "@prototype-studio/command-engine";
+import { applyBoardCommands, createRevertRevision, executeCommands, type ApplyBoardCommandsResult } from "@prototype-studio/command-engine";
 import { collectComponentLocations, getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ANNOTATION_PANEL_GAP,
@@ -100,7 +98,7 @@ import {
   type DesktopMcpConnectionInfo,
   type DesktopProjectSnapshot
 } from "./desktopBridge";
-import { webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebUser } from "./webBridge";
+import { getApiToken, webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebUser } from "./webBridge";
 import { AuthScreen, ProjectsScreen } from "./WebScreens";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
@@ -358,14 +356,6 @@ function OptionsEditor({ component, onChange }: { component: UIComponent; onChan
   </div>;
 }
 
-function DiffView({ entries }: { entries: DslDiffEntry[] }) {
-  if (!entries.length) return <div className="history-empty">本次没有可显示的字段变化</div>;
-  return <div className="diff-list">{entries.slice(0, 20).map((entry) => <div key={entry.path} className={`diff-entry diff-entry--${entry.kind}`}>
-    <code>{entry.path}</code>
-    <div><span>{entry.before === undefined ? "∅" : JSON.stringify(entry.before)}</span><b>→</b><span>{entry.after === undefined ? "∅" : JSON.stringify(entry.after)}</span></div>
-  </div>)}</div>;
-}
-
 export function App() {
   const initialPages = useMemo(() => (isDesktopRuntime() ? [] : [structuredClone(caseListExample)]), []);
   const [pages, setPages] = useState<PageDSL[]>(initialPages);
@@ -376,7 +366,10 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string>(initialPages[0] ? "search.status" : "");
   const [history, setHistory] = useState<RevisionRecord[]>([]);
   const [redoStack, setRedoStack] = useState<RevisionRecord[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showVersions, setShowVersions] = useState(false);
+  const [projectVersions, setProjectVersions] = useState<Array<{ id: string; label: string; createdAt: string }>>([]);
+  const [newVersionLabel, setNewVersionLabel] = useState("");
+  const [versionBusy, setVersionBusy] = useState(false);
   const [showDsl, setShowDsl] = useState(false);
   const [previewScale, setPreviewScale] = useState(82);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -447,8 +440,6 @@ export function App() {
 
   const selectedLocation = useMemo(() => selectedId ? getComponentLocation(dsl, selectedId) : undefined, [dsl, selectedId]);
   const selected = selectedLocation?.component;
-  const lastRevision = history.at(-1);
-  const lastDiff = useMemo(() => lastRevision ? diffDsl(lastRevision.before, lastRevision.after).filter((entry) => entry.path !== "$.revision") : [], [lastRevision]);
 
   const toast = useCallback((tone: ToastTone, title: string, detail?: string) => {
     const id = Date.now();
@@ -489,6 +480,63 @@ export function App() {
       toast("danger", "无法打开项目", error instanceof Error ? error.message : "未知错误");
     }
   }, [toast]);
+
+  const refreshVersions = useCallback(async () => {
+    if (!webMode || !webProjectId) return;
+    try {
+      const result = await webSpace.versionList(webProjectId);
+      setProjectVersions(result.versions);
+    } catch { /* 忽略版本列表加载失败 */ }
+  }, [webProjectId]);
+
+  const saveNewVersion = async () => {
+    const label = newVersionLabel.trim();
+    if (!label) {
+      toast("warning", "请输入版本编号", "例如 v1.2、评审版、发布版。");
+      return;
+    }
+    if (!webMode || !webProjectId) {
+      toast("warning", "版本管理仅网页端可用");
+      return;
+    }
+    setVersionBusy(true);
+    try {
+      await webSpace.versionSave(webProjectId, label);
+      setNewVersionLabel("");
+      await refreshVersions();
+      toast("success", "版本已保存", label);
+    } catch (error) {
+      toast("danger", "保存版本失败", error instanceof Error ? error.message : "未知错误");
+    } finally {
+      setVersionBusy(false);
+    }
+  };
+
+  const restoreVersion = async (versionId: string, label: string) => {
+    if (!webMode || !webProjectId) return;
+    setVersionBusy(true);
+    try {
+      await webSpace.versionRestore(webProjectId, versionId);
+      await loadWebProject(webProjectId);
+      await refreshVersions();
+      setShowVersions(true);
+      toast("success", "已切换到版本", `${label} · 编辑后会自动生成新的当前版本`);
+    } catch (error) {
+      toast("danger", "切换版本失败", error instanceof Error ? error.message : "未知错误");
+    } finally {
+      setVersionBusy(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (!webMode) return;
+    await webAuth.logout();
+    setWebSession(undefined);
+    setWebProjectId(undefined);
+    setPages([]);
+    setBoard(defaultBoardFromPages([]));
+    setShowSettings(false);
+  };
 
   const handleAuthenticated = useCallback(async (user: WebUser) => {
     setWebSession(user);
@@ -684,7 +732,7 @@ export function App() {
     setSelectedId("");
     setHistory([]);
     setRedoStack([]);
-    setShowHistory(false);
+    setShowVersions(false);
     setShowDsl(false);
     setOpenPageMenuId(undefined);
     setPreviewReady(false);
@@ -1003,8 +1051,8 @@ export function App() {
     if (link) {
       setBoardDraft({
         label: link.label ?? "",
-        fromComponentId: link.fromComponentId ?? "",
-        toComponentId: link.toComponentId ?? "",
+        labelSize: link.labelSize ?? 10,
+        labelColor: link.labelColor ?? "#1f2937",
         lineType: link.lineType ?? "curve",
         strokeWidth: link.strokeWidth ?? 2.5,
         color: link.color ?? "#2563eb"
@@ -1217,17 +1265,6 @@ export function App() {
     return object?.type === "flowchart" || object?.type === "er" ? object : undefined;
   }, [board, diagramEditor]);
 
-  const boardComponentOptions = (objectId: string) => {
-    const object = board.objects.find((item) => item.id === objectId);
-    if (!object || object.type !== "page") return [];
-    const page = boardPageMap[object.pageId];
-    if (!page) return [];
-    return collectComponentLocations(page).map(({ component }) => ({
-      id: component.id,
-      label: component.label ?? component.title ?? component.text ?? component.id
-    }));
-  };
-
   const nextMarkerNumber = () => Math.max(0, ...board.objects
     .filter((object) => object.type === "marker")
     .map((object) => (object as BoardMarkerObject).number)
@@ -1359,8 +1396,8 @@ export function App() {
       changes: {
         x: Number(boardDraft.x ?? boardSelectedObject.x),
         y: Number(boardDraft.y ?? boardSelectedObject.y),
-        width: Number(boardDraft.width ?? boardSelectedObject.width),
-        height: Number(boardDraft.height ?? boardSelectedObject.height)
+        width: Math.max(40, Number(boardDraft.width ?? boardSelectedObject.width)),
+        height: Math.max(40, Number(boardDraft.height ?? boardSelectedObject.height))
       }
     }]);
   };
@@ -1474,6 +1511,14 @@ export function App() {
     scheduleBoardMoveFlush();
   };
 
+  const resizeBoardObject = (id: string, x: number, y: number, width: number, height: number) => {
+    void runBoardCommands([{
+      type: "UPDATE_BOARD_OBJECT",
+      target: id,
+      changes: { x, y, width, height }
+    }]);
+  };
+
   const moveBoardObjects = (ids: string[], dx: number, dy: number) => {
     board.objects.forEach((object) => {
       if (!ids.includes(object.id) || object.type === "marker") return;
@@ -1533,7 +1578,7 @@ export function App() {
     setViewMode("page");
     setSelectedId("");
     setPreviewReady(false);
-    setShowHistory(false);
+    setShowVersions(false);
     setShowDsl(false);
   };
 
@@ -1719,6 +1764,8 @@ ${boardExportRuntimeScript}
     />;
   }
 
+  const webApiToken = getApiToken();
+
   return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
@@ -1742,7 +1789,7 @@ ${boardExportRuntimeScript}
         <span className="title-divider" />
         <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
-        <ToolButton disabled={!currentPage} onClick={() => setShowHistory(!showHistory)} active={showHistory}><History size={14} />版本 <span className="revision-badge">{currentPage?.revision ?? 0}</span></ToolButton>
+        <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
         {webMode ? <ToolButton compact title="返回项目列表" onClick={() => { setWebProjectId(undefined); setPages([]); setBoard(defaultBoardFromPages([])); }}><FolderOpen size={15} /></ToolButton> : null}
         <ToolButton><Share2 size={14} />分享</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
@@ -1838,7 +1885,7 @@ ${boardExportRuntimeScript}
                   </div> : null}
                 </div>
               </div>
-              <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><input type="range" className="zoom-slider" min={20} max={400} step={5} value={Math.round(boardZoom * 100)} onChange={(event) => boardViewRef.current?.setZoom(Number(event.target.value) / 100)} aria-label="缩放比例" /><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
+              <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
             </div>
         </>}
       </div>
@@ -1860,6 +1907,7 @@ ${boardExportRuntimeScript}
           onOpenDiagram={openDiagramEditor}
           onMoveObject={moveBoardObject}
           onMoveObjects={moveBoardObjects}
+          onResizeObject={resizeBoardObject}
           onMoveMarker={moveBoardMarker}
           onMoveMarkerNote={moveBoardMarkerNote}
           picking={markerPicking}
@@ -1908,18 +1956,35 @@ ${boardExportRuntimeScript}
 
     <aside className="studio-right">
       <div className="studio-right-content">
-      {viewMode === "canvas" ? <>
+      {showVersions ? <>
+        <PanelHeader eyebrow="PROJECT VERSIONS" title="版本管理" action={<ToolButton compact onClick={() => setShowVersions(false)}><X size={14} /></ToolButton>} />
+        <div className="version-panel">
+          <div className="version-current">
+            <div className="version-current-head"><StatusDot tone="success">当前版本</StatusDot></div>
+            <p>当前编辑内容始终作为“当前版本”，保存后形成历史版本；切换到历史版本后再编辑，会自动生成新的当前版本。</p>
+          </div>
+          <div className="version-save">
+            <input value={newVersionLabel} onChange={(event) => setNewVersionLabel(event.target.value)} placeholder="输入版本编号，如 v1.2 / 评审版" onKeyDown={(event) => { if (event.key === "Enter") void saveNewVersion(); }} />
+            <button className="is-primary" disabled={versionBusy || !newVersionLabel.trim()} onClick={() => void saveNewVersion()}>保存新版本</button>
+          </div>
+          <SectionTitle>版本记录</SectionTitle>
+          {projectVersions.length ? projectVersions.map((version) => (
+            <div className="version-row" key={version.id}>
+              <div><strong>{version.label}</strong><small>{new Date(version.createdAt).toLocaleString("zh-CN", { hour12: false })}</small></div>
+              <button disabled={versionBusy} onClick={() => void restoreVersion(version.id, version.label)}>切换</button>
+            </div>
+          )) : <div className="inspector-empty">还没有保存的版本。输入版本编号后点击“保存新版本”，即可把当前内容存为一个历史版本。</div>}
+        </div>
+      </> : viewMode === "canvas" ? <>
         <PanelHeader eyebrow={boardSelectedLink ? "BOARD LINK" : "BOARD OBJECT"} title={boardSelectedLink ? "连接线" : boardSelectedObject ? (boardSelectedObject.type === "page" ? "页面对象" : boardSelectedObject.type === "marker" ? "标注" : boardSelectedObject.type === "note" ? "说明" : "画布对象") : board.name} />
         {boardSelectedLink ? <div className="board-inspector board-link-inspector">
           <div className="selected-path"><span>{board.id}</span><ChevronRight size={10} /><b>{boardSelectedLink.id}</b></div>
           <div className="inspector-body">
-            <SectionTitle>连接关系</SectionTitle>
-            <div className="board-link-endpoints"><span><i />{boardSelectedLink.from}</span><ArrowRight size={14} /><span><i />{boardSelectedLink.to}</span></div>
-            <div className="board-link-drag-hint"><Link2 size={12} /><span>画布上拖动连线两端圆点，可重新吸附页面或具体组件</span></div>
-            <label className="inspector-field"><span>连线说明</span><input value={String(boardDraft.label ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, label: event.target.value })} onBlur={() => updateBoardLink({ label: String(boardDraft.label ?? "") || undefined })} placeholder="例如：提交后进入" /></label>
-            <div className="board-link-anchor-grid">
-              <label><span>起点元素</span><select value={String(boardDraft.fromComponentId ?? "")} onChange={(event) => { const value = event.target.value; setBoardDraft({ ...boardDraft, fromComponentId: value }); updateBoardLink({ fromComponentId: value || undefined }); }}><option value="">页面边缘</option>{boardComponentOptions(boardSelectedLink.from).map((option) => <option key={option.id} value={option.id}>{option.label} · {option.id}</option>)}</select></label>
-              <label><span>终点元素</span><select value={String(boardDraft.toComponentId ?? "")} onChange={(event) => { const value = event.target.value; setBoardDraft({ ...boardDraft, toComponentId: value }); updateBoardLink({ toComponentId: value || undefined }); }}><option value="">页面边缘</option>{boardComponentOptions(boardSelectedLink.to).map((option) => <option key={option.id} value={option.id}>{option.label} · {option.id}</option>)}</select></label>
+            <SectionTitle>连接说明</SectionTitle>
+            <label className="inspector-field"><span>内容</span><input value={String(boardDraft.label ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, label: event.target.value })} onBlur={() => updateBoardLink({ label: String(boardDraft.label ?? "") || undefined })} placeholder="例如：提交后进入" /></label>
+            <div className="board-link-style-grid">
+              <label><span>字号</span><select value={String(boardDraft.labelSize ?? 10)} onChange={(event) => { const labelSize = Number(event.target.value); setBoardDraft({ ...boardDraft, labelSize }); updateBoardLink({ labelSize }); }}><option value="8">小 · 8px</option><option value="10">标准 · 10px</option><option value="12">中 · 12px</option><option value="14">大 · 14px</option><option value="18">特大 · 18px</option></select></label>
+              <label className="board-color-field"><span>字色</span><div><input type="color" value={String(boardDraft.labelColor ?? boardSelectedLink.labelColor ?? "#1f2937")} onChange={(event) => { const labelColor = event.target.value; setBoardDraft({ ...boardDraft, labelColor }); updateBoardLink({ labelColor }); }} /><code>{String(boardDraft.labelColor ?? boardSelectedLink.labelColor ?? "#1f2937")}</code></div></label>
             </div>
             <SectionTitle>线条样式</SectionTitle>
             <div className="board-link-style-grid">
@@ -1935,10 +2000,10 @@ ${boardExportRuntimeScript}
             {boardSelectedObject.type !== "marker" ? <>
               <SectionTitle>位置与尺寸</SectionTitle>
               <div className="board-fields">
-                <label><span>X</span><input value={String(boardDraft.x ?? boardSelectedObject.x)} onChange={(event) => setBoardDraft({ ...boardDraft, x: event.target.value })} onBlur={commitBoardPosition} /></label>
-                <label><span>Y</span><input value={String(boardDraft.y ?? boardSelectedObject.y)} onChange={(event) => setBoardDraft({ ...boardDraft, y: event.target.value })} onBlur={commitBoardPosition} /></label>
-                <label><span>宽</span><input value={String(boardDraft.width ?? boardSelectedObject.width)} onChange={(event) => setBoardDraft({ ...boardDraft, width: event.target.value })} onBlur={commitBoardPosition} /></label>
-                <label><span>高</span><input value={String(boardDraft.height ?? boardSelectedObject.height)} onChange={(event) => setBoardDraft({ ...boardDraft, height: event.target.value })} onBlur={commitBoardPosition} /></label>
+                <label><span>X</span><input type="number" step={1} value={String(boardDraft.x ?? boardSelectedObject.x)} onChange={(event) => setBoardDraft({ ...boardDraft, x: event.target.value })} onBlur={commitBoardPosition} /></label>
+                <label><span>Y</span><input type="number" step={1} value={String(boardDraft.y ?? boardSelectedObject.y)} onChange={(event) => setBoardDraft({ ...boardDraft, y: event.target.value })} onBlur={commitBoardPosition} /></label>
+                <label><span>宽</span><input type="number" step={5} min={40} value={String(boardDraft.width ?? boardSelectedObject.width)} onChange={(event) => setBoardDraft({ ...boardDraft, width: event.target.value })} onBlur={commitBoardPosition} /></label>
+                <label><span>高</span><input type="number" step={5} min={40} value={String(boardDraft.height ?? boardSelectedObject.height)} onChange={(event) => setBoardDraft({ ...boardDraft, height: event.target.value })} onBlur={commitBoardPosition} /></label>
               </div>
             </> : null}
             {boardSelectedObject.type === "note" ? <>
@@ -1968,29 +2033,10 @@ ${boardExportRuntimeScript}
               <div className="diagram-launch-card"><Database size={20} /><div><strong>{boardSelectedObject.er.entities.length} 个实体</strong><span>在独立编辑器中管理字段、关系和实体位置。</span></div></div>
               <button className="inspector-action is-primary" onClick={() => openDiagramEditor(boardSelectedObject.id)}><Maximize2 size={13} />打开 ER 图编辑器</button>
             </> : null}
-            <SectionTitle>连线</SectionTitle>
-            {board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).length ? board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).map((link) => (
-              <div className="board-link-row" key={link.id}><button className="board-link-row-main" onClick={() => selectBoardLink(link.id)}><i style={{ background: link.color ?? "#2563eb", height: link.strokeWidth ?? 2.5 }} /><span>{link.label || `${link.from} → ${link.to}`}<small>{link.lineType === "straight" ? "直线" : link.lineType === "orthogonal" ? "折线" : "曲线"} · {link.strokeWidth ?? 2.5}px</small></span></button><button title="删除连线" onClick={() => void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: link.id }])}><X size={12} /></button></div>
-            )) : <div className="inspector-empty">当前对象没有连线</div>}
-            <div className="board-link-add">
-              <select value={String(boardDraft.linkTarget ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkTarget: event.target.value, linkToComponent: "" })}>
-                <option value="">选择连线目标</option>
-                {board.objects.filter((object) => object.id !== boardSelectedObject.id).map((object) => <option key={object.id} value={object.id}>{object.id}</option>)}
-              </select>
-              {boardComponentOptions(boardSelectedObject.id).length ? <select value={String(boardDraft.linkFromComponent ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkFromComponent: event.target.value })}><option value="">起点：页面边缘</option>{boardComponentOptions(boardSelectedObject.id).map((option) => <option key={option.id} value={option.id}>起点：{option.label}</option>)}</select> : null}
-              {boardDraft.linkTarget && boardComponentOptions(String(boardDraft.linkTarget)).length ? <select value={String(boardDraft.linkToComponent ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkToComponent: event.target.value })}><option value="">终点：页面边缘</option>{boardComponentOptions(String(boardDraft.linkTarget)).map((option) => <option key={option.id} value={option.id}>终点：{option.label}</option>)}</select> : null}
-              <input value={String(boardDraft.linkLabel ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkLabel: event.target.value })} placeholder="连线说明（可选）" />
-              <button disabled={!boardDraft.linkTarget} onClick={() => { void addBoardLink(boardSelectedObject.id, String(boardDraft.linkTarget), String(boardDraft.linkLabel ?? ""), String(boardDraft.linkFromComponent ?? "") || undefined, String(boardDraft.linkToComponent ?? "") || undefined); setBoardDraft({ ...boardDraft, linkTarget: "", linkLabel: "", linkFromComponent: "", linkToComponent: "" }); }}><Link2 size={12} />连线</button>
-            </div>
           </div>
           <div className="inspector-footer"><button className="is-danger" onClick={() => void deleteBoardObject(boardSelectedObject.id)}><Trash2 size={13} />删除对象</button><span>{boardSelectedObject.type}</span></div>
         </div>}
-      </> : !currentPage ? <EmptyState icon={<Layers3 size={18} />} title="暂无页面" description="从左侧新建页面后，可在此查看组件属性和 Revision。" /> : showHistory ? <>
-        <PanelHeader eyebrow="APPEND-ONLY" title="版本与变更" action={<ToolButton compact onClick={() => setShowHistory(false)}><X size={14} /></ToolButton>} />
-        <div className="history-summary"><div><Clock3 size={16} /><span>当前 Revision</span><strong>{dsl.revision}</strong></div><div><Save size={16} /><span>本次会话修改</span><strong>{history.length}</strong></div></div>
-        {lastRevision ? <div className="history-current"><div className="revision-card-head"><span>R{lastRevision.revision}</span><div><strong>{lastRevision.source === "ai" ? "AI Command" : lastRevision.source === "undo" ? "撤销操作" : "属性修改"}</strong><small>{lastRevision.changedComponentIds.join("、") || "页面状态"}</small></div><StatusDot tone="success">已保存</StatusDot></div><DiffView entries={lastDiff} /></div> : <EmptyState icon={<History size={18} />} title="尚无修改记录" description="属性编辑、拖动和 AI Command 都会形成不可覆盖的 Revision。" />}
-        <div className="history-actions"><button disabled={!history.length} onClick={undo}><Undo2 size={13} />撤销最近修改</button></div>
-      </> : showDsl ? <>
+      </> : !currentPage ? <EmptyState icon={<Layers3 size={18} />} title="暂无页面" description="从左侧新建页面后，可在此查看组件属性和 Revision。" /> : showDsl ? <>
         <PanelHeader eyebrow="READ ONLY" title="当前页面 DSL" action={<ToolButton compact onClick={() => setShowDsl(false)}><X size={14} /></ToolButton>} />
         <pre className="dsl-view">{JSON.stringify(dsl, null, 2)}</pre>
       </> : selected ? <>
@@ -2064,13 +2110,40 @@ ${boardExportRuntimeScript}
     {showSettings ? <div className="settings-overlay" onClick={() => setShowSettings(false)}>
       <section className="settings-card" onClick={(event) => event.stopPropagation()}>
         <header>
-          <div><span>SETTINGS</span><h2>设置 · 连接 Codex</h2></div>
+          <div><span>SETTINGS</span><h2>设置</h2></div>
           <button onClick={() => setShowSettings(false)} aria-label="关闭设置"><X size={14} /></button>
         </header>
         <div className="settings-body">
-          {!isDesktopRuntime() ? <div className="settings-note">{webMode ? `网页端连接 Codex：回到“我的项目”页复制 API Token，再在 ~/.codex/config.toml 配置 url = ${window.location.origin}/mcp 与 bearer_token_env_var = PROTOTYPE_STUDIO_TOKEN。` : "当前是浏览器体验模式，不能读写本地项目。请在桌面 App 中打开或创建项目后连接 Codex。"}</div>
-            : !mcpConnection ? <div className="settings-note">正在读取连接信息…</div>
-            : <>
+          <div className="settings-block">
+            <div className="settings-block-head"><div><span>ACCOUNT</span><strong>账号信息</strong></div></div>
+            <div className="settings-row"><span>账号</span><code>{webSession ? `${webSession.name} · ${webSession.email}` : isDesktopRuntime() ? "桌面端 · 本地项目" : "未登录"}</code></div>
+          </div>
+          {webMode ? <>
+            <div className="settings-block">
+              <div className="settings-block-head">
+                <div><span>API TOKEN</span><strong>Codex / WorkBuddy 连接令牌</strong><small>复制后用于 MCP 认证</small></div>
+                <button onClick={() => void copyText(webApiToken)} disabled={!webApiToken}><Copy size={13} />复制</button>
+              </div>
+              <code className="settings-token">{webApiToken ? `${webApiToken.slice(0, 12)}…${webApiToken.slice(-4)}` : "获取中…"}</code>
+            </div>
+            <div className="settings-block">
+              <div className="settings-block-head"><div><span>MCP TUTORIAL</span><strong>连接 Codex / WorkBuddy 教程</strong></div></div>
+              <ol className="settings-tutorial">
+                <li>复制上方 <b>API Token</b>；</li>
+                <li>在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</li>
+              </ol>
+              <pre>{`[mcp_servers.prototype-studio]
+type = "http"
+url = "${window.location.origin}/mcp"
+bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
+              <ol className="settings-tutorial" start={3}>
+                <li>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>；</li>
+                <li>重启 Codex 即可连接本项目。WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</li>
+              </ol>
+            </div>
+          </> : isDesktopRuntime() ? (mcpConnection ? <>
+              <div className="settings-block">
+                <div className="settings-block-head"><div><span>LOCAL MCP</span><strong>本地项目连接</strong></div></div>
                 <div className="settings-row"><span>项目目录</span><code>{mcpConnection.projectRoot ?? "未打开项目"}</code></div>
                 <div className="settings-row">
                   <span>Local MCP</span>
@@ -2078,21 +2151,21 @@ ${boardExportRuntimeScript}
                   {mcpConnection.state !== "running" ? <button className="settings-restart" onClick={() => void launchMcp()}>启动</button> : <button className="settings-restart" onClick={() => void launchMcp()}>重启</button>}
                 </div>
                 {mcpConnection.detail ? <div className="settings-note">{mcpConnection.detail}</div> : null}
-                <div className="settings-block">
-                  <div className="settings-block-head">
-                    <div><span>STEP 1</span><strong>复制 MCP 配置</strong><small>粘贴到 ~/.codex/config.toml，或在 Codex 设置 → MCP servers → Add server（STDIO）后重启</small></div>
-                    <button onClick={() => void copyText(mcpConnection.configToml ?? "")} disabled={!mcpConnection.configToml}><Copy size={13} />复制</button>
-                  </div>
-                  <pre>{mcpConnection.configToml ?? "需要先打开本地项目"}</pre>
+                <div className="settings-block-head">
+                  <div><span>STEP 1</span><strong>复制 MCP 配置</strong><small>粘贴到 ~/.codex/config.toml 后重启</small></div>
+                  <button onClick={() => void copyText(mcpConnection.configToml ?? "")} disabled={!mcpConnection.configToml}><Copy size={13} />复制</button>
                 </div>
-                <div className="settings-block">
-                  <div className="settings-block-head">
-                    <div><span>STEP 2</span><strong>复制协作提示词</strong><small>粘贴到 Codex 对话，告诉它如何使用这个本地项目</small></div>
-                    <button onClick={() => void copyText(mcpConnection.connectPrompt ?? "")} disabled={!mcpConnection.connectPrompt}><Copy size={13} />复制</button>
-                  </div>
-                  <pre>{mcpConnection.connectPrompt ?? "需要先打开本地项目"}</pre>
+                <pre>{mcpConnection.configToml ?? "需要先打开本地项目"}</pre>
+                <div className="settings-block-head">
+                  <div><span>STEP 2</span><strong>复制协作提示词</strong><small>粘贴到 Codex 对话</small></div>
+                  <button onClick={() => void copyText(mcpConnection.connectPrompt ?? "")} disabled={!mcpConnection.connectPrompt}><Copy size={13} />复制</button>
                 </div>
-              </>}
+                <pre>{mcpConnection.connectPrompt ?? "需要先打开本地项目"}</pre>
+              </div>
+            </> : <div className="settings-note">正在读取连接信息…</div>) : <div className="settings-note">当前是浏览器体验模式，不能读写本地项目。</div>}
+          {webMode ? <div className="settings-block settings-account-actions">
+            <button className="settings-logout" onClick={() => void handleLogout()}><LogOut size={13} />退出登录</button>
+          </div> : null}
         </div>
       </section>
     </div> : null}
