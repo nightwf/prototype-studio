@@ -195,6 +195,12 @@ export function validateBoard(value: unknown): BoardValidationResult {
       if (record.color && !/^#[0-9a-f]{6}$/i.test(record.color)) {
         errors.push(boardIssue("SCHEMA_INVALID", "连线颜色必须是 6 位十六进制颜色。", `${path}.color`));
       }
+      if (record.waypoint !== undefined) {
+        const waypoint = record.waypoint as { x?: unknown; y?: unknown };
+        if (typeof waypoint !== "object" || waypoint === null || !Number.isFinite(waypoint.x) || !Number.isFinite(waypoint.y)) {
+          errors.push(boardIssue("SCHEMA_INVALID", "连线中间节点必须是 { x, y } 数字坐标。", `${path}.waypoint`));
+        }
+      }
     });
   }
   return { valid: errors.length === 0, errors, warnings };

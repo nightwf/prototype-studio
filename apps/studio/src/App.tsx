@@ -1426,6 +1426,14 @@ export function App() {
     void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: linkId, changes }]);
   };
 
+  const moveBoardLinkWaypoint = (linkId: string, x: number, y: number) => {
+    void runBoardCommands([{
+      type: "UPDATE_BOARD_LINK",
+      target: linkId,
+      changes: { waypoint: { x, y } }
+    }]);
+  };
+
   const deleteBoardObjects = async (ids: string[]) => {
     if (!ids.length) return;
     if (await runBoardCommands(ids.map((id) => ({ type: "DELETE_BOARD_OBJECT", target: id })))) {
@@ -1846,6 +1854,7 @@ ${boardExportRuntimeScript}
           onSelectMany={selectBoardMany}
           onSelectLink={selectBoardLink}
           onRelink={relinkBoardLink}
+          onMoveLinkWaypoint={moveBoardLinkWaypoint}
           onOpenPage={openPageFromBoard}
           onOpenDiagram={openDiagramEditor}
           onMoveObject={moveBoardObject}

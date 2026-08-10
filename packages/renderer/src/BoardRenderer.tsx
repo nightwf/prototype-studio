@@ -49,6 +49,7 @@ export interface BoardRendererProps {
   onSelectMany?: (ids: string[]) => void;
   onSelectLink?: (id: string) => void;
   onRelink?: (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => void;
+  onMoveLinkWaypoint?: (linkId: string, x: number, y: number) => void;
   onOpenPage?: (pageId: string) => void;
   onOpenDiagram?: (id: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
@@ -95,16 +96,34 @@ function objectCenter(object: BoardObject, pins: Record<string, Point>, canvasX:
   return { x: object.x - canvasX + object.width / 2, y: object.y - canvasY + object.height / 2 };
 }
 
-function linkPath(from: Point, to: Point, type: BoardLink["lineType"] = "curve"): string {
-  if (type === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
-  if (type === "orthogonal") {
-    const middleX = Math.round((from.x + to.x) / 2);
-    return `M ${from.x} ${from.y} L ${middleX} ${from.y} L ${middleX} ${to.y} L ${to.x} ${to.y}`;
+function linkPath(from: Point, to: Point, type: BoardLink["lineType"] = "curve", waypoint?: { x: number; y: number }): string {
+  if (!waypoint) {
+    if (type === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+    if (type === "orthogonal") {
+      const middleX = Math.round((from.x + to.x) / 2);
+      return `M ${from.x} ${from.y} L ${middleX} ${from.y} L ${middleX} ${to.y} L ${to.x} ${to.y}`;
+    }
+  } else {
+    if (type === "straight") return `M ${from.x} ${from.y} L ${waypoint.x} ${waypoint.y} L ${to.x} ${to.y}`;
+    if (type === "orthogonal") {
+      return `M ${from.x} ${from.y} L ${waypoint.x} ${from.y} L ${waypoint.x} ${waypoint.y} L ${to.x} ${waypoint.y} L ${to.x} ${to.y}`;
+    }
+    const bend1 = Math.max(40, Math.abs(waypoint.x - from.x) * 0.5) * (waypoint.x >= from.x ? 1 : -1);
+    const bend2 = Math.max(40, Math.abs(to.x - waypoint.x) * 0.5) * (to.x >= waypoint.x ? 1 : -1);
+    return `M ${from.x} ${from.y} C ${from.x + bend1} ${from.y}, ${waypoint.x - bend1} ${waypoint.y}, ${waypoint.x} ${waypoint.y} C ${waypoint.x + bend2} ${waypoint.y}, ${to.x - bend2} ${to.y}, ${to.x} ${to.y}`;
   }
   const distance = Math.abs(to.x - from.x);
   const bend = Math.max(60, distance * 0.45);
   const direction = to.x >= from.x ? 1 : -1;
   return `M ${from.x} ${from.y} C ${from.x + bend * direction} ${from.y}, ${to.x - bend * direction} ${to.y}, ${to.x} ${to.y}`;
+}
+
+function linkDefaultWaypoint(from: Point, to: Point, type: BoardLink["lineType"] = "curve"): Point {
+  if (type === "orthogonal") {
+    const middleX = Math.round((from.x + to.x) / 2);
+    return { x: middleX, y: Math.round((from.y + to.y) / 2) };
+  }
+  return { x: Math.round((from.x + to.x) / 2), y: Math.round((from.y + to.y) / 2) };
 }
 
 function objectBoundaryPoint(object: BoardObject, toward: Point, pins: Record<string, Point>, canvasX: number, canvasY: number): Point {
@@ -233,6 +252,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onSelectMany,
   onSelectLink,
   onRelink,
+  onMoveLinkWaypoint,
   onOpenPage,
   onOpenDiagram,
   onMoveObject,
@@ -260,6 +280,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     point: Point;
     snap?: { objectId: string; componentId?: string; label: string; point?: Point };
   }>();
+  const [waypointDrag, setWaypointDrag] = useState<{ linkId: string; point: Point }>();
   const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; objectIds: string[] } | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -716,7 +737,11 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           const dragPoint = activeDrag?.snap?.point ?? activeDrag?.point;
           const from = activeDrag?.endpoint === "from" && dragPoint ? dragPoint : resolvedFrom;
           const to = activeDrag?.endpoint === "to" && dragPoint ? dragPoint : resolvedTo;
-          const path = linkPath(from, to, link.lineType);
+          const waypointDragPoint = waypointDrag?.linkId === link.id ? waypointDrag.point : undefined;
+          const waypoint = waypointDragPoint
+            ?? (link.waypoint ? { x: link.waypoint.x - canvasX, y: link.waypoint.y - canvasY } : undefined);
+          const path = linkPath(from, to, link.lineType, waypoint);
+          const handlePoint = waypoint ?? linkDefaultWaypoint(from, to, link.lineType);
           const color = link.color ?? "#2563eb";
           const width = link.strokeWidth ?? 2.5;
           const markerId = `board-arrow-${board.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index}`;
@@ -730,6 +755,8 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               data-from-component={link.fromComponentId}
               data-to-component={link.toComponentId}
               data-line-type={link.lineType ?? "curve"}
+              data-waypoint-x={link.waypoint ? link.waypoint.x : ""}
+              data-waypoint-y={link.waypoint ? link.waypoint.y : ""}
             >
               <defs>
                 <marker id={markerId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
@@ -778,6 +805,35 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                   onPointerCancel={() => setLinkDrag(undefined)}
                 />
               )) : null}
+              {interactive ? (
+                <circle
+                  className={`board-link-handle board-link-handle--waypoint ${waypointDrag?.linkId === link.id ? "is-dragging" : ""}`}
+                  data-link-waypoint={link.id}
+                  cx={handlePoint.x}
+                  cy={handlePoint.y}
+                  r={6}
+                  fill="white"
+                  stroke={color}
+                  strokeWidth={2.5}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setWaypointDrag({ linkId: link.id, point: handlePoint });
+                  }}
+                  onPointerMove={(event) => {
+                    if (!waypointDrag || waypointDrag.linkId !== link.id) return;
+                    setWaypointDrag({ linkId: link.id, point: pointerCanvasPoint(event.clientX, event.clientY) });
+                  }}
+                  onPointerUp={(event) => {
+                    if (!waypointDrag || waypointDrag.linkId !== link.id) return;
+                    const point = pointerCanvasPoint(event.clientX, event.clientY);
+                    setWaypointDrag(undefined);
+                    onMoveLinkWaypoint?.(link.id, Math.round(point.x + canvasX), Math.round(point.y + canvasY));
+                  }}
+                  onPointerCancel={() => setWaypointDrag(undefined)}
+                />
+              ) : null}
               {activeDrag?.snap ? (
                 <g className="board-link-snap-label" transform={`translate(${(dragPoint?.x ?? 0) + 12} ${(dragPoint?.y ?? 0) - 12})`}>
                   <rect x="0" y="-18" width={Math.max(76, activeDrag.snap.label.length * 7 + 24)} height="24" rx="6" />

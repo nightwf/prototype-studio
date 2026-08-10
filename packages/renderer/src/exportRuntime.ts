@@ -23,7 +23,14 @@ window.addEventListener('DOMContentLoaded', function () {
     var scale = Math.min(dx ? rect.width / 2 / Math.abs(dx) : Infinity, dy ? rect.height / 2 / Math.abs(dy) : Infinity);
     return { x: point.x + dx * scale, y: point.y + dy * scale };
   }
-  function pathFor(from, to, type) {
+  function pathFor(from, to, type, waypoint) {
+    if (waypoint) {
+      if (type === 'straight') return 'M ' + from.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + to.y;
+      if (type === 'orthogonal') return 'M ' + from.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + to.y;
+      var bend1 = Math.max(40, Math.abs(waypoint.x - from.x) * 0.5) * (waypoint.x >= from.x ? 1 : -1);
+      var bend2 = Math.max(40, Math.abs(to.x - waypoint.x) * 0.5) * (to.x >= waypoint.x ? 1 : -1);
+      return 'M ' + from.x + ' ' + from.y + ' C ' + (from.x + bend1) + ' ' + from.y + ', ' + (waypoint.x - bend1) + ' ' + waypoint.y + ', ' + waypoint.x + ' ' + waypoint.y + ' C ' + (waypoint.x + bend2) + ' ' + waypoint.y + ', ' + (to.x - bend2) + ' ' + to.y + ', ' + to.x + ' ' + to.y;
+    }
     if (type === 'straight') return 'M ' + from.x + ' ' + from.y + ' L ' + to.x + ' ' + to.y;
     if (type === 'orthogonal') {
       var middleX = Math.round((from.x + to.x) / 2);
@@ -74,7 +81,16 @@ window.addEventListener('DOMContentLoaded', function () {
     var toCenter = center(toRect);
     var from = componentPoint(fromObject, group.getAttribute('data-from-component') || '') || edgePoint(fromRect, toCenter);
     var to = componentPoint(toObject, group.getAttribute('data-to-component') || '') || edgePoint(toRect, fromCenter);
-    var path = pathFor(from, to, group.getAttribute('data-line-type') || 'curve');
+    var rawWx = group.getAttribute('data-waypoint-x');
+    var rawWy = group.getAttribute('data-waypoint-y');
+    var waypoint = null;
+    if (rawWx !== null && rawWx !== '' && rawWy !== null && rawWy !== '' && Number.isFinite(Number(rawWx)) && Number.isFinite(Number(rawWy))) {
+      var boardCanvas = group.closest('.board-canvas');
+      var canvasX = boardCanvas ? parseFloat(boardCanvas.style.left || '0') || 0 : 0;
+      var canvasY = boardCanvas ? parseFloat(boardCanvas.style.top || '0') || 0 : 0;
+      waypoint = { x: Number(rawWx) - canvasX, y: Number(rawWy) - canvasY };
+    }
+    var path = pathFor(from, to, group.getAttribute('data-line-type') || 'curve', waypoint);
     group.querySelectorAll('path').forEach(function (element) { element.setAttribute('d', path); });
     var label = group.querySelector('.board-link-label');
     if (label) {

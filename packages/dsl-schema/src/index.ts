@@ -385,6 +385,8 @@ export interface BoardLink {
   lineType?: BoardLinkType;
   strokeWidth?: number;
   color?: string;
+  /** 中间节点（世界坐标）：连线经过该点，可拖动改变形状。 */
+  waypoint?: { x: number; y: number };
 }
 
 export interface BoardDSL {
