@@ -1096,7 +1096,7 @@ export function App() {
     localStorage.setItem("ps_panel_right", rightCollapsed ? "1" : "0");
   }, [rightCollapsed]);
 
-  const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新", silent = false): Promise<boolean> => {
+  const runBoardCommands = useCallback(async (commands: BoardCommand[]): Promise<boolean> => {
     const targetBoardId = currentBoardIdRef.current;
     const currentBoard = boardCacheRef.current.get(targetBoardId);
     if (!currentBoard) {
@@ -1138,7 +1138,6 @@ export function App() {
           await persistDesktopBoardRevision(stringifyYaml(applied.board, { lineWidth: 0 }), applied.revision);
         }
         boardQueueBaseRefs.current.set(targetBoardId, base + 1);
-        if (!silent) toast("success", message, `画布 Revision ${applied.board.revision}`);
         return true;
       } catch (error) {
         // 画布可能已被其他会话（另一个标签页 / Codex）修改：重新读取最新画布，
@@ -1176,7 +1175,7 @@ export function App() {
       toast("danger", "图形未保存", "画布在编辑期间已被修改。当前草稿仍保留，请取消后重新打开。");
       return false;
     }
-    return runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: next.id, changes: next }], next.type === "flowchart" ? "流程图已保存" : "ER 图已保存");
+    return runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: next.id, changes: next }]);
   }, [runBoardCommands, toast]);
 
   // 拖拽移动按帧合并：一帧内只发一次 MOVE 命令（取最新位置），避免拖动时命令洪泛。
@@ -1196,7 +1195,7 @@ export function App() {
         x: position.x,
         y: position.y
       }));
-      void runBoardCommands(commands, moves.size > 1 ? "批量移动" : "移动", true);
+      void runBoardCommands(commands);
     });
   }, [runBoardCommands]);
 
@@ -1240,7 +1239,7 @@ export function App() {
       height: 640,
       source: "default"
     };
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "页面已添加到画布")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
       setBoardSelectedId(object.id);
       setBoardTool("none");
     }
@@ -1257,7 +1256,7 @@ export function App() {
       text: "在这里输入说明…",
       source: "explicit"
     };
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "说明已添加到画布")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
       setBoardSelectedId(object.id);
       setBoardDraft({ text: object.text });
     }
@@ -1273,7 +1272,7 @@ export function App() {
       source: "explicit",
       anchor: { pageObjectId, componentId, ...(offsetX !== undefined ? { offsetX } : {}), ...(offsetY !== undefined ? { offsetY } : {}) }
     };
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "标注已添加")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
       setBoardSelectedId(object.id);
       setBoardTool("none");
       setMarkerPicking(false);
@@ -1297,7 +1296,7 @@ export function App() {
         edges: [{ id: "edge-1", from: "node-1", to: "node-2", label: "", lineType: "orthogonal", color: "#64748b", strokeWidth: 2 }]
       }
     };
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "流程图已添加")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
       setBoardSelectedId(object.id);
       window.setTimeout(() => openDiagramEditor(object.id), 0);
     }
@@ -1317,7 +1316,7 @@ export function App() {
         relations: []
       }
     };
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "ER 图已添加")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
       setBoardSelectedId(object.id);
       window.setTimeout(() => openDiagramEditor(object.id), 0);
     }
@@ -1339,12 +1338,12 @@ export function App() {
           color: "#2563eb"
         }
       }
-    ], "连线已添加");
+    ]);
   };
 
   const updateBoardLink = (changes: Partial<BoardLink>) => {
     if (!boardSelectedLink) return;
-    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: boardSelectedLink.id, changes }], "连线已更新");
+    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: boardSelectedLink.id, changes }]);
   };
 
   const commitBoardPosition = () => {
@@ -1358,7 +1357,7 @@ export function App() {
         width: Number(boardDraft.width ?? boardSelectedObject.width),
         height: Number(boardDraft.height ?? boardSelectedObject.height)
       }
-    }], "对象属性已更新");
+    }]);
   };
 
   const commitBoardText = () => {
@@ -1367,11 +1366,11 @@ export function App() {
       type: "UPDATE_BOARD_OBJECT",
       target: boardSelectedObject.id,
       changes: { text: String(boardDraft.text ?? "") }
-    }], "标注已更新");
+    }]);
   };
 
   const deleteBoardObject = async (id: string) => {
-    if (await runBoardCommands([{ type: "DELETE_BOARD_OBJECT", target: id }], "画布对象已删除")) {
+    if (await runBoardCommands([{ type: "DELETE_BOARD_OBJECT", target: id }])) {
       setBoardSelectedId(undefined);
     }
   };
@@ -1405,12 +1404,12 @@ export function App() {
     const changes: Partial<BoardLink> = endpoint === "from"
       ? { from: objectId, fromComponentId: componentId }
       : { to: objectId, toComponentId: componentId };
-    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: linkId, changes }], componentId ? `已吸附到 ${componentId}` : `已吸附到 ${objectId}`);
+    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: linkId, changes }]);
   };
 
   const deleteBoardObjects = async (ids: string[]) => {
     if (!ids.length) return;
-    if (await runBoardCommands(ids.map((id) => ({ type: "DELETE_BOARD_OBJECT", target: id })), `已删除 ${ids.length} 个对象`)) {
+    if (await runBoardCommands(ids.map((id) => ({ type: "DELETE_BOARD_OBJECT", target: id })))) {
       setBoardSelectedId(undefined);
       setBoardSelectedIds([]);
     }
@@ -1425,7 +1424,7 @@ export function App() {
       x: object.x + 24,
       y: object.y + 24
     } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" }>;
-    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: copy }], "对象已复制")) {
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: copy }])) {
       setBoardSelectedId(copy.id);
       setBoardSelectedIds([copy.id]);
     }
@@ -1440,7 +1439,7 @@ export function App() {
       target: id,
       changes: { z: position === "top" ? maxZ + 1 : minZ - 1 }
     }));
-    await runBoardCommands(commands, position === "top" ? "已置顶" : "已置底");
+    await runBoardCommands(commands);
   };
 
   const moveBoardObject = (id: string, x: number, y: number) => {
@@ -1488,10 +1487,9 @@ export function App() {
         height: 640,
         source: "default"
       };
-      await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: pageObject }], "页面已添加到画布");
+      await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: pageObject }]);
     }
     await addBoardMarker(pageObject.id, selected.id, "", "orange");
-    toast("success", "标注已添加", `已挂靠 ${selected.id}，可在画布中查看和编辑`);
   };
 
   const openPageFromBoard = (pageId: string) => {
@@ -1892,7 +1890,7 @@ ${boardExportRuntimeScript}
             </div>
             <label className="inspector-field board-color-field"><span>颜色</span><div><input type="color" value={String(boardDraft.color ?? "#2563eb")} onChange={(event) => { const color = event.target.value; setBoardDraft({ ...boardDraft, color }); updateBoardLink({ color }); }} /><code>{String(boardDraft.color ?? "#2563eb")}</code></div></label>
           </div>
-          <div className="inspector-footer"><button className="is-danger" onClick={() => { void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: boardSelectedLink.id }], "连线已删除"); setBoardSelectedLinkId(undefined); }}><Trash2 size={13} />删除连线</button><span>{boardSelectedLink.lineType ?? "curve"}</span></div>
+          <div className="inspector-footer"><button className="is-danger" onClick={() => { void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: boardSelectedLink.id }]); setBoardSelectedLinkId(undefined); }}><Trash2 size={13} />删除连线</button><span>{boardSelectedLink.lineType ?? "curve"}</span></div>
         </div> : !boardSelectedObject ? <EmptyState icon={<LayoutGrid size={18} />} title="选择画布对象或连线" description="点击画布上的页面、说明、标注或连线，在这里编辑它们的属性。" /> : <div className="board-inspector">
           <div className="selected-path"><span>{board.id}</span><ChevronRight size={10} /><b>{boardSelectedObject.id}</b></div>
           <div className="inspector-body">
