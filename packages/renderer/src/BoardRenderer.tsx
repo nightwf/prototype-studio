@@ -576,6 +576,11 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             <div
               className="board-page-body"
               ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}
+              onPointerDown={(event) => { if (!picking) event.stopPropagation(); }}
+              onClick={(event) => { if (!picking) event.stopPropagation(); }}
+              onDoubleClick={(event) => { if (!picking) event.stopPropagation(); }}
+              onContextMenu={(event) => { if (!picking) event.stopPropagation(); }}
+              onWheel={(event) => { if (!picking) event.stopPropagation(); }}
               onClickCapture={(event) => {
                 if (!picking) return;
                 event.stopPropagation();
@@ -587,7 +592,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                 onPickComponent?.(object.id, target.getAttribute("data-component-id") ?? "", offsetX, offsetY);
               }}
             >
-              {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={false} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
+              {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={interactive && !picking} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
             </div>
           </>
         ) : object.type === "note" ? (

@@ -1728,7 +1728,7 @@ ${boardExportRuntimeScript}
             <div className="canvas-toolbar-actions"><div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div></div>
         </> : <>
             <div className="canvas-toolbar-left">
-              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">拖拽移动 · 双击页面或图形进入编辑 · 右键更多</span></div>
+              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">页面标题栏拖动 · 页面内容可直接操作 · 双击标题进入编辑</span></div>
             </div>
             <div className="canvas-toolbar-actions">
               <div className="board-tools">
