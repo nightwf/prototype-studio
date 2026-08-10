@@ -117,6 +117,24 @@ function objectBoundaryPoint(object: BoardObject, toward: Point, pins: Record<st
   return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
+interface LinkAnchorRect extends Point {
+  width: number;
+  height: number;
+}
+
+function anchorCenter(rect: LinkAnchorRect): Point {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+function anchorBoundaryPoint(rect: LinkAnchorRect, toward: Point): Point {
+  const center = anchorCenter(rect);
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (!dx && !dy) return { x: rect.x + rect.width, y: center.y };
+  const scale = Math.min(dx ? rect.width / 2 / Math.abs(dx) : Infinity, dy ? rect.height / 2 / Math.abs(dy) : Infinity);
+  return { x: center.x + dx * scale, y: center.y + dy * scale };
+}
+
 function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { type: "flowchart" }>; boardId: string }) {
   const { nodes, edges } = materializeFlowchart(object.flowchart);
   const markerId = `board-arrow-${boardId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${object.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-flow`;
@@ -232,7 +250,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   const [view, setView] = useState<BoardView>({ x: 0, y: 0, zoom: 1 });
   const [containerSize, setContainerSize] = useState({ width: 1200, height: 800 });
   const [pins, setPins] = useState<Record<string, Point>>({});
-  const [linkAnchors, setLinkAnchors] = useState<Record<string, Point>>({});
+  const [linkAnchors, setLinkAnchors] = useState<Record<string, LinkAnchorRect>>({});
   const [linkDrag, setLinkDrag] = useState<{
     linkId: string;
     endpoint: "from" | "to";
@@ -298,7 +316,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       };
     }
     setPins((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
-    const nextLinkAnchors: Record<string, Point> = {};
+    const nextLinkAnchors: Record<string, LinkAnchorRect> = {};
     const measureLinkAnchor = (objectId: string, componentId: string): void => {
       const frame = frameRefs.current.get(objectId);
       const pageObject = board.objects.find((item) => item.id === objectId);
@@ -309,8 +327,10 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       const objectBounds = objectElement.getBoundingClientRect();
       const componentBounds = component.getBoundingClientRect();
       nextLinkAnchors[`${objectId}:${componentId}`] = {
-        x: pageObject.x - canvasX + (componentBounds.left - objectBounds.left + componentBounds.width / 2) / view.zoom,
-        y: pageObject.y - canvasY + (componentBounds.top - objectBounds.top + componentBounds.height / 2) / view.zoom
+        x: pageObject.x - canvasX + (componentBounds.left - objectBounds.left) / view.zoom,
+        y: pageObject.y - canvasY + (componentBounds.top - objectBounds.top) / view.zoom,
+        width: componentBounds.width / view.zoom,
+        height: componentBounds.height / view.zoom
       };
     };
     for (const link of board.links) {
@@ -400,11 +420,13 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       const componentId = component?.dataset.componentId;
       if (componentId) {
         const bounds = component.getBoundingClientRect();
+        const rectTopLeft = pointerCanvasPoint(bounds.left, bounds.top);
+        const componentRect: LinkAnchorRect = { x: rectTopLeft.x, y: rectTopLeft.y, width: bounds.width / view.zoom, height: bounds.height / view.zoom };
         return {
           objectId,
           componentId,
           label: componentId,
-          point: pointerCanvasPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
+          point: anchorBoundaryPoint(componentRect, pointerCanvasPoint(clientX, clientY))
         };
       }
       return { objectId, label: objectId };
@@ -635,12 +657,14 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           const fromCenter = centers.get(link.from);
           const toCenter = centers.get(link.to);
           if (!fromObject || !toObject || !fromCenter || !toCenter) return null;
-          const resolvedFrom = link.fromComponentId
-            ? linkAnchors[`${link.from}:${link.fromComponentId}`] ?? objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY)
-            : objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY);
-          const resolvedTo = link.toComponentId
-            ? linkAnchors[`${link.to}:${link.toComponentId}`] ?? objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY)
-            : objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY);
+          const fromAnchor = link.fromComponentId ? linkAnchors[`${link.from}:${link.fromComponentId}`] : undefined;
+          const toAnchor = link.toComponentId ? linkAnchors[`${link.to}:${link.toComponentId}`] : undefined;
+          const resolvedFrom = fromAnchor
+            ? anchorBoundaryPoint(fromAnchor, toAnchor ? anchorCenter(toAnchor) : toCenter)
+            : objectBoundaryPoint(fromObject, toAnchor ? anchorCenter(toAnchor) : toCenter, pins, canvasX, canvasY);
+          const resolvedTo = toAnchor
+            ? anchorBoundaryPoint(toAnchor, fromAnchor ? anchorCenter(fromAnchor) : fromCenter)
+            : objectBoundaryPoint(toObject, fromAnchor ? anchorCenter(fromAnchor) : fromCenter, pins, canvasX, canvasY);
           const activeDrag = linkDrag?.linkId === link.id ? linkDrag : undefined;
           const dragPoint = activeDrag?.snap?.point ?? activeDrag?.point;
           const from = activeDrag?.endpoint === "from" && dragPoint ? dragPoint : resolvedFrom;
