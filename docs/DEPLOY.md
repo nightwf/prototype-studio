@@ -81,9 +81,8 @@ studio.example.com {
 2. 在服务器上设置 `REPO_URL` 后执行 `scripts/server-init.sh`，再填写生成的 `.env.production`；
 3. 给服务器配置 GitHub 私有仓库的只读 Deploy Key；
 4. 在服务器创建不属于 `docker` 用户组的专用 `deploy` 用户；其 SSH 公钥必须使用 forced-command，只允许通过 sudo 执行 root 持有的 `/usr/local/sbin/deploy-prototype-studio`，不能获得交互式 Shell；
-5. 在 GitHub 仓库 Settings → Environments 创建 `prototype-production`，配置：`SSH_HOST`、`SSH_PORT`、`SSH_USERNAME`（建议 `deploy`）、`SSH_KEY`、`SSH_FINGERPRINT`；
-6. 完成服务器备份、Deploy Key 和 `.env.production` 后，在仓库 Settings → Secrets and variables → Actions → Variables 增加 `ENABLE_TENCENT_DEPLOY=true`；未设置时只运行质量检查，部署任务会安全跳过；
-7. 之后每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
+5. 在 GitHub 仓库 Settings → Environments 创建 `production`，配置：`SSH_HOST`、`SSH_PORT`、`SSH_USERNAME`（建议 `deploy`）、`SSH_KEY`、`SSH_FINGERPRINT`；
+6. 完成服务器备份、Deploy Key 和 `.env.production` 后，每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
 
 已有 PostgreSQL 数据卷时，不要只修改 `.env.production` 中的密码：先在数据库内修改角色密码，再同步更新 `POSTGRES_PASSWORD` 和 `DATABASE_URL`。任何维护操作都不要执行 `docker compose down -v`。
 接管已有部署时，还必须把 `PGDATA_VOLUME` 和 `SPACES_VOLUME` 设置为服务器当前实际卷名，避免 Compose 创建空卷。
