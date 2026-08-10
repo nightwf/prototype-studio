@@ -357,6 +357,13 @@ button { color: inherit; }
 .board-editor-field input { flex: 1; }
 .board-editor-field .board-key-toggle { display: flex; align-items: center; gap: 4px; color: var(--ps-ink-500); font-size: 8px; white-space: nowrap; }
 .board-editor-save { width: 100%; height: 30px; margin-top: 8px; border: 1px solid var(--ps-cobalt); border-radius: 6px; background: var(--ps-cobalt); color: white; font-size: 9px; cursor: pointer; }
+.diagram-launch-card { margin: 4px 0 8px; padding: 11px; display: flex; align-items: center; gap: 10px; border: 1px solid #c9d6f3; border-radius: 8px; background: #f2f6ff; color: #315cc8; }
+.diagram-launch-card > div { min-width: 0; }
+.diagram-launch-card strong,.diagram-launch-card span { display: block; }
+.diagram-launch-card strong { color: #274580; font-size: 10px; }
+.diagram-launch-card span { margin-top: 5px; color: #697b9c; font-size: 8px; line-height: 1.5; }
+.inspector-action.is-primary { border-color: var(--ps-cobalt); background: var(--ps-cobalt); color: white; }
+.diagram-editor-loading { position: fixed; z-index: 500; inset: 0; display: grid; place-content: center; gap: 12px; background: #151d23; color: #dce3e7; text-align: center; }
 @media (max-width: 1060px) { .studio-shell { grid-template-columns: 205px minmax(480px, 1fr) 260px; } .studio-brand { width: 205px; } .studio-title-actions .ps-status-dot { display: none; } }
 .web-screen { min-height: 100vh; display: grid; place-items: center; padding: 28px; background: #0f172a; }
 .web-card { width: min(540px, 100%); border: 1px solid #3a4650; border-radius: 14px; background: #141b21; color: #dfe4e7; padding: 26px; box-shadow: 0 24px 70px rgba(5, 11, 15, 0.5); }

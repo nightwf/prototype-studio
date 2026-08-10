@@ -33,6 +33,8 @@
 
 Studio 用 iframe 加载 `/preview-runtime/:pageId`。父窗口只通过同源 `postMessage` 发送 DSL 和选中状态；Preview 回传组件选择与运行事件。Preview 的 CSS、表单状态、Overlay 和 Mock 交互不会污染 Studio。
 
+流程图和 ER 图的交互编辑器按需加载 React Flow，仅在全屏草稿中保存临时交互状态。Board DSL 仍是唯一事实源；外层画布、分享和 HTML 导出使用纯 React/SVG 预览，不依赖交互编辑器也不请求第三方服务。
+
 ## 4. 本地文件
 
 `project.yaml`、`pages/` 与 `boards/` 是唯一事实源。页面是项目级公共资产，画布只引用 pageId。每个画布的历史写入 `.prototype/revisions/boards/{boardId}/`；缓存和运行时状态可以随时重建。

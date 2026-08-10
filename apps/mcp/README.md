@@ -59,6 +59,8 @@ env = { PROTOTYPE_STUDIO_PROJECT_ROOT = "/absolute/path/to/project", PROTOTYPE_S
 - 所有输入使用 strict Zod schema，未声明的顶层参数会被拒绝。
 - 写操作与 Studio 共用 Project Store、Command Engine 和 Validator。成功写入会进行 `base_revision` 冲突检查、原子写文件、追加 Revision 与审计。
 - 每个画布使用独立的 Revision 基线；处理多需求文档时，Codex 必须先展示拟建画布清单并获得用户确认，再调用批量创建工具。
+- Codex 可通过 `prototype_apply_board_commands` 写入结构化 `flowchart` / `er` 对象；坐标可省略，Studio 会使用确定性布局，用户随后可在内置独立编辑器中继续拖动。
+- 图形编辑器不使用 diagrams.net iframe 或其他外部图形服务，图数据始终保存在 Board DSL 中。
 - 错误响应只返回稳定错误码、可执行建议与安全的校验详情，不返回堆栈或内部异常。
 - Preview 工具只声明本地可用性，不会伪造公网分享链接。
 

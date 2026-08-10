@@ -81,4 +81,13 @@ describe("validateBoard with open object types", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.map((error) => error.path)).toEqual(expect.arrayContaining(["$.links[0].lineType", "$.links[0].strokeWidth", "$.links[0].color"]));
   });
+
+  it("validates positioned diagram nodes and rejects dangling inner links", () => {
+    const base = { dslVersion: "1.0", id: "board", name: "测试画布", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", revision: 1, links: [] };
+    const valid = validateBoard({ ...base, objects: [{ id: "flow", type: "flowchart", x: 0, y: 0, width: 600, height: 400, flowchart: { nodes: [{ id: "start", label: "开始", position: { x: 20, y: 30 } }, { id: "end", label: "结束" }], edges: [{ id: "edge", from: "start", to: "end" }] } }] });
+    expect(valid.valid).toBe(true);
+    const invalid = validateBoard({ ...base, objects: [{ id: "flow", type: "flowchart", x: 0, y: 0, width: 600, height: 400, flowchart: { nodes: [{ id: "start", label: "开始" }], edges: [{ id: "edge", from: "start", to: "missing" }] } }] });
+    expect(invalid.valid).toBe(false);
+    expect(invalid.errors.some((error) => error.message.includes("不存在的节点"))).toBe(true);
+  });
 });

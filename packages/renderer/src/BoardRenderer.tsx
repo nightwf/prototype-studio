@@ -33,6 +33,7 @@ import {
   worldToScreen,
   zoomAtCursor
 } from "./boardGeometry";
+import { diagramPath, materializeEr, materializeFlowchart } from "./diagramLayout";
 import "./board.css";
 
 export interface BoardRendererProps {
@@ -48,6 +49,7 @@ export interface BoardRendererProps {
   onSelectLink?: (id: string) => void;
   onRelink?: (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => void;
   onOpenPage?: (pageId: string) => void;
+  onOpenDiagram?: (id: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveObjects?: (ids: string[], dx: number, dy: number) => void;
   onMoveMarker?: (id: string, offsetX: number, offsetY: number) => void;
@@ -116,31 +118,29 @@ function objectBoundaryPoint(object: BoardObject, toward: Point, pins: Record<st
 }
 
 function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { type: "flowchart" }>; boardId: string }) {
-  const nodes = object.flowchart.nodes;
-  const edges = object.flowchart.edges;
-  const row = 64;
+  const { nodes, edges } = materializeFlowchart(object.flowchart);
   const markerId = `board-arrow-${boardId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${object.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-flow`;
   return (
     <div className="board-flowchart">
       <svg className="board-flowchart-edges" viewBox={`0 0 ${object.width} ${object.height}`} preserveAspectRatio="none">
         <defs><marker id={markerId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#94a3b8" /></marker></defs>
         {edges.map((edge) => {
-          const fromIndex = nodes.findIndex((node) => node.id === edge.from);
-          const toIndex = nodes.findIndex((node) => node.id === edge.to);
-          if (fromIndex < 0 || toIndex < 0) return null;
+          const from = nodes.find((node) => node.id === edge.from);
+          const to = nodes.find((node) => node.id === edge.to);
+          if (!from?.position || !from.size || !to?.position || !to.size) return null;
+          const start = { x: from.position.x + from.size.width / 2, y: from.position.y + from.size.height };
+          const end = { x: to.position.x + to.size.width / 2, y: to.position.y };
           return (
             <g key={edge.id}>
-              <line
-                x1={object.width / 2}
-                y1={fromIndex * row + 24}
-                x2={object.width / 2}
-                y2={toIndex * row + 24}
-                stroke="#94a3b8"
-                strokeWidth={1.2}
+              <path
+                d={diagramPath(start, end, edge.lineType)}
+                fill="none"
+                stroke={edge.color ?? "#94a3b8"}
+                strokeWidth={edge.strokeWidth ?? 2}
                 markerEnd={`url(#${markerId})`}
               />
               {edge.label ? (
-                <text x={object.width / 2 + 8} y={((fromIndex + toIndex) / 2) * row + 24} fill="#64748b" fontSize={8}>
+                <text x={(start.x + end.x) / 2 + 8} y={(start.y + end.y) / 2 - 6} fill="#94a3b8" fontSize={9}>
                   {edge.label}
                 </text>
               ) : null}
@@ -149,9 +149,9 @@ function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { typ
         })}
       </svg>
       <div className="board-flowchart-nodes">
-        {nodes.map((node, index) => (
-          <div className="board-flow-node" key={node.id} style={{ top: index * row }}>
-            {node.label}
+        {nodes.map((node) => (
+          <div className={`board-flow-node board-flow-node--${node.kind ?? "process"}`} key={node.id} style={{ left: node.position?.x, top: node.position?.y, width: node.size?.width, height: node.size?.height, borderColor: node.color, background: node.fill }}>
+            <strong>{node.label}</strong>{node.description ? <small>{node.description}</small> : null}
           </div>
         ))}
       </div>
@@ -160,23 +160,23 @@ function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { typ
 }
 
 function ErView({ object }: { object: Extract<BoardObject, { type: "er" }> }) {
-  const { entities, relations } = object.er;
+  const { entities, relations } = materializeEr(object.er);
   return (
     <div className="board-er">
       <svg className="board-er-edges" viewBox={`0 0 ${object.width} ${object.height}`} preserveAspectRatio="none">
         {relations.map((relation) => {
-          const fromIndex = entities.findIndex((entity) => entity.id === relation.from);
-          const toIndex = entities.findIndex((entity) => entity.id === relation.to);
-          if (fromIndex < 0 || toIndex < 0) return null;
-          const fromX = 0;
-          const fromY = fromIndex * 100 + 40;
-          const toX = object.width;
-          const toY = toIndex * 100 + 40;
+          const from = entities.find((entity) => entity.id === relation.from);
+          const to = entities.find((entity) => entity.id === relation.to);
+          if (!from?.position || !to?.position) return null;
+          const fromHeight = 38 + from.fields.length * 24;
+          const toHeight = 38 + to.fields.length * 24;
+          const start = { x: from.position.x + (from.width ?? 220), y: from.position.y + fromHeight / 2 };
+          const end = { x: to.position.x, y: to.position.y + toHeight / 2 };
           return (
             <g key={relation.id}>
-              <line x1={fromX} y1={fromY} x2={toX} y2={toY} stroke="#a78bfa" strokeWidth={1.2} />
-              <text x={(fromX + toX) / 2} y={(fromY + toY) / 2 - 5} fill="#a78bfa" fontSize={8} textAnchor="middle">
-                {relation.cardinality ?? "relation"}
+              <path d={diagramPath(start, end, relation.lineType)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} />
+              <text x={(start.x + end.x) / 2} y={(start.y + end.y) / 2 - 6} fill={relation.color ?? "#a78bfa"} fontSize={9} textAnchor="middle">
+                {relation.label || relation.cardinality || "relation"}
               </text>
             </g>
           );
@@ -184,7 +184,7 @@ function ErView({ object }: { object: Extract<BoardObject, { type: "er" }> }) {
       </svg>
       <div className="board-er-entities">
         {entities.map((entity) => (
-          <div className="board-er-entity" key={entity.id}>
+          <div className="board-er-entity" key={entity.id} style={{ left: entity.position?.x, top: entity.position?.y, width: entity.width, borderColor: entity.color }}>
             <strong>{entity.name}</strong>
             {entity.fields.map((field) => (
               <span key={field.name}>
@@ -214,6 +214,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onSelectLink,
   onRelink,
   onOpenPage,
+  onOpenDiagram,
   onMoveObject,
   onMoveObjects,
   onMoveMarker,
@@ -566,6 +567,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
         onDoubleClick={(event) => {
           event.stopPropagation();
           if (object.type === "page") onOpenPage?.((object as BoardPageObject).pageId);
+          if (object.type === "flowchart" || object.type === "er") onOpenDiagram?.(object.id);
         }}
       >
         {object.type === "page" ? (

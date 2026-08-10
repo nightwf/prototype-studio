@@ -296,6 +296,13 @@ export interface BoardMarkerObject {
 export interface BoardFlowNode {
   id: string;
   label: string;
+  kind?: "start" | "end" | "process" | "decision" | "subprocess" | "data" | "lane";
+  description?: string;
+  position?: { x: number; y: number };
+  size?: { width: number; height: number };
+  laneId?: string;
+  color?: string;
+  fill?: string;
 }
 
 export interface BoardFlowEdge {
@@ -303,6 +310,12 @@ export interface BoardFlowEdge {
   from: string;
   to: string;
   label?: string;
+  condition?: string;
+  fromHandle?: string;
+  toHandle?: string;
+  lineType?: "straight" | "curve" | "orthogonal";
+  color?: string;
+  strokeWidth?: number;
 }
 
 export interface BoardFlowchartObject extends BoardObjectBase {
@@ -314,15 +327,20 @@ export interface BoardFlowchartObject extends BoardObjectBase {
 }
 
 export interface BoardErField {
+  id?: string;
   name: string;
   type: string;
   key?: boolean;
+  nullable?: boolean;
 }
 
 export interface BoardErEntity {
   id: string;
   name: string;
   fields: BoardErField[];
+  position?: { x: number; y: number };
+  width?: number;
+  color?: string;
 }
 
 export interface BoardErRelation {
@@ -332,6 +350,12 @@ export interface BoardErRelation {
   to: string;
   toField: string;
   cardinality?: string;
+  label?: string;
+  fromHandle?: string;
+  toHandle?: string;
+  lineType?: "straight" | "curve" | "orthogonal";
+  color?: string;
+  strokeWidth?: number;
 }
 
 export interface BoardErObject extends BoardObjectBase {

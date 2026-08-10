@@ -382,12 +382,44 @@ defineBoardObjectType("flowchart", (object, path, issues) => {
   const flowchart = object.flowchart as Record<string, unknown> | undefined;
   if (!flowchart || !Array.isArray(flowchart.nodes) || !Array.isArray(flowchart.edges)) {
     issues.errors.push(boardIssue("SCHEMA_INVALID", "流程图对象缺少 flowchart.nodes/edges。", `${path}.flowchart`));
+    return;
   }
+  const nodeIds = new Set<string>();
+  flowchart.nodes.forEach((candidate, index) => {
+    const node = candidate as Record<string, unknown>;
+    const nodePath = `${path}.flowchart.nodes[${index}]`;
+    if (typeof node.id !== "string" || !node.id) issues.errors.push(boardIssue("SCHEMA_INVALID", "流程节点缺少 id。", `${nodePath}.id`));
+    else if (nodeIds.has(node.id)) issues.errors.push(boardIssue("SCHEMA_INVALID", `流程节点 ID“${node.id}”重复。`, `${nodePath}.id`));
+    else nodeIds.add(node.id);
+    if (typeof node.label !== "string") issues.errors.push(boardIssue("SCHEMA_INVALID", "流程节点缺少 label。", `${nodePath}.label`));
+    const position = node.position as Record<string, unknown> | undefined;
+    if (position && (!Number.isFinite(position.x) || !Number.isFinite(position.y))) issues.errors.push(boardIssue("SCHEMA_INVALID", "流程节点坐标必须是有限数字。", `${nodePath}.position`));
+  });
+  flowchart.edges.forEach((candidate, index) => {
+    const edge = candidate as Record<string, unknown>;
+    if (!nodeIds.has(String(edge.from)) || !nodeIds.has(String(edge.to))) issues.errors.push(boardIssue("SCHEMA_INVALID", "流程连线引用了不存在的节点。", `${path}.flowchart.edges[${index}]`));
+  });
 });
 
 defineBoardObjectType("er", (object, path, issues) => {
   const er = object.er as Record<string, unknown> | undefined;
   if (!er || !Array.isArray(er.entities) || !Array.isArray(er.relations)) {
     issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 图对象缺少 er.entities/relations。", `${path}.er`));
+    return;
   }
+  const entityIds = new Set<string>();
+  er.entities.forEach((candidate, index) => {
+    const entity = candidate as Record<string, unknown>;
+    const entityPath = `${path}.er.entities[${index}]`;
+    if (typeof entity.id !== "string" || !entity.id) issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 实体缺少 id。", `${entityPath}.id`));
+    else if (entityIds.has(entity.id)) issues.errors.push(boardIssue("SCHEMA_INVALID", `ER 实体 ID“${entity.id}”重复。`, `${entityPath}.id`));
+    else entityIds.add(entity.id);
+    if (typeof entity.name !== "string" || !Array.isArray(entity.fields)) issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 实体必须包含名称和字段数组。", entityPath));
+    const position = entity.position as Record<string, unknown> | undefined;
+    if (position && (!Number.isFinite(position.x) || !Number.isFinite(position.y))) issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 实体坐标必须是有限数字。", `${entityPath}.position`));
+  });
+  er.relations.forEach((candidate, index) => {
+    const relation = candidate as Record<string, unknown>;
+    if (!entityIds.has(String(relation.from)) || !entityIds.has(String(relation.to))) issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 关系引用了不存在的实体。", `${path}.er.relations[${index}]`));
+  });
 });

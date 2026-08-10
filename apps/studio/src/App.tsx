@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   Box,
   Braces,
@@ -55,8 +55,6 @@ import {
   type BoardMarkerObject,
   type BoardNoteObject,
   type BoardObject,
-  type BoardFlowchartObject,
-  type BoardErObject,
   type Command,
   type MarkerTone,
   type PageDSL,
@@ -103,6 +101,8 @@ import {
 } from "./desktopBridge";
 import { webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebUser } from "./webBridge";
 import { AuthScreen, ProjectsScreen } from "./WebScreens";
+
+const DiagramEditor = lazy(() => import("./DiagramEditor"));
 
 type ToastTone = "success" | "warning" | "danger" | "info";
 interface Toast { id: number; tone: ToastTone; title: string; detail?: string }
@@ -250,79 +250,6 @@ function MarkerPicker({ boardPageObjects, pages, draft, picking, onChange, onSta
   );
 }
 
-function FlowchartEditor({ object, onChange }: {
-  object: Extract<BoardObject, { type: "flowchart" }>;
-  onChange: (flowchart: BoardFlowchartObject["flowchart"]) => void;
-}) {
-  const [draft, setDraft] = useState(object.flowchart);
-  useEffect(() => setDraft(object.flowchart), [object]);
-  return (
-    <div className="board-editor">
-      <div className="board-editor-sub"><strong>节点</strong><button onClick={() => setDraft((value) => ({ ...value, nodes: [...value.nodes, { id: `node-${value.nodes.length + 1}`, label: "新节点" }] }))}>+ 节点</button></div>
-      {draft.nodes.map((node, index) => (
-        <div className="board-editor-row" key={node.id}>
-          <code>{node.id}</code>
-          <input value={node.label} onChange={(event) => setDraft((value) => ({ ...value, nodes: value.nodes.map((item, i) => i === index ? { ...item, label: event.target.value } : item) }))} />
-          <button title="删除节点" onClick={() => setDraft((value) => ({ ...value, nodes: value.nodes.filter((_, i) => i !== index), edges: value.edges.filter((edge) => edge.from !== node.id && edge.to !== node.id) }))}><X size={11} /></button>
-        </div>
-      ))}
-      <div className="board-editor-sub"><strong>连线</strong><button onClick={() => setDraft((value) => ({ ...value, edges: [...value.edges, { id: `edge-${value.edges.length + 1}`, from: value.nodes[0]?.id ?? "", to: value.nodes[1]?.id ?? value.nodes[0]?.id ?? "" }] }))}>+ 连线</button></div>
-      {draft.edges.map((edge, index) => (
-        <div className="board-editor-row" key={edge.id}>
-          <select value={edge.from} onChange={(event) => setDraft((value) => ({ ...value, edges: value.edges.map((item, i) => i === index ? { ...item, from: event.target.value } : item) }))}>{draft.nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
-          <select value={edge.to} onChange={(event) => setDraft((value) => ({ ...value, edges: value.edges.map((item, i) => i === index ? { ...item, to: event.target.value } : item) }))}>{draft.nodes.map((node) => <option key={node.id} value={node.id}>{node.label || node.id}</option>)}</select>
-          <input value={edge.label ?? ""} placeholder="说明" onChange={(event) => setDraft((value) => ({ ...value, edges: value.edges.map((item, i) => i === index ? { ...item, label: event.target.value } : item) }))} />
-          <button title="删除连线" onClick={() => setDraft((value) => ({ ...value, edges: value.edges.filter((_, i) => i !== index) }))}><X size={11} /></button>
-        </div>
-      ))}
-      <button className="board-editor-save" onClick={() => onChange(draft)}>保存流程图</button>
-    </div>
-  );
-}
-
-function ErEditor({ object, onChange }: {
-  object: Extract<BoardObject, { type: "er" }>;
-  onChange: (er: BoardErObject["er"]) => void;
-}) {
-  const [draft, setDraft] = useState(object.er);
-  useEffect(() => setDraft(object.er), [object]);
-  return (
-    <div className="board-editor">
-      <div className="board-editor-sub"><strong>实体</strong><button onClick={() => setDraft((value) => ({ ...value, entities: [...value.entities, { id: `entity-${value.entities.length + 1}`, name: "新实体", fields: [{ name: "id", type: "string", key: true }] }] }))}>+ 实体</button></div>
-      {draft.entities.map((entity, entityIndex) => (
-        <div className="board-editor-entity" key={entity.id}>
-          <div className="board-editor-row">
-            <code>{entity.id}</code>
-            <input value={entity.name} onChange={(event) => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, name: event.target.value } : item) }))} />
-            <button title="删除实体" onClick={() => setDraft((value) => ({ ...value, entities: value.entities.filter((_, i) => i !== entityIndex), relations: value.relations.filter((relation) => relation.from !== entity.id && relation.to !== entity.id) }))}><X size={11} /></button>
-          </div>
-          {entity.fields.map((field, fieldIndex) => (
-            <div className="board-editor-row board-editor-field" key={`${entity.id}-${field.name}`}>
-              <input value={field.name} placeholder="字段名" onChange={(event) => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, fields: item.fields.map((f, fi) => fi === fieldIndex ? { ...f, name: event.target.value } : f) } : item) }))} />
-              <input value={field.type} placeholder="类型" onChange={(event) => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, fields: item.fields.map((f, fi) => fi === fieldIndex ? { ...f, type: event.target.value } : f) } : item) }))} />
-              <label className="board-key-toggle"><input type="checkbox" checked={Boolean(field.key)} onChange={(event) => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, fields: item.fields.map((f, fi) => fi === fieldIndex ? { ...f, key: event.target.checked } : f) } : item) }))} />主键</label>
-              <button title="删除字段" onClick={() => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, fields: item.fields.filter((_, fi) => fi !== fieldIndex) } : item) }))}><X size={11} /></button>
-            </div>
-          ))}
-          <button className="board-editor-mini" onClick={() => setDraft((value) => ({ ...value, entities: value.entities.map((item, i) => i === entityIndex ? { ...item, fields: [...item.fields, { name: "field", type: "string" }] } : item) }))}>+ 字段</button>
-        </div>
-      ))}
-      <div className="board-editor-sub"><strong>关系</strong><button onClick={() => setDraft((value) => ({ ...value, relations: [...value.relations, { id: `relation-${value.relations.length + 1}`, from: value.entities[0]?.id ?? "", fromField: value.entities[0]?.fields[0]?.name ?? "", to: value.entities[1]?.id ?? value.entities[0]?.id ?? "", toField: value.entities[0]?.fields[0]?.name ?? "", cardinality: "many-to-one" }] }))}>+ 关系</button></div>
-      {draft.relations.map((relation, index) => (
-        <div className="board-editor-row" key={relation.id}>
-          <select value={relation.from} onChange={(event) => setDraft((value) => ({ ...value, relations: value.relations.map((item, i) => i === index ? { ...item, from: event.target.value } : item) }))}>{draft.entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
-          <input value={relation.fromField} placeholder="字段" onChange={(event) => setDraft((value) => ({ ...value, relations: value.relations.map((item, i) => i === index ? { ...item, fromField: event.target.value } : item) }))} />
-          <span>→</span>
-          <select value={relation.to} onChange={(event) => setDraft((value) => ({ ...value, relations: value.relations.map((item, i) => i === index ? { ...item, to: event.target.value } : item) }))}>{draft.entities.map((entity) => <option key={entity.id} value={entity.id}>{entity.name}</option>)}</select>
-          <input value={relation.toField} placeholder="字段" onChange={(event) => setDraft((value) => ({ ...value, relations: value.relations.map((item, i) => i === index ? { ...item, toField: event.target.value } : item) }))} />
-          <button title="删除关系" onClick={() => setDraft((value) => ({ ...value, relations: value.relations.filter((_, i) => i !== index) }))}><X size={11} /></button>
-        </div>
-      ))}
-      <button className="board-editor-save" onClick={() => onChange(draft)}>保存 ER 图</button>
-    </div>
-  );
-}
-
 const EMPTY_PAGE = createMinimalPage("empty-page", "未选择页面", "detail");
 
 function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {
@@ -423,6 +350,7 @@ export function App() {
   const [boardSelectedId, setBoardSelectedId] = useState<string>();
   const [boardSelectedIds, setBoardSelectedIds] = useState<string[]>([]);
   const [boardSelectedLinkId, setBoardSelectedLinkId] = useState<string>();
+  const [diagramEditor, setDiagramEditor] = useState<{ boardId: string; objectId: string; baseRevision: number }>();
   const [boardZoom, setBoardZoom] = useState(1);
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
@@ -1180,6 +1108,22 @@ export function App() {
     return task;
   }, [projectRoot, toast, webProjectId]);
 
+  const openDiagramEditor = useCallback((objectId: string) => {
+    const current = boardCacheRef.current.get(currentBoardIdRef.current);
+    const object = current?.objects.find((item) => item.id === objectId);
+    if (!current || (object?.type !== "flowchart" && object?.type !== "er")) return;
+    setDiagramEditor({ boardId: current.id, objectId, baseRevision: current.revision });
+  }, []);
+
+  const saveDiagramObject = useCallback(async (next: Extract<BoardObject, { type: "flowchart" | "er" }>, baseRevision: number): Promise<boolean> => {
+    const current = boardCacheRef.current.get(currentBoardIdRef.current);
+    if (!current || current.revision !== baseRevision) {
+      toast("danger", "图形未保存", "画布在编辑期间已被修改。当前草稿仍保留，请取消后重新打开。");
+      return false;
+    }
+    return runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: next.id, changes: next }], next.type === "flowchart" ? "流程图已保存" : "ER 图已保存");
+  }, [runBoardCommands, toast]);
+
   // 拖拽移动按帧合并：一帧内只发一次 MOVE 命令（取最新位置），避免拖动时命令洪泛。
   const pendingMovesRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const pendingFlushRef = useRef<number>(0);
@@ -1211,6 +1155,11 @@ export function App() {
 
   const boardSelectedObject = useMemo(() => board.objects.find((object) => object.id === boardSelectedId), [board.objects, boardSelectedId]);
   const boardSelectedLink = useMemo(() => board.links.find((link) => link.id === boardSelectedLinkId), [board.links, boardSelectedLinkId]);
+  const diagramEditorObject = useMemo(() => {
+    if (!diagramEditor || diagramEditor.boardId !== board.id) return undefined;
+    const object = board.objects.find((item) => item.id === diagramEditor.objectId);
+    return object?.type === "flowchart" || object?.type === "er" ? object : undefined;
+  }, [board, diagramEditor]);
 
   const boardComponentOptions = (objectId: string) => {
     const object = board.objects.find((item) => item.id === objectId);
@@ -1285,10 +1234,17 @@ export function App() {
       width: 640,
       height: 360,
       source: "explicit",
-      flowchart: { nodes: [{ id: "node-1", label: "开始" }, { id: "node-2", label: "结束" }], edges: [{ id: "edge-1", from: "node-1", to: "node-2", label: "" }] }
+      flowchart: {
+        nodes: [
+          { id: "node-1", label: "开始", kind: "start", position: { x: 236, y: 50 }, size: { width: 168, height: 64 } },
+          { id: "node-2", label: "结束", kind: "end", position: { x: 236, y: 220 }, size: { width: 168, height: 64 } }
+        ],
+        edges: [{ id: "edge-1", from: "node-1", to: "node-2", label: "", lineType: "orthogonal", color: "#64748b", strokeWidth: 2 }]
+      }
     };
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "流程图已添加")) {
       setBoardSelectedId(object.id);
+      window.setTimeout(() => openDiagramEditor(object.id), 0);
     }
   };
 
@@ -1302,12 +1258,13 @@ export function App() {
       height: 360,
       source: "explicit",
       er: {
-        entities: [{ id: "entity-1", name: "实体A", fields: [{ name: "id", type: "string", key: true }] }],
+        entities: [{ id: "entity-1", name: "实体A", position: { x: 80, y: 70 }, width: 220, fields: [{ id: "entity-1-id", name: "id", type: "string", key: true, nullable: false }] }],
         relations: []
       }
     };
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }], "ER 图已添加")) {
       setBoardSelectedId(object.id);
+      window.setTimeout(() => openDiagramEditor(object.id), 0);
     }
   };
 
@@ -1771,7 +1728,7 @@ ${boardExportRuntimeScript}
             <div className="canvas-toolbar-actions"><div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div></div>
         </> : <>
             <div className="canvas-toolbar-left">
-              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">拖拽移动 · 双击页面进入编辑 · 右键更多</span></div>
+              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">拖拽移动 · 双击页面或图形进入编辑 · 右键更多</span></div>
             </div>
             <div className="canvas-toolbar-actions">
               <div className="board-tools">
@@ -1810,6 +1767,7 @@ ${boardExportRuntimeScript}
           onSelectLink={selectBoardLink}
           onRelink={relinkBoardLink}
           onOpenPage={openPageFromBoard}
+          onOpenDiagram={openDiagramEditor}
           onMoveObject={moveBoardObject}
           onMoveObjects={moveBoardObjects}
           onMoveMarker={moveBoardMarker}
@@ -1910,11 +1868,13 @@ ${boardExportRuntimeScript}
             </> : null}
             {boardSelectedObject.type === "flowchart" ? <>
               <SectionTitle>流程图</SectionTitle>
-              <FlowchartEditor object={boardSelectedObject} onChange={(flowchart) => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { flowchart } }])} />
+              <div className="diagram-launch-card"><GitBranch size={20} /><div><strong>{boardSelectedObject.flowchart.nodes.length} 个节点</strong><span>双击图块，或打开独立编辑器拖动节点与连线。</span></div></div>
+              <button className="inspector-action is-primary" onClick={() => openDiagramEditor(boardSelectedObject.id)}><Maximize2 size={13} />打开流程图编辑器</button>
             </> : null}
             {boardSelectedObject.type === "er" ? <>
               <SectionTitle>ER 图</SectionTitle>
-              <ErEditor object={boardSelectedObject} onChange={(er) => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { er } }])} />
+              <div className="diagram-launch-card"><Database size={20} /><div><strong>{boardSelectedObject.er.entities.length} 个实体</strong><span>在独立编辑器中管理字段、关系和实体位置。</span></div></div>
+              <button className="inspector-action is-primary" onClick={() => openDiagramEditor(boardSelectedObject.id)}><Maximize2 size={13} />打开 ER 图编辑器</button>
             </> : null}
             <SectionTitle>连线</SectionTitle>
             {board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).length ? board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).map((link) => (
@@ -2043,6 +2003,10 @@ ${boardExportRuntimeScript}
         </div>
       </section>
     </div> : null}
+
+    {diagramEditor && diagramEditorObject ? <Suspense fallback={<div className="diagram-editor-loading"><GitBranch size={22} /><strong>正在打开图形编辑器…</strong></div>}>
+      <DiagramEditor object={diagramEditorObject} boardRevision={diagramEditor.baseRevision} onSave={saveDiagramObject} onClose={() => setDiagramEditor(undefined)} />
+    </Suspense> : null}
 
     <div className="toast-stack">{toasts.map((item) => <div key={item.id} className={`studio-toast studio-toast--${item.tone}`}><span><i /></span><div><strong>{item.title}</strong>{item.detail ? <p>{item.detail}</p> : null}</div><button onClick={() => setToasts((items) => items.filter((toast) => toast.id !== item.id))}><X size={13} /></button></div>)}</div>
   </div>;
