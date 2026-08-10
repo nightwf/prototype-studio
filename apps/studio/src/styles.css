@@ -122,20 +122,6 @@ button { color: inherit; }
 .preview-browser-bar span { flex: 1; text-align: center; font: 8px/1 var(--ps-font-mono); }
 .preview-browser-bar button { border: 0; background: transparent; color: inherit; display: grid; }
 .preview-device iframe { width: 100%; height: calc(100% - 32px); border: 0; background: #f2f3f1; }
-.command-dock { position: absolute; z-index: 10; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(680px, calc(100% - 34px)); border: 1px solid #414d56; border-radius: 10px; overflow: hidden; background: #182027; color: white; box-shadow: 0 18px 55px rgba(16,23,28,.3); }
-.command-context { height: 29px; padding: 0 11px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #303b44; color: #91a0aa; font: 700 8px/1 var(--ps-font-mono); letter-spacing: .08em; }
-.command-context > svg { color: #7aa0ff; }
-.command-context i { height: 11px; border-left: 1px solid #3e4a53; }
-.command-context b { color: #dbe1e4; font-weight: 600; letter-spacing: 0; }
-.scope-pill { margin-left: auto; padding: 3px 6px; border-radius: 4px; background: rgba(31,94,255,.16); color: #92b0ff; letter-spacing: 0; }
-.command-input-row { height: 50px; padding: 0 8px 0 13px; display: flex; align-items: center; gap: 9px; }
-.command-input-row > svg { color: #71808a; }
-.command-input-row input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: white; font-size: 11px; }
-.command-input-row input::placeholder { color: #66747d; }
-.command-hint { display: flex; gap: 3px; }
-.command-hint .ps-keycap { background: #252f37; border-color: #414d56; color: #8f9ba4; }
-.command-run { height: 32px; padding: 0 12px; border: 0; border-radius: 6px; background: var(--ps-cobalt); color: white; display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; }
-.command-run:disabled { background: #33404a; color: #687781; }
 .selected-path { min-height: 31px; padding: 0 15px; display: flex; align-items: center; gap: 5px; border-bottom: 1px solid var(--ps-ink-100); color: var(--ps-ink-500); font: 8px/1 var(--ps-font-mono); }
 .selected-path b { min-width: 0; color: var(--ps-cobalt); overflow: hidden; text-overflow: ellipsis; }
 .inspector-body { padding: 3px 14px 65px; }

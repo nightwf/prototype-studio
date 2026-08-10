@@ -6,7 +6,6 @@ import {
   ChevronRight,
   CircleHelp,
   Clock3,
-  Command as CommandIcon,
   Copy,
   Database,
   Download,
@@ -29,7 +28,6 @@ import {
   Pencil,
   PanelLeft,
   PanelRight,
-  Play,
   Plus,
   Redo2,
   RotateCcw,
@@ -77,7 +75,7 @@ import {
   type BoardRendererHandle,
   type BoardView
 } from "@prototype-studio/renderer";
-import { EmptyState, Keycap, PanelHeader, StatusDot, ToolButton } from "@prototype-studio/design-system";
+import { EmptyState, PanelHeader, StatusDot, ToolButton } from "@prototype-studio/design-system";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import {
   createDesktopPage,
@@ -393,26 +391,6 @@ function DiffView({ entries }: { entries: DslDiffEntry[] }) {
   </div>)}</div>;
 }
 
-function parseLocalCommand(prompt: string, selected?: UIComponent): Command[] | undefined {
-  if (!selected) return undefined;
-  const normalized = prompt.trim().toLowerCase();
-  if (normalized.includes("不必填") || normalized.includes("取消必填")) {
-    return [{ type: "UPDATE_COMPONENT", target: selected.id, changes: { validation: { ...selected.validation, required: false } } }];
-  }
-  if (normalized.includes("必填")) {
-    return [{ type: "UPDATE_COMPONENT", target: selected.id, changes: { validation: { ...selected.validation, required: true } } }];
-  }
-  if (normalized.includes("drawer") || normalized.includes("抽屉")) {
-    return [{ type: selected.type === "modal" || selected.type === "drawer" ? "UPDATE_OVERLAY" : "UPDATE_COMPONENT", target: selected.id, changes: { type: "drawer" } } as Command];
-  }
-  if (normalized.includes("modal") || normalized.includes("弹窗")) {
-    return [{ type: selected.type === "modal" || selected.type === "drawer" ? "UPDATE_OVERLAY" : "UPDATE_COMPONENT", target: selected.id, changes: { type: "modal" } } as Command];
-  }
-  const label = prompt.match(/(?:名称|标题|label)\s*(?:改成|设为|为)\s*[“"']?([^”"']+)[”"']?/i)?.[1]?.trim();
-  if (label) return [{ type: "UPDATE_COMPONENT", target: selected.id, changes: selected.type === "button" ? { text: label } : { label } }];
-  return undefined;
-}
-
 export function App() {
   const initialPages = useMemo(() => (isDesktopRuntime() ? [] : [structuredClone(caseListExample)]), []);
   const [pages, setPages] = useState<PageDSL[]>(initialPages);
@@ -423,7 +401,6 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string>(initialPages[0] ? "search.status" : "");
   const [history, setHistory] = useState<RevisionRecord[]>([]);
   const [redoStack, setRedoStack] = useState<RevisionRecord[]>([]);
-  const [command, setCommand] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [showDsl, setShowDsl] = useState(false);
   const [previewScale, setPreviewScale] = useState(82);
@@ -1475,17 +1452,6 @@ window.addEventListener('DOMContentLoaded', function () {
     } else toast("warning", "当前仅支持同容器排序", "MVP 可拖动查询区字段调整顺序");
   };
 
-  const submitCommand = () => {
-    if (!command.trim()) return;
-    const commands = parseLocalCommand(command, selected);
-    if (commands) {
-      void runCommands(commands, "ai");
-      setCommand("");
-    } else {
-      toast("warning", "需要外部 Codex", "该复杂语义将在 MCP 接入后生成 Change Plan");
-    }
-  };
-
   const buildRequirementPlan = () => {
     const structured = parseRequirementTemplates(requirementText);
     if (structured) {
@@ -1732,15 +1698,6 @@ window.addEventListener('DOMContentLoaded', function () {
           <div className="preview-device" style={{ width: `${100 / (previewScale / 100)}%`, height: `${100 / (previewScale / 100)}%`, transform: `scale(${previewScale / 100})` }}>
             <div className="preview-browser-bar"><div><i /><i /><i /></div><span>prototype://local/{dsl.page.id}</span><button><RotateCcw size={12} /></button></div>
             <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => sendPreview({ type: "prototype:dsl", dsl })} sandbox="allow-scripts allow-same-origin allow-forms" />
-          </div>
-        </div>
-        <div className="command-dock">
-          <div className="command-context"><Sparkles size={14} /><span>AI COMMAND</span><i /><b>{selected ? selected.id : "未选择组件"}</b><span className="scope-pill">Scope · {selected ? "1 node" : "page"}</span></div>
-          <div className="command-input-row">
-            <CommandIcon size={18} />
-            <input value={command} onChange={(event) => setCommand(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submitCommand(); }} placeholder={selected ? `描述如何修改「${selected.label ?? selected.title ?? selected.text ?? selected.id}」…` : "先在原型中选择一个组件"} />
-            <span className="command-hint"><Keycap>⌘</Keycap><Keycap>↵</Keycap></span>
-            <button className="command-run" onClick={submitCommand} disabled={!command.trim()}><Play size={13} fill="currentColor" />执行</button>
           </div>
         </div>
       </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div> : <div className="requirement-stage">
