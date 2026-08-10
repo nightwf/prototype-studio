@@ -50,6 +50,7 @@ export interface BoardRendererProps {
   onSelectLink?: (id: string) => void;
   onRelink?: (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => void;
   onMoveLinkWaypoint?: (linkId: string, x: number, y: number) => void;
+  onAddLink?: (fromObjectId: string, toObjectId: string, fromComponentId?: string, toComponentId?: string) => void;
   onOpenPage?: (pageId: string) => void;
   onOpenDiagram?: (id: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
@@ -253,6 +254,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onSelectLink,
   onRelink,
   onMoveLinkWaypoint,
+  onAddLink,
   onOpenPage,
   onOpenDiagram,
   onMoveObject,
@@ -281,6 +283,9 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     snap?: { objectId: string; componentId?: string; label: string; point?: Point };
   }>();
   const [waypointDrag, setWaypointDrag] = useState<{ linkId: string; point: Point }>();
+  const [createLink, setCreateLink] = useState<{ from: { objectId: string; componentId?: string }; point: Point; snap?: Point }>();
+  const [hoverAnchor, setHoverAnchor] = useState<{ objectId: string; componentId: string; point: Point }>();
+  const createLinkRef = useRef<{ from: { objectId: string; componentId?: string }; point: Point; snap?: Point } | undefined>(undefined);
   const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; objectIds: string[] } | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -457,6 +462,42 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       return { objectId, label: objectId };
     }
     return undefined;
+  };
+
+  const startCreateLink = (event: ReactPointerEvent<HTMLElement>, from: { objectId: string; componentId?: string }): void => {
+    if (!interactive) return;
+    event.stopPropagation();
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const next = { from, point: pointerCanvasPoint(event.clientX, event.clientY) };
+    createLinkRef.current = next;
+    setCreateLink(next);
+  };
+
+  const moveCreateLink = (event: ReactPointerEvent<HTMLElement>): void => {
+    const current = createLinkRef.current;
+    if (!current) return;
+    const point = pointerCanvasPoint(event.clientX, event.clientY);
+    const snap = findLinkSnap(event.clientX, event.clientY);
+    let snapPoint: Point | undefined;
+    if (snap && snap.objectId !== current.from.objectId) {
+      snapPoint = snap.point ?? (objectMap.get(snap.objectId) ? objectBoundaryPoint(objectMap.get(snap.objectId)!, point, pins, canvasX, canvasY) : undefined);
+    }
+    const next = { from: current.from, point, ...(snapPoint ? { snap: snapPoint } : { snap: undefined }) };
+    createLinkRef.current = next;
+    setCreateLink(next);
+  };
+
+  const endCreateLink = (event: ReactPointerEvent<HTMLElement>): void => {
+    const current = createLinkRef.current;
+    createLinkRef.current = undefined;
+    setCreateLink(undefined);
+    setHoverAnchor(undefined);
+    if (!current) return;
+    const snap = findLinkSnap(event.clientX, event.clientY);
+    if (snap && snap.objectId !== current.from.objectId) {
+      onAddLink?.(current.from.objectId, snap.objectId, current.from.componentId, snap.componentId);
+    }
   };
 
   const startPanOrMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -671,6 +712,24 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               onDoubleClick={(event) => { if (!picking) event.stopPropagation(); }}
               onContextMenu={(event) => { if (!picking) event.stopPropagation(); }}
               onWheel={(event) => { if (!picking) event.stopPropagation(); }}
+              onPointerMoveCapture={(event) => {
+                if (createLinkRef.current) return;
+                if (!interactive || picking) { setHoverAnchor(undefined); return; }
+                const rawTarget = event.target as HTMLElement;
+                if (rawTarget.closest?.(".board-port")) return;
+                const target = rawTarget.closest?.("[data-component-id]") as HTMLElement | null;
+                if (!target) { setHoverAnchor(undefined); return; }
+                const componentId = target.getAttribute("data-component-id") ?? "";
+                if (!componentId) { setHoverAnchor(undefined); return; }
+                const bounds = target.getBoundingClientRect();
+                const frameRect = event.currentTarget.getBoundingClientRect();
+                const contentX = (bounds.left - frameRect.left + event.currentTarget.scrollLeft) / view.zoom;
+                const contentY = (bounds.top - frameRect.top + event.currentTarget.scrollTop) / view.zoom;
+                const width = bounds.width / view.zoom;
+                const height = bounds.height / view.zoom;
+                setHoverAnchor({ objectId: object.id, componentId, point: { x: contentX + width, y: contentY + height / 2 } });
+              }}
+              onPointerLeave={() => setHoverAnchor(undefined)}
               onClickCapture={(event) => {
                 if (!picking) return;
                 event.stopPropagation();
@@ -683,6 +742,17 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               }}
             >
               {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={interactive && !picking} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
+              {interactive && !picking && hoverAnchor && hoverAnchor.objectId === object.id ? (
+                <span
+                  className="board-port board-port--component"
+                  style={{ left: hoverAnchor.point.x, top: hoverAnchor.point.y }}
+                  title="拖动创建连线（组件）"
+                  onPointerDown={(event) => startCreateLink(event, { objectId: hoverAnchor.objectId, componentId: hoverAnchor.componentId })}
+                  onPointerMove={moveCreateLink}
+                  onPointerUp={endCreateLink}
+                  onPointerCancel={() => { createLinkRef.current = undefined; setCreateLink(undefined); }}
+                />
+              ) : null}
             </div>
           </>
         ) : object.type === "note" ? (
@@ -695,6 +765,17 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             <pre>{JSON.stringify(object, null, 2)}</pre>
           </div>
         )}
+        {interactive && !picking ? (
+          <span
+            className="board-port"
+            style={{ left: object.width - 15, top: object.height / 2 - 7 }}
+            title="拖动创建连线"
+            onPointerDown={(event) => startCreateLink(event, { objectId: object.id })}
+            onPointerMove={moveCreateLink}
+            onPointerUp={endCreateLink}
+            onPointerCancel={() => { createLinkRef.current = undefined; setCreateLink(undefined); }}
+          />
+        ) : null}
       </div>
     );
   };
@@ -844,6 +925,19 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             </g>
           );
         })}
+        {createLink ? (() => {
+          const fromObject = objectMap.get(createLink.from.objectId);
+          const fromAnchor = createLink.from.componentId ? linkAnchors[`${createLink.from.objectId}:${createLink.from.componentId}`] : undefined;
+          const source = fromAnchor
+            ? anchorBoundaryPoint(fromAnchor, createLink.point)
+            : fromObject ? objectBoundaryPoint(fromObject, createLink.point, pins, canvasX, canvasY) : createLink.point;
+          return (
+            <g className="board-link-preview">
+              <path d={linkPath(source, createLink.point, "curve")} fill="none" stroke="#2563eb" strokeWidth={2.5} strokeDasharray="6 4" />
+              {createLink.snap ? <circle cx={createLink.snap.x} cy={createLink.snap.y} r={8} fill="rgba(37, 99, 235, 0.15)" stroke="#2563eb" strokeWidth={1.5} /> : null}
+            </g>
+          );
+        })() : null}
       </svg>
       {markerObjects.map((object) => renderObject(object))}
       {showAnnotationPanel && markerObjects.length ? (

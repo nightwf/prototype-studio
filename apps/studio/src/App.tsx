@@ -1855,6 +1855,7 @@ ${boardExportRuntimeScript}
           onSelectLink={selectBoardLink}
           onRelink={relinkBoardLink}
           onMoveLinkWaypoint={moveBoardLinkWaypoint}
+          onAddLink={(from, to, fromComponentId, toComponentId) => void addBoardLink(from, to, "", fromComponentId, toComponentId)}
           onOpenPage={openPageFromBoard}
           onOpenDiagram={openDiagramEditor}
           onMoveObject={moveBoardObject}
