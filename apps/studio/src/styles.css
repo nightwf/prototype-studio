@@ -6,8 +6,8 @@ button { color: inherit; }
 .studio-shell.left-collapsed { grid-template-columns: 20px minmax(540px, 1fr) 284px; }
 .studio-shell.right-collapsed { grid-template-columns: 228px minmax(540px, 1fr) 20px; }
 .studio-shell.left-collapsed.right-collapsed { grid-template-columns: 20px minmax(540px, 1fr) 20px; }
-.left-collapsed .studio-left > *:not(.panel-toggle) { display: none; }
-.right-collapsed .studio-right > *:not(.panel-toggle) { display: none; }
+.left-collapsed .studio-left > * { display: none; }
+.right-collapsed .studio-right > * { display: none; }
 .left-collapsed .studio-brand { width: 20px; padding: 0 6px; }
 .left-collapsed .studio-brand > div { display: none; }
 .studio-titlebar { grid-column: 1 / -1; min-width: 0; display: flex; align-items: center; border-bottom: 1px solid #303941; background: var(--ps-ink-950); color: #e8ecee; user-select: none; }
@@ -43,10 +43,8 @@ button { color: inherit; }
 .studio-left { grid-column: 1; position: relative; overflow: hidden; border-right: 1px solid #cfd5d8; display: flex; flex-direction: column; }
 .studio-right { grid-column: 3; position: relative; overflow: hidden; border-left: 1px solid #cfd5d8; }
 .studio-right-content { height: 100%; overflow: auto; }
-.panel-toggle { position: absolute; top: 50%; transform: translateY(-50%); z-index: 60; width: 22px; height: 38px; display: grid; place-items: center; border: 1px solid #c9cfd1; background: #f3f4f2; color: #5b6a72; cursor: pointer; box-shadow: 0 2px 8px rgba(20, 27, 31, 0.14); }
-.panel-toggle:hover { color: var(--ps-cobalt); border-color: var(--ps-cobalt); }
-.panel-toggle--left { right: -11px; border-radius: 0 7px 7px 0; }
-.panel-toggle--right { left: -11px; border-radius: 7px 0 0 7px; }
+.title-action-label { font-size: 9px; }
+@media (max-width: 1240px) { .title-action-label { display: none; } }
 .left-tabs { height: 43px; display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--ps-ink-200); }
 .left-tabs button { border: 0; border-bottom: 2px solid transparent; background: transparent; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--ps-ink-500); font-size: 11px; font-weight: 650; }
 .left-tabs button.is-active { color: var(--ps-ink-900); border-bottom-color: var(--ps-cobalt); }

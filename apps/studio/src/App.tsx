@@ -3,7 +3,6 @@ import {
   Box,
   Braces,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
   CircleHelp,
   Clock3,
@@ -28,6 +27,7 @@ import {
   MousePointer2,
   MoreHorizontal,
   Pencil,
+  PanelLeft,
   PanelRight,
   Play,
   Plus,
@@ -1530,6 +1530,9 @@ window.addEventListener('DOMContentLoaded', function () {
       <div className="studio-title-actions">
         <StatusDot tone={currentPage && previewReady ? "success" : currentPage ? "warning" : "neutral"}>{currentPage ? (previewReady ? "Preview 已连接" : "Preview 连接中") : "暂无页面"}</StatusDot>
         <span className="title-divider" />
+        <ToolButton active={!leftCollapsed} onClick={() => setLeftCollapsed((value) => !value)} title="显示 / 隐藏左侧面板"><PanelLeft size={14} /><span className="title-action-label">左栏</span></ToolButton>
+        <ToolButton active={!rightCollapsed} onClick={() => setRightCollapsed((value) => !value)} title="显示 / 隐藏右侧面板"><PanelRight size={14} /><span className="title-action-label">右栏</span></ToolButton>
+        <span className="title-divider" />
         <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!currentPage} onClick={() => setShowHistory(!showHistory)} active={showHistory}><History size={14} />版本 <span className="revision-badge">{currentPage?.revision ?? 0}</span></ToolButton>
@@ -1580,9 +1583,6 @@ window.addEventListener('DOMContentLoaded', function () {
         </div> : <EmptyState icon={<FileText size={17} />} title="等待 Codex 结果" description="Codex 同步结构化页面模板或规范化需求后，Studio 再按声明生成页面计划。" />}
         <div className="left-footer"><FileCheck2 size={13} /><span>requirements/REQ-001.md</span><StatusDot tone="success">本地</StatusDot></div>
       </>}
-      <button className="panel-toggle panel-toggle--left" onClick={() => setLeftCollapsed((value) => !value)} title={leftCollapsed ? "展开左侧面板" : "收起左侧面板"} aria-label={leftCollapsed ? "展开左侧面板" : "收起左侧面板"}>
-        {leftCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
-      </button>
     </aside>
 
     <main className="studio-canvas">
@@ -1813,9 +1813,6 @@ window.addEventListener('DOMContentLoaded', function () {
         <div className="inspector-footer"><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
       </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" />}
       </div>
-      <button className="panel-toggle panel-toggle--right" onClick={() => setRightCollapsed((value) => !value)} title={rightCollapsed ? "展开右侧面板" : "收起右侧面板"} aria-label={rightCollapsed ? "展开右侧面板" : "收起右侧面板"}>
-        {rightCollapsed ? <ChevronLeft size={13} /> : <ChevronRight size={13} />}
-      </button>
     </aside>
 
     {appModal ? <div className="settings-overlay" onClick={() => setAppModal(undefined)}>
