@@ -1,14 +1,16 @@
+name: prototype-studio
+
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: prototype
-      POSTGRES_PASSWORD: prototype
-      POSTGRES_DB: prototype_studio
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env.production}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U prototype -d prototype_studio"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,9 +22,9 @@ services:
     environment:
       PORT: "8787"
       SPACES_DIR: /data/spaces
-      BASE_URL: ${BASE_URL:-http://localhost:8787}
-      DATABASE_URL: postgres://prototype:prototype@db:5432/prototype_studio
-      INVITE_CODES: ${INVITE_CODES:-PROTOTYPE-DEV}
+      BASE_URL: ${BASE_URL:?set BASE_URL in .env.production}
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      INVITE_CODES: ${INVITE_CODES:?set INVITE_CODES in .env.production}
     volumes:
       - spaces:/data/spaces
     depends_on:

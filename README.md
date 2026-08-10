@@ -16,7 +16,7 @@ PORT=8787 SPACES_DIR=./data/spaces INVITE_CODES=PROTOTYPE-DEV node apps/web-serv
 VITE_WEB_API=http://127.0.0.1:8787 pnpm --filter @prototype-studio/studio dev
 ```
 
-浏览器打开 vite 输出端口，用邀请码 `PROTOTYPE-DEV` 注册登录。生产部署：`docker compose up -d`（自动迁移 PostgreSQL 元数据，项目文件存数据卷）。验收清单见 `docs/WEB_ACCEPTANCE.md`。
+浏览器打开 vite 输出端口，用邀请码 `PROTOTYPE-DEV` 注册登录。生产部署前先把 `.env.example` 复制为服务器上的 `.env.production` 并填写真实配置，再执行 `bash scripts/deploy.sh`。验收清单见 `docs/WEB_ACCEPTANCE.md`。
 
 ## 现在可以体验什么
 
@@ -48,7 +48,6 @@ pnpm typecheck
 pnpm test
 pnpm lint
 pnpm build
-pnpm build:desktop
 python scripts/e2e_studio.py
 ```
 
@@ -89,7 +88,7 @@ Requirement / Studio / Codex / MCP
 - `packages/requirement-engine`：需求输入、Adapter、本地 fallback、Page Plan 与 DSL 生成。
 - `apps/studio`：Studio 编辑器与独立 Preview 页面。
 - `apps/mcp`：Local MCP Server。
-- `apps/desktop`：Tauri 桌面壳。
+- `_archive/desktop`：早期 Tauri 桌面壳归档，不属于当前 workspace 构建。
 
 更详细说明见 [架构文档](docs/ARCHITECTURE.md)、[DSL Spec](docs/DSL_SPEC_1.0.md) 和 [架构决策](docs/DECISIONS.md)。
 
@@ -130,9 +129,9 @@ Local MCP 使用 stdio，Project Root 通过环境变量显式传入。构建 MC
 
 所有 MCP 写操作与 Studio 共用 Command Engine、Validator 和 Revision，不提供绕过版本链的整页覆盖工具。
 
-## 桌面构建
+## 桌面归档
 
-桌面壳使用 Tauri 2，需要 Rust stable 和平台原生构建工具。`pnpm build:desktop` 会先把 Local MCP 编译为当前平台的独立 sidecar，再生成桌面应用。Web UI 可以在未安装 Rust 时独立开发和测试；正式桌面打包说明见 `apps/desktop/README.md`。
+早期 Tauri 桌面壳保存在 `_archive/desktop`，仅用于历史参考，不属于当前网页端 workspace 和生产构建。当前维护主线为 Studio、Web Server 和 MCP。
 
 ## 已知边界
 

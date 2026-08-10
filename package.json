@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter @prototype-studio/studio dev",
-    "build": "pnpm --filter @prototype-studio/studio build && pnpm --filter @prototype-studio/mcp build",
+    "build": "pnpm --filter @prototype-studio/studio build && pnpm --filter @prototype-studio/mcp build && pnpm --filter @prototype-studio/web-server build",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --if-present typecheck",

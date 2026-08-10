@@ -6,18 +6,50 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  quality:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.4.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm build
+
+  deploy:
+    needs: quality
+    runs-on: ubuntu-latest
+    environment: production
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SSH_HOST }}
+          port: ${{ secrets.SSH_PORT || '22' }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           script: |
-            set -e
+            set -euo pipefail
             cd /srv/prototype-studio-web || exit 1
-            git pull --ff-only
-            BASE_URL="${{ secrets.PUBLIC_URL }}" INVITE_CODES="${{ secrets.INVITE_CODES }}" sudo docker compose up -d --build
-            curl -sS -o /dev/null -w 'health:%{http_code}\n' http://127.0.0.1:8787/api/me
+            test -f .env.production
+            git fetch origin main
+            git merge --ff-only origin/main
+            sudo docker compose --env-file .env.production up -d --build
+            for attempt in $(seq 1 30); do
+              code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/api/me || true)
+              if [ "$code" = "200" ]; then
+                echo "health:200"
+                exit 0
+              fi
+              sleep 2
+            done
+            sudo docker compose --env-file .env.production logs --tail=100 app
+            exit 1

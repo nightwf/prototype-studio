@@ -33,5 +33,11 @@ fi
 
 echo "== 首次部署 =="
 cd /srv/prototype-studio-web
-BASE_URL="${PUBLIC_URL:-http://127.0.0.1:8787}" INVITE_CODES="${INVITE_CODES:-PROTOTYPE-DEV}" docker compose up -d --build
-echo "部署完成。浏览器访问 ${BASE_URL}"
+if [ ! -f .env.production ]; then
+  install -m 600 .env.example .env.production
+  echo "已创建 /srv/prototype-studio-web/.env.production。"
+  echo "请填写真实数据库密码、域名和邀请码，然后执行：bash scripts/deploy.sh"
+  exit 2
+fi
+docker compose --env-file .env.production up -d --build
+echo "部署完成。"
