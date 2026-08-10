@@ -493,7 +493,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     const selected = object.id === selectedId || selectedIds.includes(object.id);
     if (object.type === "marker") {
       const pin = pins[object.id];
-      const startMarkerDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+      const startMarkerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
         if (!interactive) return;
         event.stopPropagation();
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -505,7 +505,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           offsetY: object.anchor.offsetY ?? 0
         };
       };
-      const moveMarkerDrag = (event: ReactPointerEvent<HTMLButtonElement>): void => {
+      const moveMarkerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
         const drag = markerDragRef.current;
         if (!drag || drag.id !== object.id) return;
         const offsetX = Math.round(drag.offsetX + (event.clientX - drag.startX) / view.zoom);
@@ -517,14 +517,14 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       const pinX = (pin ? pin.x : 0) - canvasX;
       const pinY = (pin ? pin.y : 0) - canvasY;
       return (
-        <button
+        <div
           key={object.id}
-          type="button"
-          className={`board-marker-pin board-marker-pin--${object.tone} ${selected ? "is-selected" : ""}`}
+          className={`board-marker-tag ${selected ? "is-selected" : ""}`}
           style={{ left: pinX, top: pinY }}
           data-board-marker={object.id}
           data-marker-number={object.number}
           data-marker-anchor={`${object.anchor.pageObjectId}:${object.anchor.componentId}:${object.anchor.offsetX ?? 0}:${object.anchor.offsetY ?? 0}`}
+          title={object.text}
           onClick={(event) => { event.stopPropagation(); select(object.id); }}
           onContextMenu={(event) => { event.stopPropagation(); openContextMenu(event, [object.id]); }}
           onPointerDown={startMarkerDrag}
@@ -532,8 +532,9 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           onPointerUp={endMarkerDrag}
           onPointerCancel={endMarkerDrag}
         >
-          {object.number}
-        </button>
+          <i className={`board-marker-pin board-marker-pin--${object.tone}`}>{object.number}</i>
+          <span className="board-marker-text">{object.text}</span>
+        </div>
       );
     }
     const visualX = object.x - canvasX;
