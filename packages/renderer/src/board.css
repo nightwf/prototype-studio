@@ -9,7 +9,8 @@
 .board-link:hover .board-link-line, .board-link.is-selected .board-link-line { filter: drop-shadow(0 1px 3px rgba(15, 23, 42, .38)); }
 .board-link.is-selected .board-link-halo { stroke: #dbeafe; stroke-width: 9; }
 .board-link-label { paint-order: stroke; stroke: white; stroke-width: 4px; stroke-linejoin: round; }
-.board-link-handle { pointer-events: all; cursor: grab; vector-effect: non-scaling-stroke; filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .28)); transition: r .12s ease, filter .12s ease; }
+.board-link-handle { opacity: 0; pointer-events: all; cursor: grab; vector-effect: non-scaling-stroke; filter: drop-shadow(0 2px 4px rgba(15, 23, 42, .28)); transition: opacity .12s ease, r .12s ease, filter .12s ease; }
+.board-link:hover .board-link-handle, .board-link.is-selected .board-link-handle { opacity: 1; }
 .board-link-handle:hover { r: 9px; filter: drop-shadow(0 3px 7px rgba(37, 99, 235, .42)); }
 .board-link-handle.is-dragging { cursor: grabbing; r: 10px; stroke: #16a34a; stroke-width: 3px; }
 .board-link-snap-label { pointer-events: none; }

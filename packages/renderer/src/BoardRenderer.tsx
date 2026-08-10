@@ -410,7 +410,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
 
   const startPanOrMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const target = event.target as HTMLElement;
-    if (target.closest(".board-object, .board-tool-panel, .board-minimap, .board-context-menu")) return;
+    if (target.closest(".board-object, .board-link, .board-tool-panel, .board-minimap, .board-context-menu")) return;
     if (picking) return;
     const isPan = spacePressed || event.button === 1;
     if (isPan) {
@@ -657,13 +657,13 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               </defs>
               <path className="board-link-halo" d={path} fill="none" stroke="white" strokeWidth={width + 4} />
               <path className="board-link-line" d={path} fill="none" stroke={color} strokeWidth={width} markerEnd={`url(#${markerId})`} />
-              {interactive ? <path className="board-link-hit" d={path} fill="none" stroke="transparent" strokeWidth={Math.max(14, width + 10)} onClick={(event) => { event.stopPropagation(); onSelectLink?.(link.id); }} /> : null}
+              {interactive ? <path className="board-link-hit" d={path} fill="none" stroke="transparent" strokeWidth={Math.max(20, width + 14)} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onSelectLink?.(link.id); }} onClick={(event) => event.stopPropagation()} /> : null}
               {link.label ? (
                 <text className="board-link-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
                   {link.label}
                 </text>
               ) : null}
-              {interactive && (selectedLinkId === link.id || activeDrag) ? ([
+              {interactive ? ([
                 ["from", from],
                 ["to", to]
               ] as const).map(([endpoint, point]) => (
