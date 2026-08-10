@@ -171,6 +171,7 @@ interface MarkerDraft {
   componentId: string;
   offsetX?: number;
   offsetY?: number;
+  number: string;
   text: string;
   tone: MarkerTone;
 }
@@ -205,7 +206,7 @@ function MarkerPicker({ boardPageObjects, pages, draft, picking, onChange, onSta
   onChange: (draft: MarkerDraft) => void;
   onStartPick: () => void;
   onCancel: () => void;
-  onAdd: (pageObjectId: string, componentId: string, text: string, tone: MarkerTone) => void;
+  onAdd: (pageObjectId: string, componentId: string, number: string, text: string, tone: MarkerTone) => void;
 }) {
   const pageObjectId = draft.pageObjectId;
   const componentId = draft.componentId;
@@ -242,10 +243,11 @@ function MarkerPicker({ boardPageObjects, pages, draft, picking, onChange, onSta
           {markerTones.map((item) => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
+      <label><span>标注序号</span><input value={draft.number} onChange={(event) => onChange({ ...draft, number: event.target.value })} placeholder="可自定义，如 A1 / 5 / B-2" /></label>
       <label><span>说明文字</span><input value={draft.text} onChange={(event) => onChange({ ...draft, text: event.target.value })} placeholder="标注内容…" /></label>
       <div className="board-tool-actions">
         <button onClick={onCancel}>取消</button>
-        <button className="is-primary" disabled={!pageObjectId || !componentId} onClick={() => onAdd(pageObjectId, componentId, draft.text, draft.tone)}>添加</button>
+        <button className="is-primary" disabled={!pageObjectId || !componentId || !draft.number.trim()} onClick={() => onAdd(pageObjectId, componentId, draft.number.trim(), draft.text, draft.tone)}>添加</button>
       </div>
     </div>
   );
@@ -418,7 +420,7 @@ export function App() {
   const boardQueueBaseRefs = useRef<Map<string, number>>(new Map());
   const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
   const [markerPicking, setMarkerPicking] = useState(false);
-  const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", text: "", tone: "orange" });
+  const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", number: "", text: "", tone: "orange" });
   const [boardDraft, setBoardDraft] = useState<Record<string, unknown>>({});
   const boardSeedDone = useRef(false);
   const [webSession, setWebSession] = useState<WebUser>();
@@ -1226,7 +1228,10 @@ export function App() {
     }));
   };
 
-  const nextMarkerNumber = () => Math.max(0, ...board.objects.filter((object) => object.type === "marker").map((object) => (object as BoardMarkerObject).number)) + 1;
+  const nextMarkerNumber = () => Math.max(0, ...board.objects
+    .filter((object) => object.type === "marker")
+    .map((object) => (object as BoardMarkerObject).number)
+    .filter((number): number is number => typeof number === "number")) + 1;
 
   const addBoardPageObject = async (pageId: string) => {
     const object: Extract<BoardObject, { type: "page" }> = {
@@ -1262,13 +1267,13 @@ export function App() {
     }
   };
 
-  const addBoardMarker = async (pageObjectId: string, componentId: string, text: string, tone: MarkerTone, offsetX?: number, offsetY?: number) => {
+  const addBoardMarker = async (pageObjectId: string, componentId: string, number: number | string, text: string, tone: MarkerTone, offsetX?: number, offsetY?: number) => {
     const object: BoardMarkerObject = {
       id: `marker-${Date.now()}`,
       type: "marker",
-      number: nextMarkerNumber(),
+      number,
       tone,
-      text: text.trim() || `标注 ${nextMarkerNumber()}`,
+      text: text.trim() || `标注 ${number}`,
       source: "explicit",
       anchor: { pageObjectId, componentId, ...(offsetX !== undefined ? { offsetX } : {}), ...(offsetY !== undefined ? { offsetY } : {}) }
     };
@@ -1366,6 +1371,20 @@ export function App() {
       type: "UPDATE_BOARD_OBJECT",
       target: boardSelectedObject.id,
       changes: { text: String(boardDraft.text ?? "") }
+    }]);
+  };
+
+  const commitBoardNumber = () => {
+    if (!boardSelectedObject || boardSelectedObject.type !== "marker") return;
+    const value = String(boardDraft.number ?? boardSelectedObject.number).trim();
+    if (!value) {
+      toast("warning", "标注序号不能为空", "请填写标注序号后再离开输入框。");
+      return;
+    }
+    void runBoardCommands([{
+      type: "UPDATE_BOARD_OBJECT",
+      target: boardSelectedObject.id,
+      changes: { number: /^\d+$/.test(value) ? Number(value) : value }
     }]);
   };
 
@@ -1468,6 +1487,14 @@ export function App() {
     }]);
   };
 
+  const moveBoardMarkerNote = (id: string, x: number, y: number) => {
+    void runBoardCommands([{
+      type: "UPDATE_BOARD_OBJECT",
+      target: id,
+      changes: { noteX: x, noteY: y }
+    }]);
+  };
+
   const addMarkerToCurrentComponent = async () => {
     if (!selected || !currentPageId) {
       toast("warning", "请先在 Preview 中选择组件");
@@ -1489,7 +1516,7 @@ export function App() {
       };
       await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: pageObject }]);
     }
-    await addBoardMarker(pageObject.id, selected.id, "", "orange");
+    await addBoardMarker(pageObject.id, selected.id, nextMarkerNumber(), "", "orange");
   };
 
   const openPageFromBoard = (pageId: string) => {
@@ -1824,6 +1851,7 @@ ${boardExportRuntimeScript}
           onMoveObject={moveBoardObject}
           onMoveObjects={moveBoardObjects}
           onMoveMarker={moveBoardMarker}
+          onMoveMarkerNote={moveBoardMarkerNote}
           picking={markerPicking}
           onPickComponent={(pageObjectId, componentId, offsetX, offsetY) => {
             setMarkerDraft((previous) => ({ ...previous, pageObjectId, componentId, offsetX, offsetY }));
@@ -1851,11 +1879,11 @@ ${boardExportRuntimeScript}
           onChange={setMarkerDraft}
           onStartPick={() => { setMarkerPicking(true); setMarkerDraft((previous) => ({ ...previous, pageObjectId: boardPageObjects[0]?.id ?? "", componentId: "" })); }}
           onCancel={() => { setBoardTool("none"); setMarkerPicking(false); }}
-          onAdd={async (pageObjectId, componentId, text, tone) => {
+          onAdd={async (pageObjectId, componentId, number, text, tone) => {
             const offsets = markerDraft.pageObjectId === pageObjectId && markerDraft.componentId === componentId
               ? { offsetX: markerDraft.offsetX, offsetY: markerDraft.offsetY }
               : {};
-            await addBoardMarker(pageObjectId, componentId, text, tone, offsets.offsetX, offsets.offsetY);
+            await addBoardMarker(pageObjectId, componentId, number, text, tone, offsets.offsetX, offsets.offsetY);
           }}
         /> : null}
       </div> : currentPage ? <>
@@ -1909,7 +1937,8 @@ ${boardExportRuntimeScript}
             </> : null}
             {boardSelectedObject.type === "marker" ? <>
               <SectionTitle>标注</SectionTitle>
-              <div className="readonly-value"><code>#{boardSelectedObject.number} · {boardSelectedObject.tone}</code><i>挂靠组件</i></div>
+              <label className="inspector-field"><span>标注序号</span><input value={String(boardDraft.number ?? boardSelectedObject.number)} onChange={(event) => setBoardDraft({ ...boardDraft, number: event.target.value })} onBlur={commitBoardNumber} placeholder="可自定义，如 A1 / 5 / B-2" /></label>
+              <div className="readonly-value"><code>{boardSelectedObject.tone}</code><i>挂靠组件</i></div>
               <textarea value={String(boardDraft.text ?? boardSelectedObject.text)} onChange={(event) => setBoardDraft({ ...boardDraft, text: event.target.value })} onBlur={commitBoardText} rows={3} />
               <div className="board-tones">{markerTones.map((tone) => <button key={tone} className={`board-tone board-tone--${tone} ${boardSelectedObject.tone === tone ? "is-active" : ""}`} title={tone} onClick={() => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { tone } }])} />)}</div>
               <div className="board-anchor-info">挂靠：{boardSelectedObject.anchor.pageObjectId} / {boardSelectedObject.anchor.componentId}</div>

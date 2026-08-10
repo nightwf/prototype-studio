@@ -2,6 +2,7 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  Fragment,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -53,6 +54,7 @@ export interface BoardRendererProps {
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveObjects?: (ids: string[], dx: number, dy: number) => void;
   onMoveMarker?: (id: string, offsetX: number, offsetY: number) => void;
+  onMoveMarkerNote?: (id: string, x: number, y: number) => void;
   onPickComponent?: (pageObjectId: string, componentId: string, offsetX: number, offsetY: number) => void;
   onViewChange?: (view: BoardView) => void;
   onContentBounds?: (bounds: BoardBounds) => void;
@@ -236,6 +238,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onMoveObject,
   onMoveObjects,
   onMoveMarker,
+  onMoveMarkerNote,
   onPickComponent,
   onViewChange,
   onContentBounds,
@@ -271,6 +274,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     offsets: Record<string, { x: number; y: number }>;
   } | undefined>(undefined);
   const markerDragRef = useRef<{ id: string; startX: number; startY: number; offsetX: number; offsetY: number } | undefined>(undefined);
+  const markerNoteDragRef = useRef<{ id: string; startX: number; startY: number; originX: number; originY: number } | undefined>(undefined);
   const rafRef = useRef<number>(0);
 
   const bounds = useMemo(() => boardContentBounds(board, pins), [board, pins]);
@@ -493,6 +497,14 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     const selected = object.id === selectedId || selectedIds.includes(object.id);
     if (object.type === "marker") {
       const pin = pins[object.id];
+      const pinX = (pin ? pin.x : 0) - canvasX;
+      const pinY = (pin ? pin.y : 0) - canvasY;
+      const noteWorld = {
+        x: object.noteX ?? (pin?.x ?? 0) + 38,
+        y: object.noteY ?? (pin?.y ?? 0) - 8
+      };
+      const noteX = noteWorld.x - canvasX;
+      const noteY = noteWorld.y - canvasY;
       const startMarkerDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
         if (!interactive) return;
         event.stopPropagation();
@@ -514,27 +526,61 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
         onMoveMarker?.(drag.id, offsetX, offsetY);
       };
       const endMarkerDrag = (): void => { markerDragRef.current = undefined; };
-      const pinX = (pin ? pin.x : 0) - canvasX;
-      const pinY = (pin ? pin.y : 0) - canvasY;
+      const startNoteDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+        if (!interactive) return;
+        event.stopPropagation();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        markerNoteDragRef.current = {
+          id: object.id,
+          startX: event.clientX,
+          startY: event.clientY,
+          originX: noteWorld.x,
+          originY: noteWorld.y
+        };
+      };
+      const moveNoteDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
+        const drag = markerNoteDragRef.current;
+        if (!drag || drag.id !== object.id) return;
+        const x = Math.round(drag.originX + (event.clientX - drag.startX) / view.zoom);
+        const y = Math.round(drag.originY + (event.clientY - drag.startY) / view.zoom);
+        onMoveMarkerNote?.(drag.id, x, y);
+      };
+      const endNoteDrag = (): void => { markerNoteDragRef.current = undefined; };
       return (
-        <div
-          key={object.id}
-          className={`board-marker-tag ${selected ? "is-selected" : ""}`}
-          style={{ left: pinX, top: pinY }}
-          data-board-marker={object.id}
-          data-marker-number={object.number}
-          data-marker-anchor={`${object.anchor.pageObjectId}:${object.anchor.componentId}:${object.anchor.offsetX ?? 0}:${object.anchor.offsetY ?? 0}`}
-          title={object.text}
-          onClick={(event) => { event.stopPropagation(); select(object.id); }}
-          onContextMenu={(event) => { event.stopPropagation(); openContextMenu(event, [object.id]); }}
-          onPointerDown={startMarkerDrag}
-          onPointerMove={moveMarkerDrag}
-          onPointerUp={endMarkerDrag}
-          onPointerCancel={endMarkerDrag}
-        >
-          <i className={`board-marker-pin board-marker-pin--${object.tone}`}>{object.number}</i>
-          <span className="board-marker-text">{object.text}</span>
-        </div>
+        <Fragment key={object.id}>
+          <div
+            className={`board-marker-pin-wrap ${selected ? "is-selected" : ""}`}
+            style={{ left: pinX, top: pinY }}
+            data-board-marker={object.id}
+            data-marker-number={object.number}
+            data-marker-anchor={`${object.anchor.pageObjectId}:${object.anchor.componentId}:${object.anchor.offsetX ?? 0}:${object.anchor.offsetY ?? 0}`}
+            title={object.text}
+            onClick={(event) => { event.stopPropagation(); select(object.id); }}
+            onContextMenu={(event) => { event.stopPropagation(); openContextMenu(event, [object.id]); }}
+            onPointerDown={startMarkerDrag}
+            onPointerMove={moveMarkerDrag}
+            onPointerUp={endMarkerDrag}
+            onPointerCancel={endMarkerDrag}
+          >
+            <i className={`board-marker-pin board-marker-pin--${object.tone}`}>{object.number}</i>
+          </div>
+          <div
+            className={`board-marker-note ${selected ? "is-selected" : ""}`}
+            style={{ left: noteX, top: noteY }}
+            data-board-marker-note={object.id}
+            data-marker-note-x={object.noteX ?? ""}
+            data-marker-note-y={object.noteY ?? ""}
+            onClick={(event) => { event.stopPropagation(); select(object.id); }}
+            onContextMenu={(event) => { event.stopPropagation(); openContextMenu(event, [object.id]); }}
+            onPointerDown={startNoteDrag}
+            onPointerMove={moveNoteDrag}
+            onPointerUp={endNoteDrag}
+            onPointerCancel={endNoteDrag}
+          >
+            <i className={`board-marker-pin board-marker-pin--${object.tone}`}>{object.number}</i>
+            <span className="board-marker-note-text">{object.text}</span>
+          </div>
+        </Fragment>
       );
     }
     const visualX = object.x - canvasX;

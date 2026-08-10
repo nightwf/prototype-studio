@@ -282,7 +282,7 @@ export interface BoardMarkerObject {
   type: "marker";
   source?: ComponentSource;
   z?: number;
-  number: number;
+  number: number | string;
   tone: MarkerTone;
   text: string;
   anchor: {
@@ -291,6 +291,9 @@ export interface BoardMarkerObject {
     offsetX?: number;
     offsetY?: number;
   };
+  /** 备注框独立位置（世界坐标）；缺省时备注框紧贴序号钉点右侧。 */
+  noteX?: number;
+  noteY?: number;
 }
 
 export interface BoardFlowNode {

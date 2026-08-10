@@ -48,6 +48,22 @@ window.addEventListener('DOMContentLoaded', function () {
     pin.style.left = (objectX + componentRect.left - objectRect.left + frame.scrollLeft + Number(parts[2] || 0)) + 'px';
     pin.style.top = (objectY + componentRect.top - objectRect.top + frame.scrollTop + Number(parts[3] || 0)) + 'px';
   });
+  document.querySelectorAll('[data-board-marker-note]').forEach(function (note) {
+    var markerId = note.getAttribute('data-board-marker-note');
+    var rawX = note.getAttribute('data-marker-note-x');
+    var rawY = note.getAttribute('data-marker-note-y');
+    var pin = markerId && document.querySelector('[data-board-marker="' + markerId + '"]');
+    if (rawX !== null && rawX !== '' && rawY !== null && rawY !== '' && Number.isFinite(Number(rawX)) && Number.isFinite(Number(rawY))) {
+      var boardCanvas = note.closest('.board-canvas');
+      var canvasX = boardCanvas ? parseFloat(boardCanvas.style.left || '0') || 0 : 0;
+      var canvasY = boardCanvas ? parseFloat(boardCanvas.style.top || '0') || 0 : 0;
+      note.style.left = (Number(rawX) - canvasX) + 'px';
+      note.style.top = (Number(rawY) - canvasY) + 'px';
+    } else if (pin) {
+      note.style.left = (parseFloat(pin.style.left || '0') + 38) + 'px';
+      note.style.top = (parseFloat(pin.style.top || '0') - 8) + 'px';
+    }
+  });
   document.querySelectorAll('[data-board-link]').forEach(function (group) {
     var fromObject = objectElement(group.getAttribute('data-link-from') || '');
     var toObject = objectElement(group.getAttribute('data-link-to') || '');

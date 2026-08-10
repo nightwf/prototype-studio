@@ -367,7 +367,12 @@ defineBoardObjectType("note", (object, path, issues) => {
 });
 
 defineBoardObjectType("marker", (object, path, issues) => {
-  if (typeof object.number !== "number") issues.errors.push(boardIssue("SCHEMA_INVALID", "标注缺少 number。", `${path}.number`));
+  const number = object.number;
+  if (typeof number !== "number" && typeof number !== "string") {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "标注缺少 number。", `${path}.number`));
+  } else if (typeof number === "string" && !number.trim()) {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "标注 number 不能为空。", `${path}.number`));
+  }
   if (!["orange", "blue", "green", "red", "purple"].includes(String(object.tone))) {
     issues.errors.push(boardIssue("SCHEMA_INVALID", "标注 tone 无效。", `${path}.tone`));
   }
@@ -375,6 +380,11 @@ defineBoardObjectType("marker", (object, path, issues) => {
   const anchor = object.anchor as Record<string, unknown> | undefined;
   if (!anchor || typeof anchor.pageObjectId !== "string" || typeof anchor.componentId !== "string") {
     issues.errors.push(boardIssue("SCHEMA_INVALID", "标注必须挂靠页面对象与组件。", `${path}.anchor`));
+  }
+  for (const field of ["noteX", "noteY"]) {
+    if (object[field] !== undefined && typeof object[field] !== "number") {
+      issues.errors.push(boardIssue("SCHEMA_INVALID", `标注 ${field} 必须是数字。`, `${path}.${field}`));
+    }
   }
 });
 

@@ -81,8 +81,16 @@ export function snapValue(value: number, step = SNAP_STEP): number {
 export function objectRect(object: BoardObject, pins: Record<string, Point>): Rect {
   if (object.type === "marker") {
     const pin = pins[object.id];
-    if (!pin) return { x: -MARKER_PIN_SIZE, y: -MARKER_PIN_SIZE, width: MARKER_PIN_SIZE, height: MARKER_PIN_SIZE };
-    return { x: pin.x, y: pin.y, width: MARKER_PIN_SIZE, height: MARKER_PIN_SIZE };
+    const pinRect = pin
+      ? { x: pin.x, y: pin.y, width: MARKER_PIN_SIZE, height: MARKER_PIN_SIZE }
+      : { x: -MARKER_PIN_SIZE, y: -MARKER_PIN_SIZE, width: MARKER_PIN_SIZE, height: MARKER_PIN_SIZE };
+    if (object.noteX === undefined || object.noteY === undefined) return pinRect;
+    const noteRect = { x: object.noteX, y: object.noteY, width: 280, height: 64 };
+    const minX = Math.min(pinRect.x, noteRect.x);
+    const minY = Math.min(pinRect.y, noteRect.y);
+    const maxX = Math.max(pinRect.x + pinRect.width, noteRect.x + noteRect.width);
+    const maxY = Math.max(pinRect.y + pinRect.height, noteRect.y + noteRect.height);
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
   return { x: object.x, y: object.y, width: object.width, height: object.height };
 }

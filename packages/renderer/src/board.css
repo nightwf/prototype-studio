@@ -55,10 +55,14 @@
 .board-generic pre { margin: 0; white-space: pre-wrap; word-break: break-all; font: 8px/1.5 var(--ps-font-mono); }
 .board-marker-pin { position: absolute; z-index: 30; width: 26px; height: 26px; display: grid; place-items: center; border: 2px solid white; border-radius: 50%; color: white; font: 700 11px/1 var(--ps-font-mono); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35); cursor: pointer; }
 .board-marker-pin.is-selected { outline: 2px solid rgba(59, 130, 246, 0.7); outline-offset: 2px; }
-.board-marker-tag { position: absolute; z-index: 30; display: flex; align-items: flex-start; gap: 6px; max-width: 300px; cursor: pointer; }
-.board-marker-tag .board-marker-pin { position: static; flex: none; cursor: pointer; }
-.board-marker-tag .board-marker-text { min-width: 0; padding: 4px 9px; border: 1px solid #cfd6db; border-radius: 7px; background: rgba(255, 255, 255, 0.96); color: #293238; font-size: 10px; line-height: 1.5; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.16); overflow-wrap: break-word; user-select: none; }
-.board-marker-tag.is-selected .board-marker-text { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25), 0 3px 10px rgba(0, 0, 0, 0.16); }
+.board-marker-pin-wrap { position: absolute; z-index: 30; cursor: pointer; }
+.board-marker-pin-wrap .board-marker-pin { position: static; }
+.board-marker-pin-wrap.is-selected .board-marker-pin { outline: 2px solid rgba(59, 130, 246, 0.7); outline-offset: 2px; }
+.board-marker-note { position: absolute; z-index: 30; display: flex; align-items: flex-start; gap: 7px; max-width: 300px; padding: 6px 10px; border: 1px solid #cfd6db; border-radius: 9px; background: rgba(255, 255, 255, 0.97); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16); cursor: grab; user-select: none; }
+.board-marker-note:active { cursor: grabbing; }
+.board-marker-note .board-marker-pin { position: static; flex: none; width: 22px; height: 22px; font-size: 10px; cursor: default; }
+.board-marker-note-text { min-width: 0; color: #293238; font-size: 10px; line-height: 1.5; overflow-wrap: break-word; }
+.board-marker-note.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25), 0 4px 14px rgba(0, 0, 0, 0.16); }
 .board-marker-pin--orange { background: #f97316; }
 .board-marker-pin--blue { background: #3b82f6; }
 .board-marker-pin--green { background: #22c55e; }
