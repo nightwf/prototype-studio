@@ -27,8 +27,8 @@ window.addEventListener('DOMContentLoaded', function () {
     if (waypoint) {
       if (type === 'straight') return 'M ' + from.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + to.y;
       if (type === 'orthogonal') return 'M ' + from.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + from.y + ' L ' + waypoint.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + waypoint.y + ' L ' + to.x + ' ' + to.y;
-      var bend1 = Math.max(40, Math.abs(waypoint.x - from.x) * 0.5) * (waypoint.x >= from.x ? 1 : -1);
-      var bend2 = Math.max(40, Math.abs(to.x - waypoint.x) * 0.5) * (to.x >= waypoint.x ? 1 : -1);
+      var bend1 = Math.max(80, Math.hypot(waypoint.x - from.x, waypoint.y - from.y) * 0.4) * (waypoint.x >= from.x ? 1 : -1);
+      var bend2 = Math.max(80, Math.hypot(to.x - waypoint.x, to.y - waypoint.y) * 0.4) * (to.x >= waypoint.x ? 1 : -1);
       return 'M ' + from.x + ' ' + from.y + ' C ' + (from.x + bend1) + ' ' + from.y + ', ' + (waypoint.x - bend1) + ' ' + waypoint.y + ', ' + waypoint.x + ' ' + waypoint.y + ' C ' + (waypoint.x + bend2) + ' ' + waypoint.y + ', ' + (to.x - bend2) + ' ' + to.y + ', ' + to.x + ' ' + to.y;
     }
     if (type === 'straight') return 'M ' + from.x + ' ' + from.y + ' L ' + to.x + ' ' + to.y;
