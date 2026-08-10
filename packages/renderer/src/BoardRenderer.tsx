@@ -715,6 +715,10 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             <>
               <div className="board-page-head board-page-head--module"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>模块说明</small></div>
               <div className="board-page-module-body">
+                <div className="board-module-doc-head">
+                  <h3>{(pages[object.pageId]?.page.title ?? object.pageId).replace(/\s*·?\s*模块说明\s*$/, "")}</h3>
+                  {pages[object.pageId]?.page.description ? <p>{pages[object.pageId]!.page.description}</p> : null}
+                </div>
                 {(pages[object.pageId]?.sections ?? []).filter((section) => section.type === "card").map((section) => (
                   <div className="board-module-block" key={section.id}>
                     {section.title ? <strong>{section.title}</strong> : null}
