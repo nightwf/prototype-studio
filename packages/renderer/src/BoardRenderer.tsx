@@ -742,6 +742,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             ?? (link.waypoint ? { x: link.waypoint.x - canvasX, y: link.waypoint.y - canvasY } : undefined);
           const path = linkPath(from, to, link.lineType, waypoint);
           const handlePoint = waypoint ?? linkDefaultWaypoint(from, to, link.lineType);
+          const labelPoint = waypoint ?? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
           const color = link.color ?? "#2563eb";
           const width = link.strokeWidth ?? 2.5;
           const markerId = `board-arrow-${board.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index}`;
@@ -767,7 +768,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
               <path className="board-link-line" d={path} fill="none" stroke={color} strokeWidth={width} markerEnd={`url(#${markerId})`} />
               {interactive ? <path className="board-link-hit" d={path} fill="none" stroke="transparent" strokeWidth={Math.max(20, width + 14)} onPointerDown={(event) => { event.preventDefault(); event.stopPropagation(); onSelectLink?.(link.id); }} onClick={(event) => event.stopPropagation()} /> : null}
               {link.label ? (
-                <text className="board-link-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
+                <text className="board-link-label" x={labelPoint.x} y={labelPoint.y - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
                   {link.label}
                 </text>
               ) : null}

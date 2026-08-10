@@ -94,8 +94,10 @@ window.addEventListener('DOMContentLoaded', function () {
     group.querySelectorAll('path').forEach(function (element) { element.setAttribute('d', path); });
     var label = group.querySelector('.board-link-label');
     if (label) {
-      label.setAttribute('x', String((from.x + to.x) / 2));
-      label.setAttribute('y', String((from.y + to.y) / 2 - 8));
+      var labelX = waypoint ? waypoint.x : (from.x + to.x) / 2;
+      var labelY = waypoint ? waypoint.y : (from.y + to.y) / 2;
+      label.setAttribute('x', String(labelX));
+      label.setAttribute('y', String(labelY - 8));
     }
   });
 });`;
