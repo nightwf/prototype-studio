@@ -38,19 +38,4 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           fingerprint: ${{ secrets.SSH_FINGERPRINT }}
           script: |
-            set -euo pipefail
-            cd /srv/prototype-studio-web || exit 1
-            test -f .env.production
-            git fetch origin main
-            git merge --ff-only origin/main
-            docker compose --env-file .env.production up -d --build
-            for attempt in $(seq 1 30); do
-              code=$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/api/me || true)
-              if [ "$code" = "200" ]; then
-                echo "health:200"
-                exit 0
-              fi
-              sleep 2
-            done
-            docker compose --env-file .env.production logs --tail=100 app
-            exit 1
+            deploy
