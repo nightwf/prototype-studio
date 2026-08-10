@@ -55,6 +55,8 @@ studio.example.com {
 | `POSTGRES_PASSWORD` | 必填 | PostgreSQL 密码，建议使用 URL 安全的长随机字符串 |
 | `POSTGRES_DB` | 必填 | PostgreSQL 数据库名 |
 | `DATABASE_URL` | 必填 | 与上述 PostgreSQL 配置一致的应用连接串 |
+| `PGDATA_VOLUME` | `prototype-studio_pgdata` | PostgreSQL 数据卷名；接管旧部署时填写原卷名 |
+| `SPACES_VOLUME` | `prototype-studio_spaces` | 项目文件数据卷名；接管旧部署时填写原卷名 |
 
 ## 数据与备份
 
@@ -83,5 +85,6 @@ studio.example.com {
 6. 之后每次 push 到 `main` 自动部署；也可在 Actions 页面手动触发。
 
 已有 PostgreSQL 数据卷时，不要只修改 `.env.production` 中的密码：先在数据库内修改角色密码，再同步更新 `POSTGRES_PASSWORD` 和 `DATABASE_URL`。任何维护操作都不要执行 `docker compose down -v`。
+接管已有部署时，还必须把 `PGDATA_VOLUME` 和 `SPACES_VOLUME` 设置为服务器当前实际卷名，避免 Compose 创建空卷。
 
 腾讯云（Gitee 等）平台同理：换成对应 CI 配置（如 Gitee Go），把同一套 SSH 部署命令接入即可。
