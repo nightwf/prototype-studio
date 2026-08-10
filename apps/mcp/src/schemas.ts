@@ -6,6 +6,7 @@ const identifier = z.string()
   .regex(/^[a-zA-Z][a-zA-Z0-9_.-]*$/, "ID 必须以字母开头，且只能包含字母、数字、点、短横线或下划线");
 
 const pageId = identifier.describe("页面的稳定 pageId，例如 case-list。");
+const boardId = identifier.describe("画布的稳定 board_id；先调用 prototype_list_boards 获取。");
 const componentId = identifier.describe("组件的全页唯一稳定 componentId，例如 search.status。");
 const baseRevision = z.number().int().min(0)
   .describe("命令所基于的当前页面 revision；与最新版本不同时拒绝写入。");
@@ -33,9 +34,31 @@ export const deletePageInputSchema = z.object({
   operator
 }).strict();
 
-export const requirementInputSchema = z.object({
-  requirement_id: identifier.describe("需求文件 ID 或安全文件名，例如 REQ-001 或 REQ-001.md。")
+export const listBoardsInputSchema = z.object({
+  limit: z.number().int().min(1).max(100).default(20),
+  offset: z.number().int().min(0).default(0)
 }).strict();
+
+export const boardInputSchema = z.object({ board_id: boardId }).strict();
+
+const boardDraftSchema = z.object({
+  name: z.string().trim().min(1).max(120).describe("项目内不区分大小写唯一的画布名称。"),
+  description: z.string().trim().max(1000).optional(),
+  page_ids: z.array(pageId).max(200).default([]).describe("创建时铺入画布的已有公共页面 ID；按两列自动布局。"),
+  board_id: boardId.optional()
+}).strict();
+
+export const createBoardInputSchema = boardDraftSchema;
+export const createBoardsInputSchema = z.object({
+  boards: z.array(boardDraftSchema).min(1).max(50).describe("已获用户确认的完整画布清单；服务会先整体校验再创建。")
+}).strict();
+export const updateBoardInputSchema = z.object({
+  board_id: boardId,
+  name: z.string().trim().min(1).max(120).optional(),
+  description: z.string().trim().max(1000).optional(),
+  is_default: z.boolean().optional()
+}).strict();
+export const deleteBoardInputSchema = z.object({ board_id: boardId }).strict();
 
 export const componentInputSchema = z.object({
   page_id: pageId,
@@ -207,6 +230,7 @@ export const boardCommandSchema = z.discriminatedUnion("type", [
 ]);
 
 export const applyBoardCommandsInputSchema = z.object({
+  board_id: boardId,
   base_revision: baseRevision,
   commands: z.array(boardCommandSchema).min(1).max(100)
     .describe("画布结构化命令（对象增删改移、连线增删改），同一 base_revision 原子执行。"),
@@ -216,7 +240,12 @@ export const applyBoardCommandsInputSchema = z.object({
 export type ListPagesInput = z.infer<typeof listPagesInputSchema>;
 export type PageInput = z.infer<typeof pageInputSchema>;
 export type DeletePageInput = z.infer<typeof deletePageInputSchema>;
-export type RequirementInput = z.infer<typeof requirementInputSchema>;
+export type ListBoardsInput = z.infer<typeof listBoardsInputSchema>;
+export type BoardInput = z.infer<typeof boardInputSchema>;
+export type CreateBoardInput = z.infer<typeof createBoardInputSchema>;
+export type CreateBoardsInput = z.infer<typeof createBoardsInputSchema>;
+export type UpdateBoardInput = z.infer<typeof updateBoardInputSchema>;
+export type DeleteBoardInput = z.infer<typeof deleteBoardInputSchema>;
 export type ComponentInput = z.infer<typeof componentInputSchema>;
 export type CreatePageInput = z.infer<typeof createPageInputSchema>;
 export type UpdateComponentInput = z.infer<typeof updateComponentInputSchema>;

@@ -251,25 +251,6 @@ export interface RevisionRecord {
   reappliesRevision?: number;
 }
 
-export interface RequirementItem<T = string> {
-  value: T;
-  source: ComponentSource;
-  evidence?: string;
-}
-
-export interface RequirementModel {
-  id: string;
-  title: string;
-  sourceFile?: string;
-  pages: RequirementItem<string>[];
-  features: RequirementItem<string>[];
-  businessRules: RequirementItem<string>[];
-  permissions: RequirementItem<string>[];
-  validations: RequirementItem<string>[];
-  interactions: RequirementItem<string>[];
-  unresolved: RequirementItem<string>[];
-}
-
 // ===== Board (canvas) model =====
 
 export type BoardObjectType = "page" | "note" | "marker" | "flowchart" | "er";
@@ -383,6 +364,10 @@ export interface BoardDSL {
   dslVersion: typeof DSL_VERSION;
   id: string;
   projectId?: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
   revision: number;
   objects: BoardObject[];
   links: BoardLink[];
@@ -416,6 +401,10 @@ export interface ProjectManifest {
   name: string;
   description?: string;
   status: "active" | "archived";
+  /** Missing only while reading a legacy project that has not been migrated yet. */
+  projectFormatVersion?: 1 | 2;
+  /** Missing only while reading a legacy project that has not been migrated yet. */
+  defaultBoardId?: string;
   dslVersion: string;
   rendererVersion: string;
   designSystemVersion: string;

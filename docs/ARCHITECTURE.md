@@ -4,8 +4,8 @@
 
 | 层 | 负责 | 不负责 |
 |---|---|---|
-| Requirement Model | 页面、功能、规则、权限、校验、交互和未明确项 | 具体组件布局 |
 | UI DSL | 页面、组件、Overlay、规则和事件的结构 | 任意 CSS 与生产后端 |
+| Board DSL | 独立画布对象、连线、说明与 Revision | 复制页面 DSL |
 | Design System | Token、语义尺寸、Variant 与固定组件外观 | 业务意图推断 |
 | Renderer | 确定性地把 DSL 显示为 React 原型 | 调用模型或修改 DSL |
 | Command Engine | 校验并增量修改 DSL、产生 Revision | 绕过 baseRevision 覆盖页面 |
@@ -35,11 +35,11 @@ Studio 用 iframe 加载 `/preview-runtime/:pageId`。父窗口只通过同源 `
 
 ## 4. 本地文件
 
-`project.yaml` 与业务目录是唯一事实源。`.prototype/index.json`、缓存和运行时状态可以随时重建。历史记录保留完整 Before/After，以换取 MVP 阶段直观、可靠的恢复能力；后续可以在保持格式兼容的前提下压缩历史。
+`project.yaml`、`pages/` 与 `boards/` 是唯一事实源。页面是项目级公共资产，画布只引用 pageId。每个画布的历史写入 `.prototype/revisions/boards/{boardId}/`；缓存和运行时状态可以随时重建。
 
 ## 5. AI 边界
 
-简单命令由本地 Parser 直接产生。复杂命令通过 `RequirementParserAdapter` / Agent Adapter 输出 Command 或 Change Plan。AI 无权直接返回页面 HTML、改写完整 DSL 或扩大选中 Scope 而不解释影响。
+简单命令由页面直接操作产生。复杂需求由 Codex 在对话中理解：先展示拟拆分画布、范围、页面与共享页面，得到用户确认后才通过 MCP 写入。Studio 不保存或解析原始需求文档。
 
 ## 6. MCP 边界
 

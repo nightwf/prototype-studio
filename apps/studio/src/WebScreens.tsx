@@ -31,7 +31,7 @@ export function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: WebUse
   return (
     <div className="web-screen">
       <section className="web-card">
-        <header><div><span>PROTOTYPE</span><h1>Prototype Studio</h1><p>网页端 · 云托管需求与原型工作台</p></div></header>
+        <header><div><span>PROTOTYPE</span><h1>Prototype Studio</h1><p>网页端 · 多画布原型工作台</p></div></header>
         <div className="web-tabs">
           <button className={tab === "login" ? "is-active" : ""} onClick={() => setTab("login")}>登录</button>
           <button className={tab === "register" ? "is-active" : ""} onClick={() => setTab("register")}>注册</button>

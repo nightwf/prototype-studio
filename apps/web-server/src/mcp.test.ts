@@ -44,23 +44,6 @@ async function mcpClient(base: string, token: string) {
   return { client, transport };
 }
 
-const templateYaml = `
-title: 案件批量分配
-pages:
-  - id: case-list
-    title: 案件列表页
-    type: list
-board:
-  objects:
-    - id: note-1
-      type: note
-      x: 10
-      y: 10
-      width: 200
-      height: 80
-      text: 最多选择 500 条
-`;
-
 describe("cloud MCP", () => {
   it("authenticates with a bearer token and exercises multi-project tools", { timeout: 60_000 }, async () => {
     const { app, base } = await testServer();
@@ -96,25 +79,24 @@ describe("cloud MCP", () => {
         name: "prototype_apply_board_commands",
         arguments: {
           project_id: projectId,
+          board_id: "main",
           base_revision: 1,
           commands: [{ type: "ADD_BOARD_OBJECT", object: { id: "note-1", type: "note", x: 0, y: 0, width: 200, height: 80, text: "说明" } }]
         }
       });
       expect(boardCommands.structuredContent).toMatchObject({ ok: true, data: { revision: 2, changed_object_ids: ["note-1"] } });
 
-      const board = await client.callTool({ name: "prototype_get_board", arguments: { project_id: projectId } });
+      const board = await client.callTool({ name: "prototype_get_board", arguments: { project_id: projectId, board_id: "main" } });
       expect(board.structuredContent).toMatchObject({ ok: true, data: { board: { revision: 2 } } });
 
       const preview = await client.callTool({ name: "prototype_get_preview_url", arguments: { project_id: projectId, page_id: "case-list" } });
       expect(preview.structuredContent).toMatchObject({ ok: true, data: { preview_url: `http://127.0.0.1:8787/?project=${projectId}&page=case-list` } });
 
-      const fromRequirement = await client.callTool({
-        name: "prototype_create_project_from_requirement",
-        arguments: { name: "从需求创建", requirement: templateYaml }
+      const createdBoards = await client.callTool({
+        name: "prototype_create_boards",
+        arguments: { project_id: projectId, boards: [{ name: "还款管理", page_ids: ["case-list"] }, { name: "对账", page_ids: ["case-list"] }] }
       });
-      expect(fromRequirement.structuredContent).toMatchObject({ ok: true, data: { pages: ["case-list"] } });
-      const newProjectId = (fromRequirement.structuredContent as { data: { project_id: string } }).data.project_id;
-      expect(newProjectId).not.toBe(projectId);
+      expect(createdBoards.structuredContent).toMatchObject({ ok: true, data: { boards: [{ name: "还款管理" }, { name: "对账" }] } });
 
     } finally {
       await client.close();

@@ -10,7 +10,6 @@ import {
   Database,
   Download,
   FileCheck2,
-  FileText,
   FolderOpen,
   GripVertical,
   GitBranch,
@@ -35,7 +34,6 @@ import {
   Search,
   Settings2,
   Share2,
-  Sparkles,
   StickyNote,
   Trash2,
   Undo2,
@@ -103,20 +101,7 @@ import {
   type DesktopMcpConnectionInfo,
   type DesktopProjectSnapshot
 } from "./desktopBridge";
-import {
-  confirmPagePlan,
-  createBoardFromTemplates,
-  createPagePlan,
-  createPagePlanFromTemplates,
-  deterministicRequirementParser,
-  generateConfirmedPageDSLs,
-  parseRequirementTemplates,
-  requirementModelFromTemplates,
-  type PagePlan,
-  type RequirementTemplates
-} from "@prototype-studio/requirement-engine/browser";
-import type { RequirementModel } from "@prototype-studio/dsl-schema";
-import { webAuth, webMode, webProjects, webSpace, type WebUser } from "./webBridge";
+import { webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebUser } from "./webBridge";
 import { AuthScreen, ProjectsScreen } from "./WebScreens";
 
 type ToastTone = "success" | "warning" | "danger" | "info";
@@ -189,10 +174,13 @@ interface MarkerDraft {
   tone: MarkerTone;
 }
 
-function defaultBoardFromPages(pages: PageDSL[], id = "web-board"): BoardDSL {
+function defaultBoardFromPages(pages: PageDSL[], id = "main"): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
     id,
+    name: "主画布",
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
     revision: 1,
     objects: pages.map((page, index) => ({
       id: `obj-${page.page.id}`,
@@ -409,32 +397,7 @@ export function App() {
   const [previewScale, setPreviewScale] = useState(82);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
-  const [activeWorkspace, setActiveWorkspace] = useState<"pages" | "requirements">("pages");
-  const [requirementText, setRequirementText] = useState(`# 案件批量分配
-
-## 页面
-- 案件管理列表页
-
-## 功能
-- 支持勾选案件并批量分配
-- 点击批量分配后打开弹窗
-
-## 业务规则
-- 单次最多选择 500 条
-- 已锁定案件不可分配
-
-## 权限
-- 只有主管和管理员可以批量分配
-
-## 校验
-- 催收员必填
-- 备注最多 200 字
-
-## 交互
-- 提交成功后关闭弹窗并刷新列表`);
-  const [requirementModel, setRequirementModel] = useState<RequirementModel>();
-  const [pagePlan, setPagePlan] = useState<PagePlan>();
-  const [structuredTemplates, setStructuredTemplates] = useState<RequirementTemplates>();
+  const [activeWorkspace, setActiveWorkspace] = useState<"pages" | "boards">("pages");
   const [projectName, setProjectName] = useState(() => (isDesktopRuntime() ? "未打开项目" : "案件中台"));
   const [projectRoot, setProjectRoot] = useState<string>();
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -448,6 +411,14 @@ export function App() {
   const [appModal, setAppModal] = useState<AppModal>();
   const [modalValue, setModalValue] = useState("");
   const [board, setBoard] = useState<BoardDSL>(() => defaultBoardFromPages([]));
+  const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [trashedBoards, setTrashedBoards] = useState<TrashedBoardSummary[]>([]);
+  const [currentBoardId, setCurrentBoardId] = useState("main");
+  const currentBoardIdRef = useRef("main");
+  const [showBoardCreator, setShowBoardCreator] = useState(false);
+  const [newBoardName, setNewBoardName] = useState("");
+  const [newBoardPageIds, setNewBoardPageIds] = useState<string[]>([]);
+  const [openBoardMenuId, setOpenBoardMenuId] = useState<string>();
   const [viewMode, setViewMode] = useState<"canvas" | "page">("page");
   const [boardSelectedId, setBoardSelectedId] = useState<string>();
   const [boardSelectedIds, setBoardSelectedIds] = useState<string[]>([]);
@@ -459,10 +430,9 @@ export function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_left") === "1");
   const [rightCollapsed, setRightCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_right") === "1");
   const boardViewRef = useRef<BoardRendererHandle>(null);
-  const boardRef = useRef(board);
-  const boardRevisionRef = useRef(board.revision);
-  const boardQueueRef = useRef<Promise<boolean>>(Promise.resolve(true));
-  const boardQueueBaseRef = useRef<number | null>(null);
+  const boardCacheRef = useRef<Map<string, BoardDSL>>(new Map([[board.id, board]]));
+  const boardQueueRefs = useRef<Map<string, Promise<boolean>>>(new Map());
+  const boardQueueBaseRefs = useRef<Map<string, number>>(new Map());
   const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
   const [markerPicking, setMarkerPicking] = useState(false);
   const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", text: "", tone: "orange" });
@@ -508,15 +478,26 @@ export function App() {
       for (const summary of tree.pages) {
         loadedPages.push((await webSpace.getPage(projectId, summary.id)).dsl);
       }
+      const requestedBoardId = new URLSearchParams(window.location.search).get("board");
+      const requestedPageId = new URLSearchParams(window.location.search).get("page");
+      const selectedBoardId = tree.boards.some((item) => item.id === requestedBoardId)
+        ? requestedBoardId!
+        : tree.manifest.defaultBoardId ?? tree.board.id;
+      const selectedBoard = selectedBoardId === tree.board.id ? tree.board : (await webSpace.board(projectId, selectedBoardId)).board;
       setPages(loadedPages);
-      setBoard(tree.board);
+      setBoards(tree.boards);
+      setTrashedBoards((await webSpace.trashedBoards(projectId)).boards);
+      setCurrentBoardId(selectedBoardId);
+      setBoard(selectedBoard);
+      boardCacheRef.current = new Map([[selectedBoardId, selectedBoard]]);
       setProjectName(tree.manifest.name);
       setProjectRoot(`web://${projectId}`);
-      setCurrentPageId(loadedPages[0]?.page.id ?? null);
+      setCurrentPageId(loadedPages.some((page) => page.page.id === requestedPageId) ? requestedPageId : loadedPages[0]?.page.id ?? null);
       setSelectedId("");
       setHistory([]);
       setRedoStack([]);
-      setViewMode("canvas");
+      setViewMode(requestedPageId && loadedPages.some((page) => page.page.id === requestedPageId) ? "page" : "canvas");
+      setActiveWorkspace(requestedPageId ? "pages" : "boards");
       setWebProjectId(projectId);
       toast("success", "项目已打开", tree.manifest.name);
     } catch (error) {
@@ -604,9 +585,16 @@ export function App() {
       try {
         const boardText = await readDesktopBoard();
         const nextBoard = parseYaml(boardText) as BoardDSL;
-        if (nextBoard && Array.isArray(nextBoard.objects)) setBoard(nextBoard);
+        if (nextBoard && Array.isArray(nextBoard.objects)) {
+          setBoard(nextBoard);
+          setCurrentBoardId(nextBoard.id);
+          setBoards([{ id: nextBoard.id, name: nextBoard.name || "主画布", description: nextBoard.description, revision: nextBoard.revision, pageCount: nextBoard.objects.filter((object) => object.type === "page").length, objectCount: nextBoard.objects.length, createdAt: nextBoard.createdAt, updatedAt: nextBoard.updatedAt, isDefault: true }]);
+          boardCacheRef.current = new Map([[nextBoard.id, nextBoard]]);
+        }
       } catch {
-        setBoard(defaultBoardFromPages(loadedPages));
+        const nextBoard = defaultBoardFromPages(loadedPages);
+        setBoard(nextBoard);
+        setBoards([{ id: nextBoard.id, name: nextBoard.name, revision: nextBoard.revision, pageCount: loadedPages.length, objectCount: nextBoard.objects.length, createdAt: nextBoard.createdAt, updatedAt: nextBoard.updatedAt, isDefault: true }]);
       }
     } else {
       setBoard(defaultBoardFromPages(loadedPages));
@@ -617,6 +605,7 @@ export function App() {
     setRedoStack([]);
     setPreviewReady(false);
     setViewMode("canvas");
+    setActiveWorkspace("boards");
     await startProjectWatcher();
     void startLocalMcp().then((status) => setMcpState(status.state)).catch(() => setMcpState("unavailable"));
     toast("success", "本地项目已打开", `${snapshot.manifest.name} · ${snapshot.pageIds.length} 个页面`);
@@ -662,12 +651,19 @@ export function App() {
           setCurrentPageId(homePage.page.id);
           const homeBoard: BoardDSL = {
             dslVersion: DSL_VERSION,
-            id: `${snapshot.manifest.id}-board`,
+            id: "main",
+            projectId: snapshot.manifest.id,
+            name: "主画布",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
             revision: 1,
             objects: [{ id: "obj-home", type: "page", pageId: "home", x: 120, y: 80, width: 960, height: 640, source: "default" }],
             links: []
           };
           setBoard(homeBoard);
+          setBoards([{ id: "main", name: "主画布", revision: 1, pageCount: 1, objectCount: 1, createdAt: homeBoard.createdAt, updatedAt: homeBoard.updatedAt, isDefault: true }]);
+          setCurrentBoardId("main");
+          boardCacheRef.current = new Map([["main", homeBoard]]);
           await writeDesktopBoard(stringifyYaml(homeBoard, { lineWidth: 0 }));
           setProjectRoot(snapshot.root);
           toast("success", "项目已创建", "已写入标准目录结构和示例页面");
@@ -696,8 +692,9 @@ export function App() {
   }, [projectRoot, refreshMcpConnection, toast]);
 
   const selectPage = useCallback((pageId: string) => {
-    if (pageId === currentPageId) return;
+    setActiveWorkspace("pages");
     setViewMode("page");
+    if (pageId === currentPageId) return;
     setCurrentPageId(pageId);
     setSelectedId("");
     setHistory([]);
@@ -707,6 +704,135 @@ export function App() {
     setOpenPageMenuId(undefined);
     setPreviewReady(false);
   }, [currentPageId]);
+
+  const refreshBoards = useCallback(async () => {
+    if (!webProjectId) return;
+    const [active, trashed] = await Promise.all([webSpace.boards(webProjectId), webSpace.trashedBoards(webProjectId)]);
+    setBoards(active.boards);
+    setTrashedBoards(trashed.boards);
+  }, [webProjectId]);
+
+  const selectBoard = useCallback(async (boardId: string) => {
+    currentBoardIdRef.current = boardId;
+    setActiveWorkspace("boards");
+    setViewMode("canvas");
+    setOpenBoardMenuId(undefined);
+    setBoardSelectedId(undefined);
+    setBoardSelectedIds([]);
+    setBoardSelectedLinkId(undefined);
+    try {
+      const cached = boardCacheRef.current.get(boardId);
+      const next = cached ?? (webProjectId ? (await webSpace.board(webProjectId, boardId)).board : board);
+      boardCacheRef.current.set(boardId, next);
+      setCurrentBoardId(boardId);
+      setBoard(next);
+    } catch (error) {
+      toast("danger", "无法打开画布", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [board, toast, webProjectId]);
+
+  const createNewBoard = useCallback(async () => {
+    const name = newBoardName.trim();
+    if (!name) {
+      toast("warning", "请输入画布名称");
+      return;
+    }
+    if (!webProjectId) {
+      toast("warning", "桌面端多画布尚未连接", "请先使用当前网页端项目创建画布。");
+      return;
+    }
+    try {
+      const result = await webSpace.createBoard(webProjectId, { name, pageIds: newBoardPageIds });
+      boardCacheRef.current.set(result.board.id, result.board);
+      setShowBoardCreator(false);
+      setNewBoardName("");
+      setNewBoardPageIds([]);
+      await refreshBoards();
+      await selectBoard(result.board.id);
+      toast("success", "画布已创建", `${name} · ${newBoardPageIds.length} 个页面`);
+    } catch (error) {
+      toast("danger", "无法创建画布", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [newBoardName, newBoardPageIds, refreshBoards, selectBoard, toast, webProjectId]);
+
+  const renameBoard = useCallback((summary: BoardSummary) => {
+    setOpenBoardMenuId(undefined);
+    askText({
+      title: "重命名画布",
+      label: "画布名称",
+      defaultValue: summary.name,
+      confirmText: "保存",
+      onConfirm: async (name) => {
+        if (!webProjectId || !name.trim()) return;
+        try {
+          const result = await webSpace.updateBoard(webProjectId, summary.id, { name: name.trim() });
+          boardCacheRef.current.set(summary.id, result.board);
+          if (summary.id === currentBoardId) setBoard(result.board);
+          await refreshBoards();
+        } catch (error) { toast("danger", "重命名失败", error instanceof Error ? error.message : "未知错误"); }
+      }
+    });
+  }, [askText, currentBoardId, refreshBoards, toast, webProjectId]);
+
+  const editBoardDescription = useCallback((summary: BoardSummary) => {
+    setOpenBoardMenuId(undefined);
+    askText({
+      title: "修改画布说明",
+      label: "画布说明",
+      defaultValue: summary.description ?? "",
+      confirmText: "保存",
+      onConfirm: async (description) => {
+        if (!webProjectId) return;
+        try {
+          const result = await webSpace.updateBoard(webProjectId, summary.id, { description });
+          boardCacheRef.current.set(summary.id, result.board);
+          if (summary.id === currentBoardId) setBoard(result.board);
+          await refreshBoards();
+        } catch (error) { toast("danger", "修改说明失败", error instanceof Error ? error.message : "未知错误"); }
+      }
+    });
+  }, [askText, currentBoardId, refreshBoards, toast, webProjectId]);
+
+  const makeDefaultBoard = useCallback(async (summary: BoardSummary) => {
+    if (!webProjectId || summary.isDefault) return;
+    try {
+      await webSpace.updateBoard(webProjectId, summary.id, { isDefault: true });
+      await refreshBoards();
+      toast("success", "已设为默认画布", summary.name);
+    } catch (error) { toast("danger", "设置失败", error instanceof Error ? error.message : "未知错误"); }
+  }, [refreshBoards, toast, webProjectId]);
+
+  const trashBoard = useCallback((summary: BoardSummary) => {
+    setOpenBoardMenuId(undefined);
+    askConfirm({
+      title: "移入画布回收站",
+      message: `确定移除“${summary.name}”吗？共享页面不会被删除。`,
+      confirmText: "移入回收站",
+      danger: true,
+      onConfirm: async () => {
+        if (!webProjectId) return;
+        try {
+          const result = await webSpace.deleteBoard(webProjectId, summary.id);
+          boardCacheRef.current.delete(summary.id);
+          await refreshBoards();
+          if (summary.id === currentBoardId) await selectBoard(result.defaultBoardId);
+          toast("success", "画布已移入回收站", summary.name);
+        } catch (error) { toast("danger", "无法删除画布", error instanceof Error ? error.message : "未知错误"); }
+      }
+    });
+  }, [askConfirm, currentBoardId, refreshBoards, selectBoard, toast, webProjectId]);
+
+  const restoreTrashedBoard = useCallback(async (summary: TrashedBoardSummary) => {
+    if (!webProjectId) return;
+    try {
+      const result = await webSpace.restoreBoard(webProjectId, summary.trashId);
+      boardCacheRef.current.set(result.board.id, result.board);
+      await refreshBoards();
+      toast("success", "画布已恢复", result.board.name);
+    } catch (error) {
+      toast("danger", "恢复失败", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [refreshBoards, toast, webProjectId]);
 
   const addPage = useCallback(async () => {
     const title = newPageTitle.trim();
@@ -966,9 +1092,9 @@ export function App() {
   }, [persistDesktopPage, toast, webProjectId]);
 
   useEffect(() => {
-    boardRef.current = board;
-    boardRevisionRef.current = board.revision;
-  }, [board]);
+    currentBoardIdRef.current = currentBoardId;
+    boardCacheRef.current.set(currentBoardId, board);
+  }, [board, currentBoardId]);
 
   useEffect(() => {
     if (!boardMoreOpen) return;
@@ -988,47 +1114,58 @@ export function App() {
   }, [rightCollapsed]);
 
   const runBoardCommands = useCallback(async (commands: BoardCommand[], message = "画布已更新", silent = false): Promise<boolean> => {
-    // 1) 本地乐观应用：基于 ref 链，保证连续快速调用（如拖拽）不会版本回退。
+    const targetBoardId = currentBoardIdRef.current;
+    const currentBoard = boardCacheRef.current.get(targetBoardId);
+    if (!currentBoard) {
+      toast("danger", "画布修改未执行", "当前画布尚未加载完成。");
+      return false;
+    }
     let applied: ApplyBoardCommandsResult;
     try {
       const result = applyBoardCommands({
-        board: boardRef.current,
-        baseRevision: boardRevisionRef.current,
+        board: currentBoard,
+        baseRevision: currentBoard.revision,
         commands,
         source: "manual",
         operator: "jojo"
       });
       applied = result;
-      boardRef.current = result.board;
-      boardRevisionRef.current = result.board.revision;
-      setBoard(result.board);
+      boardCacheRef.current.set(targetBoardId, result.board);
+      if (currentBoardIdRef.current === targetBoardId) setBoard(result.board);
+      setBoards((items) => items.map((item) => item.id === targetBoardId ? {
+        ...item,
+        revision: result.board.revision,
+        objectCount: result.board.objects.length,
+        pageCount: result.board.objects.filter((object) => object.type === "page").length,
+        updatedAt: result.board.updatedAt
+      } : item));
     } catch (error) {
       toast("danger", "画布修改未执行", error instanceof Error ? error.message : "未知错误");
       return false;
     }
     // 2) 服务端提交串行化：一次只发一个命令，base revision 沿队列递增，
     //    彻底避免并发命令互相踩踏导致的 revision 冲突。
-    const task = boardQueueRef.current.then(async (): Promise<boolean> => {
+    const previousTask = boardQueueRefs.current.get(targetBoardId) ?? Promise.resolve(true);
+    const task = previousTask.then(async (): Promise<boolean> => {
       try {
-        const base = boardQueueBaseRef.current ?? applied.board.revision - 1;
+        const base = boardQueueBaseRefs.current.get(targetBoardId) ?? applied.board.revision - 1;
         if (webMode && webProjectId) {
-          await webSpace.boardCommands(webProjectId, base, commands, "manual", "jojo");
+          await webSpace.boardCommands(webProjectId, targetBoardId, base, commands, "manual", "jojo");
         } else if (projectRoot && isDesktopRuntime()) {
           await persistDesktopBoardRevision(stringifyYaml(applied.board, { lineWidth: 0 }), applied.revision);
         }
-        boardQueueBaseRef.current = base + 1;
-        if (!silent) toast("success", message, `画布 Revision ${boardRevisionRef.current}`);
+        boardQueueBaseRefs.current.set(targetBoardId, base + 1);
+        if (!silent) toast("success", message, `画布 Revision ${applied.board.revision}`);
         return true;
       } catch (error) {
         // 画布可能已被其他会话（另一个标签页 / Codex）修改：重新读取最新画布，
         // 重置版本链，避免本地乐观状态与服务端继续偏离。
-        boardQueueBaseRef.current = null;
+        boardQueueBaseRefs.current.delete(targetBoardId);
         if (webMode && webProjectId) {
           try {
-            const fresh = await webSpace.board(webProjectId);
-            boardRef.current = fresh.board;
-            boardRevisionRef.current = fresh.board.revision;
-            setBoard(fresh.board);
+            const fresh = await webSpace.board(webProjectId, targetBoardId);
+            boardCacheRef.current.set(targetBoardId, fresh.board);
+            if (currentBoardIdRef.current === targetBoardId) setBoard(fresh.board);
           } catch { /* 忽略重新读取失败，保留当前状态 */ }
         }
         const detail = error instanceof Error ? error.message : "未知错误";
@@ -1036,7 +1173,10 @@ export function App() {
         return false;
       }
     });
-    boardQueueRef.current = task;
+    boardQueueRefs.current.set(targetBoardId, task);
+    void task.finally(() => {
+      if (boardQueueRefs.current.get(targetBoardId) === task) boardQueueRefs.current.delete(targetBoardId);
+    });
     return task;
   }, [projectRoot, toast, webProjectId]);
 
@@ -1343,6 +1483,7 @@ export function App() {
   };
 
   const openPageFromBoard = (pageId: string) => {
+    setActiveWorkspace("pages");
     setCurrentPageId(pageId);
     setViewMode("page");
     setSelectedId("");
@@ -1351,7 +1492,21 @@ export function App() {
     setShowDsl(false);
   };
 
-  const exportBoardHtml = (mode: "content" | "with-annotations" = "content") => {
+  useEffect(() => {
+    if (!webMode || !webProjectId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("project", webProjectId);
+    if (viewMode === "canvas") {
+      url.searchParams.set("board", currentBoardId);
+      url.searchParams.delete("page");
+    } else if (currentPageId) {
+      url.searchParams.set("page", currentPageId);
+      url.searchParams.delete("board");
+    }
+    window.history.replaceState(null, "", url);
+  }, [currentBoardId, currentPageId, viewMode, webProjectId]);
+
+  const exportBoardHtml = (mode: "content" | "with-annotations" = "content", scope: "current" | "all" = "current") => {
     const bounds = boardContentBounds(board, {});
     const showPanel = mode === "with-annotations" && board.objects.some((object) => object.type === "marker");
     const panelReserve = showPanel ? ANNOTATION_PANEL_WIDTH + ANNOTATION_PANEL_GAP : 0;
@@ -1381,16 +1536,16 @@ ${boardExportRuntimeScript}
 </body>
 </html>`;
     if (webMode && webProjectId) {
-      void webSpace.exportHtml(webProjectId, mode)
+      void webSpace.exportHtml(webProjectId, mode, scope, currentBoardId)
         .then((result) => {
           const blob = new Blob([result.html], { type: "text/html" });
           const url = URL.createObjectURL(blob);
           const link = document.createElement("a");
           link.href = url;
-          link.download = "prototype-board.html";
+          link.download = scope === "all" ? "prototype-all-boards.html" : `prototype-${currentBoardId}.html`;
           link.click();
           URL.revokeObjectURL(url);
-          toast("success", "画布已导出", "已下载 prototype-board.html");
+          toast("success", "画布已导出", scope === "all" ? "已下载全部画布 HTML" : `已下载 ${board.name}`);
         })
         .catch((error) => toast("danger", "导出失败", error instanceof Error ? error.message : "未知错误"));
     } else if (projectRoot && isDesktopRuntime()) {
@@ -1499,56 +1654,6 @@ ${boardExportRuntimeScript}
     } else toast("warning", "当前仅支持同容器排序", "MVP 可拖动查询区字段调整顺序");
   };
 
-  const buildRequirementPlan = () => {
-    const structured = parseRequirementTemplates(requirementText);
-    if (structured) {
-      const model = requirementModelFromTemplates(structured);
-      const plan = createPagePlanFromTemplates(structured);
-      setStructuredTemplates(structured);
-      setRequirementModel(model);
-      setPagePlan(plan);
-      toast("success", "结构化页面模板已接收", `按声明生成 ${plan.pages.length} 个页面 · 无关键词猜测`);
-      return;
-    }
-    const model = deterministicRequirementParser({
-      text: requirementText,
-      title: "案件批量分配",
-      requirementId: "REQ-001"
-    });
-    const plan = createPagePlan(model);
-    setRequirementModel(model);
-    setPagePlan(plan);
-    toast("success", "Codex 需求已接收", `形成 ${plan.pages.length} 个页面计划 · ${model.businessRules.length} 条业务规则`);
-  };
-
-  const confirmRequirementPlan = () => {
-    if (!pagePlan) return;
-    const confirmed = confirmPagePlan(pagePlan);
-    const generated = generateConfirmedPageDSLs(confirmed);
-    setPagePlan(confirmed);
-    if (generated[0]) {
-      setPages((items) => {
-        const generatedIds = new Set(generated.map((item) => item.dsl.page.id));
-        return [...items.filter((item) => !generatedIds.has(item.page.id)), ...generated.map((item) => item.dsl)];
-      });
-      setCurrentPageId(generated[0].dsl.page.id);
-      generated.forEach((item) => void persistDesktopPage(item.dsl));
-      setSelectedId("");
-      setHistory([]);
-      setRedoStack([]);
-      setPreviewReady(false);
-      toast("success", "Page Plan 已确认", `已生成 ${generated.length} 个合法 UI DSL 页面`);
-    }
-    const board = structuredTemplates ? createBoardFromTemplates(structuredTemplates) : null;
-    if (board) {
-      setBoard(board);
-      if (projectRoot && isDesktopRuntime()) {
-        void writeDesktopBoard(stringifyYaml(board, { lineWidth: 0 }));
-      }
-      toast("success", "画布已生成", `来自 Codex 模板：${board.objects.length} 个对象 · ${board.links.length} 条连线`);
-    }
-  };
-
   const outlineComponents: UIComponent[] = [
     ...(dsl.search?.fields ?? []),
     ...(dsl.toolbar?.actions ?? []),
@@ -1568,13 +1673,6 @@ ${boardExportRuntimeScript}
       onLogout={() => { void webAuth.logout(); setWebSession(undefined); }}
     />;
   }
-
-  const viewSwitcher = (
-    <div className="view-switcher">
-      <button className={viewMode === "page" ? "is-active" : ""} onClick={() => setViewMode("page")}><Monitor size={14} />页面</button>
-      <button className={viewMode === "canvas" ? "is-active" : ""} onClick={() => { setViewMode("canvas"); setBoardSelectedId(undefined); }}><LayoutGrid size={14} />画布</button>
-    </div>
-  );
 
   return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
     <header className="studio-titlebar">
@@ -1607,7 +1705,7 @@ ${boardExportRuntimeScript}
     </header>
 
     <aside className="studio-left">
-      <div className="left-tabs"><button className={activeWorkspace === "pages" ? "is-active" : ""} onClick={() => setActiveWorkspace("pages")}><Layers3 size={14} />页面</button><button className={activeWorkspace === "requirements" ? "is-active" : ""} onClick={() => setActiveWorkspace("requirements")}><FileText size={14} />需求</button></div>
+      <div className="left-tabs"><button className={activeWorkspace === "pages" ? "is-active" : ""} onClick={() => setActiveWorkspace("pages")}><Layers3 size={14} />页面</button><button className={activeWorkspace === "boards" ? "is-active" : ""} onClick={() => setActiveWorkspace("boards")}><LayoutGrid size={14} />画布</button></div>
       {activeWorkspace === "pages" ? <>
         <div className="left-project-label"><span>页面结构 · {pages.length}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
         {showPageCreator ? <div className="page-creator">
@@ -1636,33 +1734,44 @@ ${boardExportRuntimeScript}
         {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单或详情页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
         <div className="left-footer"><FileCheck2 size={13} /><span>{currentPage ? `pages/${currentPage.page.id}.ui.yaml` : "pages/"}</span><StatusDot tone={currentPage ? "success" : "neutral"}>{currentPage ? "有效" : "空"}</StatusDot></div>
       </> : <>
-        <div className="left-project-label"><span>需求资产</span><ToolButton compact title="从 Codex 同步需求"><Plus size={13} /></ToolButton></div>
-        <div className="requirement-file-row is-active"><div><FileText size={14} /></div><span><strong>案件批量分配</strong><small>REQ-001.md · MARKDOWN</small></span><StatusDot tone={requirementModel ? "success" : "warning"}>{requirementModel ? "已解析" : "待解析"}</StatusDot></div>
-        <SectionTitle>解析概览</SectionTitle>
-        {requirementModel ? <div className="requirement-mini-stats">
-          <div><b>{requirementModel.pages.length}</b><span>页面</span></div>
-          <div><b>{requirementModel.features.length}</b><span>功能</span></div>
-          <div><b>{requirementModel.businessRules.length}</b><span>规则</span></div>
-          <div><b>{requirementModel.unresolved.length}</b><span>待确认</span></div>
-        </div> : <EmptyState icon={<FileText size={17} />} title="等待 Codex 结果" description="Codex 同步结构化页面模板或规范化需求后，Studio 再按声明生成页面计划。" />}
-        <div className="left-footer"><FileCheck2 size={13} /><span>requirements/REQ-001.md</span><StatusDot tone="success">本地</StatusDot></div>
+        <div className="left-project-label"><span>画布 · {boards.length}</span><ToolButton compact title="新建画布" active={showBoardCreator} onClick={() => setShowBoardCreator((value) => !value)}><Plus size={13} /></ToolButton></div>
+        {showBoardCreator ? <div className="board-creator">
+          <input autoFocus value={newBoardName} onChange={(event) => setNewBoardName(event.target.value)} placeholder="画布名称" aria-label="画布名称" />
+          <span className="board-creator-label">选择需要放入画布的页面（可留空）</span>
+          <div className="board-page-picker">{pages.map((page) => <label key={page.page.id}><input type="checkbox" checked={newBoardPageIds.includes(page.page.id)} onChange={(event) => setNewBoardPageIds((items) => event.target.checked ? [...items, page.page.id] : items.filter((id) => id !== page.page.id))} /><span>{page.page.title}</span></label>)}</div>
+          <div className="page-creator-actions"><button onClick={() => setShowBoardCreator(false)}>取消</button><button className="is-primary" onClick={() => void createNewBoard()}>创建画布</button></div>
+        </div> : null}
+        <div className="board-list">{boards.map((summary, index) => <div key={summary.id} className={`board-list-row ${summary.id === currentBoardId && viewMode === "canvas" ? "is-active" : ""}`}>
+          <button className="board-list-main" onClick={() => void selectBoard(summary.id)}><div className="page-icon"><LayoutGrid size={14} /></div><span><strong>{summary.name}{summary.isDefault ? <em>默认</em> : null}</strong><small>{summary.pageCount} 页面 · {summary.objectCount} 对象 · R{summary.revision}</small></span></button>
+          <button className="page-more" title={`管理画布 ${summary.name}`} onClick={() => setOpenBoardMenuId(openBoardMenuId === summary.id ? undefined : summary.id)}><MoreHorizontal size={14} /></button>
+          {openBoardMenuId === summary.id ? <div className={`page-row-menu ${index >= 4 ? "is-up" : ""}`}>
+            <button onClick={() => renameBoard(summary)}><Pencil size={12} />重命名</button>
+            <button onClick={() => editBoardDescription(summary)}><FileCheck2 size={12} />修改说明</button>
+            <button disabled={summary.isDefault} onClick={() => void makeDefaultBoard(summary)}><MapPin size={12} />设为默认</button>
+            <i />
+            <button className="is-danger" disabled={boards.length <= 1} onClick={() => trashBoard(summary)}><Trash2 size={12} />移入回收站</button>
+          </div> : null}
+        </div>)}</div>
+        {trashedBoards.length ? <div className="board-trash">
+          <div className="board-trash-title"><Trash2 size={12} /><span>回收站 · {trashedBoards.length}</span></div>
+          {trashedBoards.map((summary) => <div className="board-trash-row" key={summary.trashId}><span><strong>{summary.name}</strong><small>{summary.boardId}</small></span><button title={`恢复画布 ${summary.name}`} onClick={() => void restoreTrashedBoard(summary)}><RotateCcw size={12} />恢复</button></div>)}
+        </div> : null}
+        {!boards.length ? <EmptyState icon={<LayoutGrid size={17} />} title="还没有画布" description="创建空白画布，或选择已有页面自动平铺。" /> : null}
+        <div className="left-footer"><LayoutGrid size={13} /><span>{currentBoardId ? `boards/${currentBoardId}.board.yaml` : "boards/"}</span><StatusDot tone={currentBoardId ? "success" : "neutral"}>{currentBoardId ? "独立版本" : "空"}</StatusDot></div>
       </>}
     </aside>
 
     <main className="studio-canvas">
       <div className="canvas-toolbar">
-        {activeWorkspace === "pages" ? <>
-          {viewMode === "page" ? <>
+        {viewMode === "page" ? <>
             <div className="canvas-toolbar-left">
-              {viewSwitcher}
               <div className="viewport-switcher"><button className="is-active"><Monitor size={14} />桌面</button><button><PanelRight size={14} />平板</button></div>
               <div className="canvas-meta"><span>1280 × 820</span><i /><span className="board-hint-text">可点选模式</span></div>
             </div>
             <div className="canvas-toolbar-actions"><div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div></div>
-          </> : <>
+        </> : <>
             <div className="canvas-toolbar-left">
-              {viewSwitcher}
-              <div className="canvas-meta"><span>画布 · {board.objects.length} 个对象</span><i /><span className="board-hint-text">拖拽移动 · 双击页面进入编辑 · 右键更多</span></div>
+              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">拖拽移动 · 双击页面进入编辑 · 右键更多</span></div>
             </div>
             <div className="canvas-toolbar-actions">
               <div className="board-tools">
@@ -1686,14 +1795,9 @@ ${boardExportRuntimeScript}
               </div>
               <div className="zoom-control"><button onClick={() => boardViewRef.current?.zoomOut()}>−</button><span>{Math.round(boardZoom * 100)}%</span><button onClick={() => boardViewRef.current?.zoomIn()}>+</button><button onClick={() => boardViewRef.current?.fitToContent()} title="适配全部内容"><Maximize2 size={13} /></button></div>
             </div>
-          </>}
-        </> : <>
-          <div className="requirement-toolbar-title"><FileText size={14} /><span>Requirement Model</span></div>
-          <StatusDot tone={pagePlan?.status === "confirmed" ? "success" : requirementModel ? "info" : "warning"}>{pagePlan?.status === "confirmed" ? "页面计划已确认" : requirementModel ? "等待确认 Page Plan" : "等待解析"}</StatusDot>
-          <div className="requirement-format">Explicit / Inferred / Default</div>
         </>}
       </div>
-      {activeWorkspace === "pages" ? viewMode === "canvas" ? <div className="canvas-stage board-stage">
+      {viewMode === "canvas" ? <div className="canvas-stage board-stage">
         <BoardRenderer
           ref={boardViewRef}
           board={board}
@@ -1750,43 +1854,13 @@ ${boardExportRuntimeScript}
             <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => sendPreview({ type: "prototype:dsl", dsl })} sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
         </div>
-      </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div> : <div className="requirement-stage">
-        <section className="requirement-editor-card">
-          <header><div><span>01 · CODEX INPUT</span><h2>规范化需求</h2></div><div className="local-asset"><StatusDot tone="success">仅保存在本地项目</StatusDot></div></header>
-          <textarea value={requirementText} onChange={(event) => setRequirementText(event.target.value)} spellCheck={false} />
-          <footer><span>{requirementText.length} 字 · Markdown / 结构化模板</span><button onClick={buildRequirementPlan}><Sparkles size={13} />生成 Page Plan</button></footer>
-        </section>
-        <section className="requirement-plan-card">
-          <header><div><span>02 · PAGE PLAN</span><h2>页面规划</h2></div>{pagePlan ? <div className={`plan-status plan-status--${pagePlan.status}`}>{pagePlan.status}</div> : null}</header>
-          {!pagePlan ? <EmptyState icon={<LayoutPanelLeft size={18} />} title="先解析业务需求" description="系统会先展示页面、功能、规则和未明确项；确认后才生成 UI DSL。" /> : <div className="page-plan-list">
-            {pagePlan.pages.map((page) => <article key={page.id} className={page.decision === "confirmed" ? "is-confirmed" : ""}>
-              <div className="plan-page-index">{String(pagePlan.pages.indexOf(page) + 1).padStart(2, "0")}</div>
-              <div><div className="plan-page-title"><strong>{page.title}</strong><code>{page.type}</code><span className={`source-chip source-chip--${page.source}`}>{page.source}</span></div><p>{page.features.slice(0, 2).map((item) => item.value).join(" · ") || "根据需求生成基础页面结构"}</p><small>{page.businessRules.length} 条规则 · {page.validations.length} 条校验 · {page.interactions.length} 个交互</small></div>
-            </article>)}
-          </div>}
-          {pagePlan ? <footer><span>{pagePlan.unresolved.length ? `${pagePlan.unresolved.length} 个未明确项会保留到 Product Package` : "未发现阻塞性未明确项"}</span><button onClick={confirmRequirementPlan} disabled={pagePlan.status === "confirmed"}><FileCheck2 size={13} />{pagePlan.status === "confirmed" ? "已生成 DSL" : "确认并生成"}</button></footer> : null}
-        </section>
-      </div>}
+      </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div>}
     </main>
 
     <aside className="studio-right">
       <div className="studio-right-content">
-      {activeWorkspace === "requirements" ? <>
-        <PanelHeader eyebrow="TRACEABLE MODEL" title="需求解析结果" action={<ToolButton compact><MoreHorizontal size={14} /></ToolButton>} />
-        {!requirementModel ? <EmptyState icon={<Sparkles size={18} />} title="等待 Requirement Model" description="解析后可在这里检查每一项来自原文、AI 推断还是系统默认。" /> : <div className="requirement-inspector">
-          <div className="requirement-result-banner"><div><Sparkles size={16} /></div><span><strong>结构化 Requirement Model</strong><small>原始文档由 Codex 处理 · Studio 不解析附件</small></span><StatusDot tone="success">完成</StatusDot></div>
-          {([
-            ["页面", requirementModel.pages],
-            ["功能", requirementModel.features],
-            ["业务规则", requirementModel.businessRules],
-            ["权限", requirementModel.permissions],
-            ["校验", requirementModel.validations],
-            ["交互", requirementModel.interactions]
-          ] as const).map(([label, items]) => <div className="requirement-result-group" key={label}><SectionTitle>{label} · {items.length}</SectionTitle>{items.length ? items.map((item, index) => <div className="requirement-result-item" key={`${label}-${index}`}><i className={`source-dot source-dot--${item.source}`} /><span>{item.value}</span><code>{item.source}</code></div>) : <div className="requirement-result-empty">未识别</div>}</div>)}
-          <div className="requirement-unresolved"><SectionTitle>未明确项 · {requirementModel.unresolved.length}</SectionTitle>{requirementModel.unresolved.map((item, index) => <div key={index}><CircleHelp size={12} /><span>{item.value}</span></div>)}</div>
-        </div>}
-      </> : viewMode === "canvas" ? <>
-        <PanelHeader eyebrow={boardSelectedLink ? "BOARD LINK" : "BOARD OBJECT"} title={boardSelectedLink ? "连接线" : boardSelectedObject ? (boardSelectedObject.type === "page" ? "页面对象" : boardSelectedObject.type === "marker" ? "标注" : boardSelectedObject.type === "note" ? "说明" : "画布对象") : "画布对象"} action={<ToolButton compact onClick={() => setViewMode("page")}><Monitor size={13} /></ToolButton>} />
+      {viewMode === "canvas" ? <>
+        <PanelHeader eyebrow={boardSelectedLink ? "BOARD LINK" : "BOARD OBJECT"} title={boardSelectedLink ? "连接线" : boardSelectedObject ? (boardSelectedObject.type === "page" ? "页面对象" : boardSelectedObject.type === "marker" ? "标注" : boardSelectedObject.type === "note" ? "说明" : "画布对象") : board.name} />
         {boardSelectedLink ? <div className="board-inspector board-link-inspector">
           <div className="selected-path"><span>{board.id}</span><ChevronRight size={10} /><b>{boardSelectedLink.id}</b></div>
           <div className="inspector-body">
@@ -1845,7 +1919,7 @@ ${boardExportRuntimeScript}
             <SectionTitle>连线</SectionTitle>
             {board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).length ? board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).map((link) => (
               <div className="board-link-row" key={link.id}><button className="board-link-row-main" onClick={() => selectBoardLink(link.id)}><i style={{ background: link.color ?? "#2563eb", height: link.strokeWidth ?? 2.5 }} /><span>{link.label || `${link.from} → ${link.to}`}<small>{link.lineType === "straight" ? "直线" : link.lineType === "orthogonal" ? "折线" : "曲线"} · {link.strokeWidth ?? 2.5}px</small></span></button><button title="删除连线" onClick={() => void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: link.id }])}><X size={12} /></button></div>
-            )) : <div className="requirement-result-empty">当前对象没有连线</div>}
+            )) : <div className="inspector-empty">当前对象没有连线</div>}
             <div className="board-link-add">
               <select value={String(boardDraft.linkTarget ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkTarget: event.target.value, linkToComponent: "" })}>
                 <option value="">选择连线目标</option>
@@ -1918,14 +1992,18 @@ ${boardExportRuntimeScript}
           <button onClick={() => setBoardExportOpen(false)} aria-label="关闭导出"><X size={14} /></button>
         </header>
         <div className="board-export-options">
-          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("content"); }}>
-            <strong>仅内容</strong>
-            <small>按画布内容边界裁剪，不含标注汇总栏，适合嵌入文档或直接展示。</small>
+          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("content", "current"); }}>
+            <strong>当前画布</strong>
+            <small>导出“{board.name}”为单文件 HTML，不含标注汇总栏。</small>
           </button>
-          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("with-annotations"); }}>
-            <strong>含标注栏</strong>
-            <small>内容 + 右侧标注汇总面板，适合评审沟通。</small>
+          <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("with-annotations", "current"); }}>
+            <strong>当前画布 + 标注</strong>
+            <small>当前画布内容加右侧标注汇总面板，适合评审。</small>
           </button>
+          {webMode ? <button onClick={() => { setBoardExportOpen(false); exportBoardHtml("content", "all"); }}>
+            <strong>全部画布</strong>
+            <small>生成带画布导航的自包含 HTML，一次只显示选中的画布。</small>
+          </button> : null}
         </div>
       </section>
     </div> : null}

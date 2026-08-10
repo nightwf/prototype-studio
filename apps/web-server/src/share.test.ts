@@ -43,6 +43,7 @@ describe("read-only sharing", () => {
       payload: { base_revision: 1, commands: [{ type: "ADD_BOARD_OBJECT", object: { id: "obj-case-list", type: "page", pageId: "case-list", x: 120, y: 80, width: 960, height: 640 } }] },
       headers: auth
     });
+    await app.inject({ method: "POST", url: `/api/projects/${projectId}/boards`, payload: { name: "第二画布", page_ids: ["case-list"] }, headers: auth });
     await app.inject({
       method: "POST",
       url: `/api/projects/${projectId}/board-commands`,
@@ -58,13 +59,17 @@ describe("read-only sharing", () => {
     const data = await app.inject({ method: "GET", url: `/api/share/${token}` });
     expect(data.statusCode).toBe(200);
     expect(data.json()).toMatchObject({ ok: true, project: { id: projectId }, pages: [{ id: "case-list" }] });
-    expect(data.json().board.revision).toBe(3);
+    expect(data.json().boards).toHaveLength(2);
+    expect(data.json().boards[0].revision).toBe(3);
+    expect(data.json().project.defaultBoardId).toBe("main");
 
     const html = await app.inject({ method: "GET", url: `/share/${token}` });
     expect(html.statusCode).toBe(200);
     expect(html.headers["content-type"]).toContain("text/html");
     expect(html.body).toContain("data-board-object");
     expect(html.body).toContain("案件管理");
+    expect(html.body).toContain("data-board-tab");
+    expect(html.body).toContain("第二画布");
 
     const revoked = await app.inject({ method: "DELETE", url: `/api/projects/${projectId}/share/${token}`, headers: auth });
     expect(revoked.statusCode).toBe(200);

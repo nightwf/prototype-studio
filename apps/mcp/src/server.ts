@@ -2,17 +2,22 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { PrototypeService, type ToolOutcome } from "./service.js";
 import {
   applyBoardCommandsInputSchema,
+  boardInputSchema,
   applyCommandsInputSchema,
   componentInputSchema,
+  createBoardInputSchema,
+  createBoardsInputSchema,
   createOverlayInputSchema,
   createPageInputSchema,
   deletePageInputSchema,
   deleteComponentInputSchema,
+  deleteBoardInputSchema,
   emptyInputSchema,
   listPagesInputSchema,
+  listBoardsInputSchema,
   moveComponentInputSchema,
   pageInputSchema,
-  requirementInputSchema,
+  updateBoardInputSchema,
   updateComponentInputSchema,
   updateOverlayInputSchema,
   validateDslInputSchema
@@ -101,23 +106,52 @@ export function createPrototypeStudioServer(options: CreateServerOptions): McpSe
     annotations: readAnnotations
   }, async (input) => response(await service.getDsl(input), "已读取完整页面 DSL。"));
 
-  server.registerTool("prototype_get_requirement", {
-    title: "Get Prototype Studio Requirement",
-    description: "Read one Markdown, TXT or structured JSON requirement from the configured project's requirements directory. The tool is read-only, path-scoped and truncates responses above 25,000 characters.",
-    inputSchema: requirementInputSchema,
+
+  server.registerTool("prototype_list_boards", {
+    title: "List Prototype Studio Boards",
+    description: "List the project's independent boards with pagination, name, description, counts, revision, timestamps and default-board status. Call this before reading or mutating a board to obtain the correct board_id.",
+    inputSchema: listBoardsInputSchema,
     annotations: readAnnotations
-  }, async (input) => response(await service.getRequirement(input), "已读取需求资产。"));
+  }, async (input) => response(await service.listBoards(input), "已读取画布列表。"));
 
   server.registerTool("prototype_get_board", {
     title: "Get Prototype Studio Board",
-    description: "Read the canvas (board.yaml): all canvas objects (page frames, notes, markers, flowcharts, ER diagrams), links and the current board revision. Read-only and path-scoped.",
-    inputSchema: emptyInputSchema,
+    description: "Read one board by board_id, including shared page frames, notes, markers, diagrams, links and its independent revision. Use the returned revision as base_revision for mutations.",
+    inputSchema: boardInputSchema,
     annotations: readAnnotations
-  }, async () => response(await service.getBoard(), "已读取画布。"));
+  }, async (input) => response(await service.getBoard(input), "已读取画布。"));
+
+  server.registerTool("prototype_create_board", {
+    title: "Create Prototype Studio Board",
+    description: "Create one independent board after the user has approved its scope. Optionally place existing project-level pages in a deterministic two-column layout. Names are required and case-insensitively unique.",
+    inputSchema: createBoardInputSchema,
+    annotations: createAnnotations
+  }, async (input) => response(await service.createBoard(input), "画布已创建。"));
+
+  server.registerTool("prototype_create_boards", {
+    title: "Create Prototype Studio Boards",
+    description: "Atomically create the complete multi-board split only after showing the proposed board names, requirement scopes, page lists and shared pages to the user and receiving confirmation. The whole batch is validated before any board is retained.",
+    inputSchema: createBoardsInputSchema,
+    annotations: createAnnotations
+  }, async (input) => response(await service.createBoards(input), "多画布已批量创建。"));
+
+  server.registerTool("prototype_update_board", {
+    title: "Update Prototype Studio Board",
+    description: "Rename a board, update its description, or make it the project default. Board names remain case-insensitively unique; board objects and links are unchanged.",
+    inputSchema: updateBoardInputSchema,
+    annotations: updateAnnotations
+  }, async (input) => response(await service.updateBoard(input), "画布信息已更新。"));
+
+  server.registerTool("prototype_delete_board", {
+    title: "Delete Prototype Studio Board",
+    description: "Move one board and its revision history to the recoverable board trash. Shared pages are retained and the final remaining board cannot be deleted.",
+    inputSchema: deleteBoardInputSchema,
+    annotations: destructiveAnnotations
+  }, async (input) => response(await service.deleteBoard(input), "画布已移入回收站。"));
 
   server.registerTool("prototype_apply_board_commands", {
     title: "Apply Prototype Studio Board Commands",
-    description: "Atomically apply 1-100 structured canvas commands (ADD/UPDATE/MOVE/DELETE_BOARD_OBJECT, ADD/UPDATE/DELETE_BOARD_LINK) through the shared board engine. All commands share one base revision, the resulting board must validate, and an auditable board Revision is appended.",
+    description: "Atomically apply 1-100 structured canvas commands to the specified board_id. Each board has an independent revision baseline and queue, preventing commands from crossing into another board.",
     inputSchema: applyBoardCommandsInputSchema,
     annotations: destructiveAnnotations
   }, async (input) => response(await service.applyBoardCommands(input), "画布命令已原子执行并生成 Revision。"));

@@ -20,14 +20,14 @@ const client = new Client({ name: "prototype-sidecar-smoke", version: "1.0.0" })
 try {
   await client.connect(transport);
   const listed = await client.listTools();
-  if (listed.tools.length !== 19) throw new Error(`Expected 19 tools, received ${listed.tools.length}`);
+  if (listed.tools.length !== 23) throw new Error(`Expected 23 tools, received ${listed.tools.length}`);
   const project = await client.callTool({ name: "prototype_get_project", arguments: {} });
   if (project.isError || project.structuredContent?.ok !== true) throw new Error(`prototype_get_project failed: ${JSON.stringify(project)}`);
-  const requirement = await client.callTool({ name: "prototype_get_requirement", arguments: { requirement_id: "REQ-001" } });
-  if (requirement.isError || requirement.structuredContent?.ok !== true) throw new Error("prototype_get_requirement failed");
-  const board = await client.callTool({ name: "prototype_get_board", arguments: {} });
+  const boards = await client.callTool({ name: "prototype_list_boards", arguments: {} });
+  if (boards.isError || boards.structuredContent?.ok !== true) throw new Error("prototype_list_boards failed");
+  const board = await client.callTool({ name: "prototype_get_board", arguments: { board_id: "main" } });
   if (board.isError || board.structuredContent?.ok !== true) throw new Error("prototype_get_board failed");
-  process.stdout.write(`MCP_SIDECAR_OK tools=${listed.tools.length} project=case-center-demo requirement=REQ-001 board=ok\n`);
+  process.stdout.write(`MCP_SIDECAR_OK tools=${listed.tools.length} project=case-center-demo boards=ok\n`);
 } finally {
   await client.close();
 }

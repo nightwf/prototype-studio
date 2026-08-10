@@ -25,7 +25,7 @@ describe("validateDSL", () => {
 
 describe("validateBoard with open object types", () => {
   it("accepts known types and warns on unknown types instead of failing", () => {
-    const base = { dslVersion: "1.0", id: "board", revision: 1, links: [] };
+    const base = { dslVersion: "1.0", id: "board", name: "测试画布", createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", revision: 1, links: [] };
     expect(validateBoard({ ...base, objects: [{ id: "n", type: "note", x: 0, y: 0, width: 100, height: 50, text: "说明" }] })).toMatchObject({ valid: true, errors: [] });
 
     const unknown = validateBoard({ ...base, objects: [{ id: "c", type: "chart", x: 0, y: 0, width: 100, height: 50 }] });
@@ -42,6 +42,9 @@ describe("validateBoard with open object types", () => {
     const valid = validateBoard({
       dslVersion: "1.0",
       id: "board",
+      name: "测试画布",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       revision: 1,
       objects: [{ id: "c", type: "chart", x: 0, y: 0, width: 100, height: 50, data: {} }],
       links: []
@@ -50,6 +53,9 @@ describe("validateBoard with open object types", () => {
     const invalid = validateBoard({
       dslVersion: "1.0",
       id: "board",
+      name: "测试画布",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       revision: 1,
       objects: [{ id: "c", type: "chart", x: 0, y: 0, width: 100, height: 50 }],
       links: []
@@ -62,6 +68,9 @@ describe("validateBoard with open object types", () => {
     const result = validateBoard({
       dslVersion: "1.0",
       id: "board",
+      name: "测试画布",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
       revision: 1,
       objects: [
         { id: "a", type: "note", x: 0, y: 0, width: 100, height: 50, text: "A" },

@@ -10,7 +10,7 @@ import type { MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { hashPassword, newToken, verifyPassword } from "./auth";
 import { ProjectSpaceManager, SpaceError } from "./spaces";
-import { renderBoardHtml } from "./export";
+import { renderBoardHtml, renderBoardsHtml } from "./export";
 import { handleCloudMcpRequest } from "./mcp/http";
 import { buildCloudMcpServer } from "./mcp/server";
 
@@ -35,8 +35,8 @@ function toHttpError(error: unknown): { status: number; code: string; message: s
   }
   if (error instanceof Error && "code" in error) {
     const code = String((error as { code: unknown }).code);
-    const status = code === "REVISION_CONFLICT" || code === "PAGE_EXISTS" ? 409
-      : code === "PAGE_NOT_FOUND" || code === "TARGET_NOT_FOUND" || code === "REVISION_NOT_FOUND" ? 404
+    const status = code === "REVISION_CONFLICT" || code === "PAGE_EXISTS" || code === "BOARD_EXISTS" || code === "LAST_BOARD" ? 409
+      : code === "PAGE_NOT_FOUND" || code === "BOARD_NOT_FOUND" || code === "TARGET_NOT_FOUND" || code === "REVISION_NOT_FOUND" ? 404
       : code === "INVALID_COMMAND" || code === "CONTAINER_NOT_FOUND" ? 400
       : code === "INVALID_DSL_FILE" || code === "DSL_VALIDATION_FAILED" || code === "BOARD_VALIDATION_FAILED" ? 422
       : 500;
@@ -87,6 +87,18 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   function projectIdOf(params: unknown): string {
     const id = (params as { projectId?: string }).projectId ?? "";
     if (!projectIdPattern.test(id)) throw new SpaceError("INVALID_INPUT", "项目 ID 无效。");
+    return id;
+  }
+
+  function boardIdOf(params: unknown): string {
+    const id = (params as { boardId?: string }).boardId ?? "";
+    if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(id)) throw new SpaceError("INVALID_INPUT", "画布 ID 无效。");
+    return id;
+  }
+
+  function trashIdOf(params: unknown): string {
+    const id = (params as { trashId?: string }).trashId ?? "";
+    if (!/^[A-Za-z0-9._-]+$/.test(id)) throw new SpaceError("INVALID_INPUT", "回收站记录 ID 无效。");
     return id;
   }
 
@@ -268,6 +280,95 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return { ok: true, board: await options.spaces.getBoard(user.id, projectIdOf(request.params)) };
   });
 
+  app.get("/api/projects/:projectId/boards", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, boards: await options.spaces.listBoards(user.id, projectIdOf(request.params)) };
+  });
+
+  app.post("/api/projects/:projectId/boards", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { name?: string; description?: string; page_ids?: string[]; board_id?: string };
+    if (!body.name?.trim() || (body.page_ids !== undefined && !Array.isArray(body.page_ids))) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "name 必填，page_ids 必须是数组。" });
+      return;
+    }
+    const board = await options.spaces.createBoard(user.id, projectIdOf(request.params), {
+      name: body.name.trim(),
+      description: body.description,
+      pageIds: body.page_ids,
+      boardId: body.board_id
+    });
+    reply.code(201).send({ ok: true, board });
+  });
+
+  app.post("/api/projects/:projectId/boards/batch", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { boards?: Array<{ name?: string; description?: string; page_ids?: string[]; board_id?: string }> };
+    if (!Array.isArray(body.boards) || !body.boards.length || body.boards.some((board) => !board.name?.trim())) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "boards 必须是包含有效名称的非空数组。" });
+      return;
+    }
+    const boards = await options.spaces.createBoards(user.id, projectIdOf(request.params), body.boards.map((board) => ({
+      name: board.name!.trim(),
+      description: board.description,
+      pageIds: board.page_ids,
+      boardId: board.board_id
+    })));
+    reply.code(201).send({ ok: true, boards });
+  });
+
+  app.get("/api/projects/:projectId/boards/trash", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, boards: await options.spaces.listTrashedBoards(user.id, projectIdOf(request.params)) };
+  });
+
+  app.post("/api/projects/:projectId/boards/trash/:trashId/restore", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const board = await options.spaces.restoreBoard(user.id, projectIdOf(request.params), trashIdOf(request.params));
+    return { ok: true, board };
+  });
+
+  app.get("/api/projects/:projectId/boards/:boardId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, board: await options.spaces.getBoard(user.id, projectIdOf(request.params), boardIdOf(request.params)) };
+  });
+
+  app.patch("/api/projects/:projectId/boards/:boardId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { name?: string; description?: string; is_default?: boolean };
+    if (body.name !== undefined && !body.name.trim()) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "画布名称不能为空。" });
+      return;
+    }
+    const board = await options.spaces.updateBoard(user.id, projectIdOf(request.params), boardIdOf(request.params), {
+      name: body.name,
+      description: body.description,
+      isDefault: body.is_default
+    });
+    return { ok: true, board };
+  });
+
+  app.delete("/api/projects/:projectId/boards/:boardId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, ...(await options.spaces.deleteBoard(user.id, projectIdOf(request.params), boardIdOf(request.params))) };
+  });
+
+  app.post("/api/projects/:projectId/boards/:boardId/commands", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { base_revision?: number; commands?: BoardCommand[]; source?: RevisionSource; operator?: string };
+    if (typeof body.base_revision !== "number" || !Array.isArray(body.commands)) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "base_revision 与 commands 为必填。" });
+      return;
+    }
+    const result = await options.spaces.applyBoardCommands(user.id, projectIdOf(request.params), boardIdOf(request.params), {
+      baseRevision: body.base_revision,
+      commands: body.commands,
+      source: body.source ?? "api",
+      operator: body.operator ?? user.name
+    });
+    return { ok: true, revision: result.revision.revision, changed_object_ids: result.revision.changedObjectIds };
+  });
+
   app.post("/api/projects/:projectId/board-commands", async (request, reply) => {
     const user = await requireUser(request, reply);
     const body = request.body as { base_revision?: number; commands?: BoardCommand[]; source?: RevisionSource; operator?: string };
@@ -275,7 +376,8 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "base_revision 与 commands 为必填。" });
       return;
     }
-    const result = await options.spaces.applyBoardCommands(user.id, projectIdOf(request.params), {
+    const defaultBoard = await options.spaces.getBoard(user.id, projectIdOf(request.params));
+    const result = await options.spaces.applyBoardCommands(user.id, projectIdOf(request.params), defaultBoard.id, {
       baseRevision: body.base_revision,
       commands: body.commands,
       source: body.source ?? "api",
@@ -289,16 +391,10 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return { ok: true, revisions: await options.spaces.revisions(user.id, projectIdOf(request.params)) };
   });
 
-  app.get("/api/projects/:projectId/requirements/:file", async (request, reply) => {
-    const user = await requireUser(request, reply);
-    const params = request.params as { file?: string };
-    return { ok: true, ...(await options.spaces.requirements(user.id, projectIdOf(request.params), params.file ?? "")) };
-  });
-
   app.post("/api/projects/:projectId/export", async (request, reply) => {
     const user = await requireUser(request, reply);
     const projectId = projectIdOf(request.params);
-    const body = request.body as { type?: string; mode?: string };
+    const body = request.body as { type?: string; mode?: string; scope?: string; board_id?: string };
     if (body.type === "product-package") {
       return { ok: true, package: await options.spaces.productPackage(user.id, projectId) };
     }
@@ -309,7 +405,20 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
         pages[summary.id] = await options.spaces.getPageDsl(user.id, projectId, summary.id);
       }
       const mode = body.mode === "with-annotations" ? "with-annotations" : "content";
-      const html = await renderBoardHtml(tree.board, pages, tree.manifest.name, { mode });
+      const html = body.scope === "all"
+        ? await renderBoardsHtml(
+          await Promise.all(tree.boards.map((board) => options.spaces.getBoard(user.id, projectId, board.id))),
+          pages,
+          tree.manifest.name,
+          tree.manifest.defaultBoardId ?? tree.board.id,
+          { mode }
+        )
+        : await renderBoardHtml(
+          body.board_id ? await options.spaces.getBoard(user.id, projectId, body.board_id) : tree.board,
+          pages,
+          tree.manifest.name,
+          { mode }
+        );
       return { ok: true, html };
     }
     if (body.type === "zip") {

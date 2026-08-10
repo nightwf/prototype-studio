@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -44,7 +44,7 @@ async function registerAndLogin(app: Awaited<ReturnType<typeof testApp>>["app"],
 
 describe("web server project spaces", () => {
   it("registers, logs in, creates a project and exercises the space API", async () => {
-    const { app, root } = await testApp();
+    const { app } = await testApp();
     const { cookie } = await registerAndLogin(app, "张三", "zhang@example.com");
     const auth = { cookie };
 
@@ -99,11 +99,14 @@ describe("web server project spaces", () => {
     expect(revisions.statusCode).toBe(200);
     expect(revisions.json().revisions.length).toBeGreaterThanOrEqual(2);
 
-    const spaceDir = join(root, "spaces", projectId);
-    await writeFile(join(spaceDir, "requirements", "REQ-001.md"), "# 案件批量分配\n\n最多选择 500 条。", "utf8");
-    const requirement = await app.inject({ method: "GET", url: `/api/projects/${projectId}/requirements/REQ-001.md`, headers: auth });
-    expect(requirement.statusCode).toBe(200);
-    expect(requirement.json().content).toContain("500");
+    const createdBoard = await app.inject({ method: "POST", url: `/api/projects/${projectId}/boards`, payload: { name: "对账画布", page_ids: ["case-list"] }, headers: auth });
+    expect(createdBoard.statusCode).toBe(201);
+    expect(createdBoard.json().board.objects).toHaveLength(1);
+    const boardId = createdBoard.json().board.id as string;
+    const boardList = await app.inject({ method: "GET", url: `/api/projects/${projectId}/boards`, headers: auth });
+    expect(boardList.json().boards).toHaveLength(2);
+    const boardRead = await app.inject({ method: "GET", url: `/api/projects/${projectId}/boards/${boardId}`, headers: auth });
+    expect(boardRead.json().board.name).toBe("对账画布");
 
     const exported = await app.inject({ method: "POST", url: `/api/projects/${projectId}/export`, payload: { type: "html" }, headers: auth });
     expect(exported.statusCode).toBe(200);
@@ -111,11 +114,30 @@ describe("web server project spaces", () => {
     expect(exported.json().html).toContain("data-board-marker");
     expect(exported.json().html).toContain("html,body{margin:0;background:#e6eaed");
 
+    const allBoardsExport = await app.inject({
+      method: "POST",
+      url: `/api/projects/${projectId}/export`,
+      payload: { type: "html", scope: "all" },
+      headers: auth
+    });
+    expect(allBoardsExport.statusCode).toBe(200);
+    expect(allBoardsExport.json().html).toContain("data-board-tab");
+    expect(allBoardsExport.json().html).toContain("主画布");
+    expect(allBoardsExport.json().html).toContain("对账画布");
+
     const zip = await app.inject({ method: "POST", url: `/api/projects/${projectId}/export`, payload: { type: "zip" }, headers: auth });
     if (zip.statusCode !== 200) throw new Error(`zip 导出失败：${zip.statusCode} ${zip.body}`);
     expect(zip.statusCode).toBe(200);
     const zipBuffer = Buffer.from(zip.json().zip as string, "base64");
     expect(zipBuffer.subarray(0, 2).toString()).toBe("PK");
+
+    expect((await app.inject({ method: "DELETE", url: `/api/projects/${projectId}/boards/${boardId}`, headers: auth })).statusCode).toBe(200);
+    const trash = await app.inject({ method: "GET", url: `/api/projects/${projectId}/boards/trash`, headers: auth });
+    expect(trash.statusCode).toBe(200);
+    const trashId = trash.json().boards[0].trashId as string;
+    const restored = await app.inject({ method: "POST", url: `/api/projects/${projectId}/boards/trash/${trashId}/restore`, headers: auth });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().board).toMatchObject({ id: boardId, name: "对账画布" });
   });
 
   it("isolates projects between users and rejects path traversal", async () => {
@@ -128,7 +150,7 @@ describe("web server project spaces", () => {
     const forbidden = await app.inject({ method: "GET", url: `/api/projects/${projectId}/tree`, headers: { cookie: bob.cookie } });
     expect(forbidden.statusCode).toBe(403);
 
-    const traversal = await app.inject({ method: "GET", url: `/api/projects/${projectId}/requirements/..%2Fproject.yaml`, headers: { cookie: alice.cookie } });
+    const traversal = await app.inject({ method: "GET", url: `/api/projects/${projectId}/boards/..%2Fproject`, headers: { cookie: alice.cookie } });
     expect([400, 404]).toContain(traversal.statusCode);
 
     const conflict = await app.inject({

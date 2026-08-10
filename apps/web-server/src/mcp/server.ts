@@ -7,7 +7,14 @@ import { CloudMcpService, McpUnauthorizedError } from "./service";
 
 const projectId = z.string().min(1).describe("项目 ID（来自 prototype_list_projects）");
 const pageId = z.string().min(1).describe("页面的稳定 pageId");
+const boardId = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/).describe("画布 ID（来自 prototype_list_boards）");
 const operator = z.string().default("codex").describe("执行者名称，写入审计");
+const boardDraft = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
+  page_ids: z.array(pageId).max(200).default([]),
+  board_id: boardId.optional()
+}).strict();
 
 export interface BuildCloudMcpOptions {
   metadata: MetadataStore;
@@ -59,23 +66,6 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     return { project_id: row.id, name: row.name, preview_url: service.previewUrl(row.id) };
   }));
 
-  server.registerTool("prototype_create_project_from_requirement", {
-    title: "Create Prototype Studio Project From Requirement",
-    description: "Parse a structured requirement template, generate pages and the canvas, and return the project link.",
-    inputSchema: z.object({
-      name: z.string().optional(),
-      requirement: z.string().min(1).describe("结构化页面模板 YAML/JSON")
-    }).strict()
-  }, async (input) => respond(async (userId) => {
-    const result = await service.createProjectFromRequirement(userId, input.name ?? "", input.requirement);
-    return {
-      project_id: result.project.id,
-      name: result.project.name,
-      pages: result.pages,
-      preview_url: service.previewUrl(result.project.id)
-    };
-  }));
-
   server.registerTool("prototype_get_project", {
     title: "Get Prototype Studio Project",
     description: "Read project metadata and page list.",
@@ -109,17 +99,56 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     inputSchema: z.object({ project_id: projectId, page_id: pageId, component_id: z.string().min(1) }).strict()
   }, async (input) => respond(async (userId) => service.getComponent(userId, input.project_id, input.page_id, input.component_id)));
 
-  server.registerTool("prototype_get_requirement", {
-    title: "Get Prototype Studio Requirement",
-    description: "Read a requirement asset by id (REQ-001) or file name.",
-    inputSchema: z.object({ project_id: projectId, requirement_id: z.string().min(1) }).strict()
-  }, async (input) => respond(async (userId) => service.getRequirement(userId, input.project_id, input.requirement_id)));
+
+  server.registerTool("prototype_list_boards", {
+    title: "List Prototype Studio Boards",
+    description: "List all independent boards in a project, including the default flag, counts and revision. Use this first to select the correct board_id.",
+    inputSchema: z.object({ project_id: projectId }).strict()
+  }, async (input) => respond(async (userId) => ({ boards: await service.listBoards(userId, input.project_id) })));
 
   server.registerTool("prototype_get_board", {
     title: "Get Prototype Studio Board",
-    description: "Read the canvas (board.yaml) with all objects and links.",
-    inputSchema: z.object({ project_id: projectId }).strict()
-  }, async (input) => respond(async (userId) => ({ board: await service.getBoard(userId, input.project_id) })));
+    description: "Read one board and its independent revision by board_id.",
+    inputSchema: z.object({ project_id: projectId, board_id: boardId }).strict()
+  }, async (input) => respond(async (userId) => ({ board: await service.getBoard(userId, input.project_id, input.board_id) })));
+
+  server.registerTool("prototype_create_board", {
+    title: "Create Prototype Studio Board",
+    description: "Create one board after user approval, optionally laying out existing shared pages in two columns.",
+    inputSchema: z.object({ project_id: projectId, board: boardDraft }).strict()
+  }, async (input) => respond(async (userId) => ({ board: await service.createBoard(userId, input.project_id, {
+    name: input.board.name,
+    description: input.board.description,
+    pageIds: input.board.page_ids,
+    boardId: input.board.board_id
+  }) })));
+
+  server.registerTool("prototype_create_boards", {
+    title: "Create Prototype Studio Boards",
+    description: "Atomically create a confirmed requirement-to-board split. Before calling, show the user every board name, scope, page list and shared pages and wait for confirmation.",
+    inputSchema: z.object({ project_id: projectId, boards: z.array(boardDraft).min(1).max(50) }).strict()
+  }, async (input) => respond(async (userId) => ({ boards: await service.createBoards(userId, input.project_id, input.boards.map((board) => ({
+    name: board.name,
+    description: board.description,
+    pageIds: board.page_ids,
+    boardId: board.board_id
+  }))) })));
+
+  server.registerTool("prototype_update_board", {
+    title: "Update Prototype Studio Board",
+    description: "Rename a board, update its description or make it the default board.",
+    inputSchema: z.object({ project_id: projectId, board_id: boardId, name: z.string().trim().min(1).optional(), description: z.string().trim().max(1000).optional(), is_default: z.boolean().optional() }).strict()
+  }, async (input) => respond(async (userId) => ({ board: await service.updateBoard(userId, input.project_id, input.board_id, {
+    name: input.name,
+    description: input.description,
+    isDefault: input.is_default
+  }) })));
+
+  server.registerTool("prototype_delete_board", {
+    title: "Delete Prototype Studio Board",
+    description: "Move a board and its revisions to recoverable trash. Shared pages remain and the last board cannot be deleted.",
+    inputSchema: z.object({ project_id: projectId, board_id: boardId }).strict()
+  }, async (input) => respond(async (userId) => ({ ...(await service.deleteBoard(userId, input.project_id, input.board_id)), recoverable: true })));
 
   server.registerTool("prototype_create_page", {
     title: "Create Prototype Studio Page",
@@ -150,11 +179,12 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     description: "Atomically apply canvas commands through the shared board engine.",
     inputSchema: z.object({
       project_id: projectId,
+      board_id: boardId,
       base_revision: z.number().int(),
       commands: z.array(z.record(z.any())),
       operator
     }).strict()
-  }, async (input) => respond(async (userId) => service.applyBoardCommands(userId, input.project_id, input.base_revision, input.commands as unknown as BoardCommand[], "mcp", input.operator)));
+  }, async (input) => respond(async (userId) => service.applyBoardCommands(userId, input.project_id, input.board_id, input.base_revision, input.commands as unknown as BoardCommand[], "mcp", input.operator)));
 
   server.registerTool("prototype_validate_dsl", {
     title: "Validate Prototype Studio DSL",

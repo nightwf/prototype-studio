@@ -25,7 +25,7 @@ export function clearApiToken(): void {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  headers.set("content-type", "application/json");
+  if (init.body !== undefined) headers.set("content-type", "application/json");
   if (apiToken) headers.set("authorization", `Bearer ${apiToken}`);
   const response = await fetch(`${apiBase}${path}`, { ...init, headers, credentials: "include" });
   if (!response.ok) {
@@ -51,6 +51,26 @@ export interface WebProject {
   status: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BoardSummary {
+  id: string;
+  name: string;
+  description?: string;
+  revision: number;
+  pageCount: number;
+  objectCount: number;
+  createdAt: string;
+  updatedAt: string;
+  isDefault: boolean;
+}
+
+export interface TrashedBoardSummary {
+  trashId: string;
+  boardId: string;
+  name: string;
+  description?: string;
+  deletedAt: string;
 }
 
 export const webAuth = {
@@ -97,7 +117,7 @@ export const webProjects = {
 
 export const webSpace = {
   tree(projectId: string) {
-    return request<{ ok: true; manifest: { name: string }; pages: Array<{ id: string; title: string }>; board: BoardDSL }>(`/api/projects/${projectId}/tree`);
+    return request<{ ok: true; manifest: { name: string; defaultBoardId?: string }; pages: Array<{ id: string; title: string }>; boards: BoardSummary[]; board: BoardDSL }>(`/api/projects/${projectId}/tree`);
   },
   getPage(projectId: string, pageId: string) {
     return request<{ ok: true; dsl: PageDSL }>(`/api/projects/${projectId}/pages/${encodeURIComponent(pageId)}`);
@@ -123,11 +143,35 @@ export const webSpace = {
       body: JSON.stringify({ page_id: pageId, base_revision: baseRevision, commands, source, operator })
     });
   },
-  board(projectId: string) {
-    return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/board`);
+  boards(projectId: string) {
+    return request<{ ok: true; boards: BoardSummary[] }>(`/api/projects/${projectId}/boards`);
   },
-  boardCommands(projectId: string, baseRevision: number, commands: BoardCommand[], source: RevisionSource, operator: string) {
-    return request<{ ok: true; revision: number }>(`/api/projects/${projectId}/board-commands`, {
+  trashedBoards(projectId: string) {
+    return request<{ ok: true; boards: TrashedBoardSummary[] }>(`/api/projects/${projectId}/boards/trash`);
+  },
+  board(projectId: string, boardId: string) {
+    return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}`);
+  },
+  createBoard(projectId: string, input: { name: string; description?: string; pageIds?: string[] }) {
+    return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/boards`, {
+      method: "POST",
+      body: JSON.stringify({ name: input.name, description: input.description, page_ids: input.pageIds })
+    });
+  },
+  updateBoard(projectId: string, boardId: string, input: { name?: string; description?: string; isDefault?: boolean }) {
+    return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name: input.name, description: input.description, is_default: input.isDefault })
+    });
+  },
+  deleteBoard(projectId: string, boardId: string) {
+    return request<{ ok: true; deletedBoardId: string; defaultBoardId: string }>(`/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}`, { method: "DELETE" });
+  },
+  restoreBoard(projectId: string, trashId: string) {
+    return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/boards/trash/${encodeURIComponent(trashId)}/restore`, { method: "POST" });
+  },
+  boardCommands(projectId: string, boardId: string, baseRevision: number, commands: BoardCommand[], source: RevisionSource, operator: string) {
+    return request<{ ok: true; revision: number }>(`/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}/commands`, {
       method: "POST",
       body: JSON.stringify({ base_revision: baseRevision, commands, source, operator })
     });
@@ -135,10 +179,10 @@ export const webSpace = {
   revisions(projectId: string) {
     return request<{ ok: true; revisions: Array<{ object: string; revision: number }> }>(`/api/projects/${projectId}/revisions`);
   },
-  exportHtml(projectId: string, mode: "content" | "with-annotations" = "content") {
+  exportHtml(projectId: string, mode: "content" | "with-annotations" = "content", scope: "current" | "all" = "current", boardId?: string) {
     return request<{ ok: true; html: string }>(`/api/projects/${projectId}/export`, {
       method: "POST",
-      body: JSON.stringify({ type: "html", mode })
+      body: JSON.stringify({ type: "html", mode, scope, board_id: boardId })
     });
   },
   exportZip(projectId: string) {

@@ -104,7 +104,7 @@ function boardIssue(code: ValidationErrorCode, message: string, path: string): D
   return { code, message, path };
 }
 
-/** Structural validation for the canvas (board.yaml), independent of page content. */
+/** Structural validation for one boards/{boardId}.board.yaml file, independent of page content. */
 export function validateBoard(value: unknown): BoardValidationResult {
   const errors: DSLValidationIssue[] = [];
   const warnings: DSLValidationIssue[] = [];
@@ -112,6 +112,18 @@ export function validateBoard(value: unknown): BoardValidationResult {
     return { valid: false, errors: [boardIssue("SCHEMA_INVALID", "画布必须是对象。", "$")], warnings };
   }
   const board = value as unknown as BoardDSL;
+  if (typeof board.id !== "string" || !board.id.trim()) {
+    errors.push(boardIssue("SCHEMA_INVALID", "画布 id 不能为空。", "$.id"));
+  }
+  if (typeof board.name !== "string" || !board.name.trim()) {
+    errors.push(boardIssue("SCHEMA_INVALID", "画布名称不能为空。", "$.name"));
+  }
+  if (typeof board.createdAt !== "string" || !board.createdAt) {
+    errors.push(boardIssue("SCHEMA_INVALID", "画布缺少 createdAt。", "$.createdAt"));
+  }
+  if (typeof board.updatedAt !== "string" || !board.updatedAt) {
+    errors.push(boardIssue("SCHEMA_INVALID", "画布缺少 updatedAt。", "$.updatedAt"));
+  }
   if (typeof board.revision !== "number" || board.revision < 1) {
     errors.push(boardIssue("SCHEMA_INVALID", "画布 revision 必须为正整数。", "$.revision"));
   }

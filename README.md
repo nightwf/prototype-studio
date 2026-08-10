@@ -1,8 +1,8 @@
 # Prototype Studio
 
-Prototype Studio 是面向后台管理类 Web 系统的本地优先需求与原型工作台。需求、页面、交互和版本都保存在可读、可复制、可 Git 管理的项目目录中；UI DSL 是唯一事实源，React 页面只是确定性渲染结果。
+Prototype Studio 是面向后台管理类 Web 系统的多画布原型工作台。页面、画布、交互和版本都保存在可读、可复制、可 Git 管理的项目目录中；UI DSL 是唯一事实源，React 页面只是确定性渲染结果。
 
-> 当前阶段：Local-first MVP 持续实现中。DSL、Validator、Command/Revision、Project Store、Requirement Engine、Renderer、Preview Runtime 与 Studio 编辑闭环已经可运行；桌面与 MCP 集成在同一仓库内继续收口。
+> 当前阶段：多画布 v2 已实现。DSL、Validator、Command/Revision、Project Store、Renderer、Preview Runtime、Web API 与 MCP 共用同一套存储和版本规则。
 
 > **网页端**：本仓库是纯网页端版本（云托管、多项目空间、浏览器编辑、云端 MCP、只读分享、导出导入）。原桌面项目在 `prototype studio` 目录，保持可构建、随时可用。
 
@@ -28,7 +28,9 @@ VITE_WEB_API=http://127.0.0.1:8787 pnpm --filter @prototype-studio/studio dev
 - 每次修改产生 Revision；查看 DSL Diff，并用追加式 Revision 撤销/重做。
 - 在 Preview 中运行查询、重置、表格多选、Modal/Drawer、必填校验和提交反馈。
 - 创建、打开和迁移本地项目；YAML 页面文件、历史与审计均可独立恢复。
-- 接收 Codex 整理后的结构化页面模板（显式页面类型、查询字段、表格列、表单字段与校验规则）或规范需求文本，按声明确定性生成 DSL，并区分 Explicit、Inferred、Default。
+- 一个项目创建多个独立画布；页面作为项目级公共资产，可同时出现在多个画布中。
+- 从空白或已选页面创建画布，重命名、修改说明、设为默认并移入回收站。
+- 导出当前画布或带导航的全部画布 HTML，分享页可只读切换画布。
 
 ## 快速启动
 
@@ -60,7 +62,7 @@ python -m playwright install chromium
 ## 架构
 
 ```text
-Requirement / Studio / Codex / MCP
+Studio / Codex / MCP
                  │
                  ▼
             Command Engine
@@ -85,7 +87,6 @@ Requirement / Studio / Codex / MCP
 - `packages/project-store`：项目目录、原子 YAML 写入、历史、审计、File Watcher 和 Product Package。
 - `packages/design-system`：语义 Token 与 Studio 基础控件。
 - `packages/renderer`：固定组件映射和交互式 Preview Runtime。
-- `packages/requirement-engine`：需求输入、Adapter、本地 fallback、Page Plan 与 DSL 生成。
 - `apps/studio`：Studio 编辑器与独立 Preview 页面。
 - `apps/mcp`：Local MCP Server。
 - `_archive/desktop`：早期 Tauri 桌面壳归档，不属于当前 workspace 构建。
@@ -96,18 +97,20 @@ Requirement / Studio / Codex / MCP
 
 ```text
 project.yaml
-requirements/
 pages/
+boards/
+  main.board.yaml
 data/
 flows/
 assets/
 .prototype/
-  revisions/
+  revisions/boards/{boardId}/
+  trash/boards/
   audit.jsonl
   cache/
 ```
 
-`.prototype/cache/` 只保存可重建缓存。删除缓存不会破坏项目；页面与需求文件始终足以在另一台电脑重新打开项目。
+`project.yaml` 使用 `projectFormatVersion: 2` 和 `defaultBoardId`。`.prototype/cache/` 只保存可重建缓存，删除缓存不会破坏项目。
 
 ## MCP / Codex
 
@@ -137,7 +140,7 @@ Local MCP 使用 stdio，Project Root 通过环境变量显式传入。构建 MC
 
 - 当前目标只覆盖后台管理类 Web 原型，不是 Figma、自由画布或生产代码生成器。
 - Local-first 版本提供本机 Preview 与可迁移 Product Package，不伪造公网 `AnyoneWithLink`。
-- DOCX、PDF、OCR 等原始文档处理由 Codex 负责；Studio 消费其整理后的结构化页面模板或 Requirement Model，不内置重复的文档解析链路。
+- DOCX、PDF、OCR 等文档只在 Codex 对话中读取。Codex 先展示画布拆分方案，用户确认后再通过 MCP 创建或复用公共页面并批量创建画布；Studio 不保存或解析文档。
 - Studio 内部复杂 AI 命令通过 Adapter 预留，V1 推荐外部 Codex + Local MCP。
 - DSL 权限只表达产品规格，不替代生产系统的后端鉴权。
 

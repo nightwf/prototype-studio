@@ -1,5 +1,10 @@
 dslVersion: "1.0"
-id: case-center-demo-board
+id: main
+projectId: case-center-demo
+name: 主画布
+description: 案件中台示例画布
+createdAt: "2026-08-07T00:00:00.000Z"
+updatedAt: "2026-08-07T00:00:00.000Z"
 revision: 1
 objects:
   - id: obj-case-list

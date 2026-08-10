@@ -7,6 +7,9 @@ import { BoardRenderer } from "./index";
 const board: BoardDSL = {
   dslVersion: DSL_VERSION,
   id: "board-test",
+  name: "测试画布",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
   revision: 1,
   objects: [
     { id: "obj-home", type: "page", pageId: "case-list", x: 120, y: 80, width: 960, height: 640, source: "default" },

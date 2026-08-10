@@ -22,7 +22,6 @@
     "@prototype-studio/dsl-validator": "workspace:^",
     "@prototype-studio/project-store": "workspace:^",
     "@prototype-studio/renderer": "workspace:^",
-    "@prototype-studio/requirement-engine": "workspace:^",
     "archiver": "^8.0.0",
     "fastify": "^5.11.3",
     "pg": "^8.23.0",

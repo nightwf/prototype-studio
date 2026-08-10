@@ -1,30 +1,39 @@
 import path from "node:path";
-import { readFile, stat } from "node:fs/promises";
 import type { BoardCommand, Command, PageDSL, UIComponent } from "@prototype-studio/dsl-schema";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ProjectStoreError,
   executeBoardCommands,
+  createBoard,
+  createBoards,
+  deleteBoard,
   createPage,
   deletePage,
   executeProjectCommands,
   getPage,
   listPages,
+  listBoards,
   openProject,
-  readBoard
+  readBoard,
+  updateBoard
 } from "@prototype-studio/project-store";
 import type {
   ApplyBoardCommandsInput,
+  BoardInput,
   ApplyCommandsInput,
   ComponentInput,
+  CreateBoardInput,
+  CreateBoardsInput,
   CreateOverlayInput,
   CreatePageInput,
   DeletePageInput,
   DeleteComponentInput,
+  DeleteBoardInput,
   ListPagesInput,
   MoveComponentInput,
   PageInput,
-  RequirementInput,
+  ListBoardsInput,
+  UpdateBoardInput,
   UpdateComponentInput,
   UpdateOverlayInput,
   ValidateDslInput
@@ -71,7 +80,9 @@ function safeFailure(error: unknown): ToolFailure {
       INVALID_PROJECT: "修复 project.yaml 或页面 ID 后重试。",
       PAGE_NOT_FOUND: "先调用 prototype_list_pages 取得有效 page_id。",
       PAGE_EXISTS: "改用新 page_id，或读取现有页面后通过 Command 修改。",
-      REQUIREMENT_NOT_FOUND: "检查 requirements/ 中的 REQ ID 或安全文件名后重试。",
+      BOARD_NOT_FOUND: "先调用 prototype_list_boards 取得有效 board_id。",
+      BOARD_EXISTS: "使用项目内唯一的画布名称和 board_id。",
+      LAST_BOARD: "项目至少要保留一个画布；请先创建其他画布。",
       PATH_OUTSIDE_PROJECT: "只能访问当前 Project Root 中的文件。",
       INVALID_DSL_FILE: "调用 prototype_validate_dsl 定位错误，修正后再写入。",
       REVISION_NOT_FOUND: "重新读取页面与当前 Revision 后重试。",
@@ -203,40 +214,26 @@ export class PrototypeService {
     return run(async () => ({ dsl: await getPage(this.projectRoot, input.page_id) }));
   }
 
-  getRequirement(input: RequirementInput): Promise<ToolOutcome<unknown>> {
+  listBoards(input: ListBoardsInput): Promise<ToolOutcome<unknown>> {
     return run(async () => {
-      await openProject(this.projectRoot);
-      const requirementsRoot = path.resolve(this.projectRoot, "requirements");
-      const candidates = input.requirement_id.includes(".")
-        ? [input.requirement_id]
-        : [`${input.requirement_id}.md`, `${input.requirement_id}.txt`, `${input.requirement_id}.requirement.json`];
-      let resolvedFile: string | undefined;
-      for (const candidate of candidates) {
-        const candidatePath = path.resolve(requirementsRoot, candidate);
-        if (!candidatePath.startsWith(`${requirementsRoot}${path.sep}`)) continue;
-        try { if ((await stat(candidatePath)).isFile()) { resolvedFile = candidatePath; break; } } catch { /* try next supported extension */ }
-      }
-      if (!resolvedFile) {
-        const error = new Error(`找不到需求“${input.requirement_id}”。`) as Error & { code: string };
-        error.code = "REQUIREMENT_NOT_FOUND";
-        throw error;
-      }
-      const raw = await readFile(resolvedFile, "utf8");
-      const limit = 25_000;
+      const allBoards = await listBoards(this.projectRoot);
+      const boards = allBoards.slice(input.offset, input.offset + input.limit);
+      const nextOffset = input.offset + boards.length;
       return {
-        requirement_id: input.requirement_id,
-        file: path.relative(this.projectRoot, resolvedFile),
-        content: raw.slice(0, limit),
-        truncated: raw.length > limit,
-        ...(raw.length > limit ? { truncation_message: `需求超过 ${limit} 字符，返回内容已截断。请直接读取本地文件获取完整内容。` } : {})
+        total_count: allBoards.length,
+        count: boards.length,
+        offset: input.offset,
+        limit: input.limit,
+        boards,
+        has_more: nextOffset < allBoards.length,
+        ...(nextOffset < allBoards.length ? { next_offset: nextOffset } : {})
       };
     });
   }
 
-  getBoard(): Promise<ToolOutcome<unknown>> {
+  getBoard(input: BoardInput): Promise<ToolOutcome<unknown>> {
     return run(async () => {
-      await openProject(this.projectRoot);
-      const board = await readBoard(this.projectRoot);
+      const board = await readBoard(this.projectRoot, input.board_id);
       return {
         board,
         object_count: board.objects.length,
@@ -248,19 +245,50 @@ export class PrototypeService {
 
   applyBoardCommands(input: ApplyBoardCommandsInput): Promise<ToolOutcome<unknown>> {
     return run(async () => {
-      const result = await executeBoardCommands(this.projectRoot, {
+      const result = await executeBoardCommands(this.projectRoot, input.board_id, {
         baseRevision: input.base_revision,
         commands: input.commands as BoardCommand[],
         source: "mcp",
         operator: input.operator
       });
       return {
+        board_id: input.board_id,
         revision: result.revision.revision,
         changed_object_ids: result.revision.changedObjectIds,
         object_count: result.board.objects.length,
         link_count: result.board.links.length
       };
     });
+  }
+
+  createBoard(input: CreateBoardInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => ({ board: await createBoard(this.projectRoot, {
+      name: input.name,
+      description: input.description,
+      pageIds: input.page_ids,
+      boardId: input.board_id
+    }) }));
+  }
+
+  createBoards(input: CreateBoardsInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => ({ boards: await createBoards(this.projectRoot, input.boards.map((board) => ({
+      name: board.name,
+      description: board.description,
+      pageIds: board.page_ids,
+      boardId: board.board_id
+    }))) }));
+  }
+
+  updateBoard(input: UpdateBoardInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => ({ board: await updateBoard(this.projectRoot, input.board_id, {
+      name: input.name,
+      description: input.description,
+      isDefault: input.is_default
+    }) }));
+  }
+
+  deleteBoard(input: DeleteBoardInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => ({ ...(await deleteBoard(this.projectRoot, input.board_id)), recoverable: true }));
   }
 
   createPage(input: CreatePageInput): Promise<ToolOutcome<unknown>> {

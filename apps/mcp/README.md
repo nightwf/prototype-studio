@@ -32,9 +32,13 @@ env = { PROTOTYPE_STUDIO_PROJECT_ROOT = "/absolute/path/to/project", PROTOTYPE_S
 | `prototype_get_page` | 读取页面摘要与当前 revision |
 | `prototype_get_component` | 读取组件、DSL path 和父节点 |
 | `prototype_get_dsl` | 读取完整页面 DSL |
-| `prototype_get_requirement` | 读取 Markdown/TXT/结构化需求资产，超长内容安全截断 |
-| `prototype_get_board` | 读取画布（board.yaml）：全部画布对象、连线与当前 revision |
-| `prototype_apply_board_commands` | 原子执行画布命令（对象增删改移、连线增删改），共享版本链并追加画布 Revision |
+| `prototype_list_boards` | 分页列出画布、对象/页面数量、Revision 与默认标识 |
+| `prototype_get_board` | 按 `board_id` 读取完整画布 |
+| `prototype_create_board` | 创建空白画布或从已有公共页面创建画布 |
+| `prototype_create_boards` | 用户确认拆分方案后，整体校验并批量创建画布 |
+| `prototype_update_board` | 重命名、修改说明或设为默认画布 |
+| `prototype_delete_board` | 把画布与 Revision 移入可恢复回收站 |
+| `prototype_apply_board_commands` | 按 `board_id` 原子执行画布命令并追加独立 Revision |
 | `prototype_create_page` | 校验并原子创建页面，不覆盖已有页面 |
 | `prototype_delete_page` | revision 检查后移动页面到可恢复回收目录 |
 | `prototype_update_component` | 通过 Command Engine 增量更新组件 |
@@ -54,6 +58,7 @@ env = { PROTOTYPE_STUDIO_PROJECT_ROOT = "/absolute/path/to/project", PROTOTYPE_S
 - 工具不接受文件路径，所有读写都被限制在配置的 Project Root。
 - 所有输入使用 strict Zod schema，未声明的顶层参数会被拒绝。
 - 写操作与 Studio 共用 Project Store、Command Engine 和 Validator。成功写入会进行 `base_revision` 冲突检查、原子写文件、追加 Revision 与审计。
+- 每个画布使用独立的 Revision 基线；处理多需求文档时，Codex 必须先展示拟建画布清单并获得用户确认，再调用批量创建工具。
 - 错误响应只返回稳定错误码、可执行建议与安全的校验详情，不返回堆栈或内部异常。
 - Preview 工具只声明本地可用性，不会伪造公网分享链接。
 

@@ -24,8 +24,11 @@ describe("createPrototypeStudioServer", () => {
       expect(names).toEqual([
         "prototype_apply_board_commands",
         "prototype_apply_commands",
+        "prototype_create_board",
+        "prototype_create_boards",
         "prototype_create_overlay",
         "prototype_create_page",
+        "prototype_delete_board",
         "prototype_delete_component",
         "prototype_delete_page",
         "prototype_get_board",
@@ -34,10 +37,11 @@ describe("createPrototypeStudioServer", () => {
         "prototype_get_page",
         "prototype_get_preview_url",
         "prototype_get_project",
-        "prototype_get_requirement",
+        "prototype_list_boards",
         "prototype_list_pages",
         "prototype_move_component",
         "prototype_render_preview",
+        "prototype_update_board",
         "prototype_update_component",
         "prototype_update_overlay",
         "prototype_validate_dsl"
@@ -57,12 +61,13 @@ describe("createPrototypeStudioServer", () => {
       expect(result.structuredContent).toMatchObject({ ok: true });
       expect(SERVER_NAME).toBe("prototype-studio-mcp-server");
 
-      const board = await client.callTool({ name: "prototype_get_board", arguments: {} });
+      const board = await client.callTool({ name: "prototype_get_board", arguments: { board_id: "main" } });
       expect(board.structuredContent).toMatchObject({ ok: true, data: { object_count: 0, revision: 1 } });
 
       const write = await client.callTool({
         name: "prototype_apply_board_commands",
         arguments: {
+          board_id: "main",
           base_revision: 1,
           commands: [
             { type: "ADD_BOARD_OBJECT", object: { id: "note-1", type: "note", x: 0, y: 0, width: 200, height: 80, text: "MCP 说明" } }

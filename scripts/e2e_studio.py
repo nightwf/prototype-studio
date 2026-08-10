@@ -3,7 +3,7 @@ from playwright.sync_api import sync_playwright, expect
 
 
 OUTPUT = Path(__file__).resolve().parents[1] / ".prototype" / "screenshots" / "studio-e2e.png"
-REQUIREMENT_OUTPUT = Path(__file__).resolve().parents[1] / ".prototype" / "screenshots" / "requirement-e2e.png"
+BOARD_OUTPUT = Path(__file__).resolve().parents[1] / ".prototype" / "screenshots" / "multi-board-e2e.png"
 
 
 with sync_playwright() as playwright:
@@ -25,7 +25,8 @@ with sync_playwright() as playwright:
     page.get_by_role("button", name="关闭设置").click()
 
     # Canvas view: page frame renders on the board, a note can be added and selected.
-    page.locator(".view-switcher").get_by_role("button", name="画布", exact=True).click()
+    page.get_by_role("button", name="画布", exact=True).click()
+    page.locator(".board-list-main").first.click()
     expect(page.locator('[data-board-object="obj-case-list"]')).to_be_visible(timeout=10000)
     page.get_by_role("button", name="说明", exact=True).click()
     note = page.locator('[data-board-object^="note-"]')
@@ -61,10 +62,12 @@ with sync_playwright() as playwright:
     # Standalone HTML export of the canvas.
     with page.expect_download() as download_info:
         page.get_by_role("button", name="导出 HTML", exact=True).click()
+        page.get_by_role("button", name="当前画布", exact=True).click()
     download = download_info.value
-    assert download.suggested_filename == "prototype-board.html"
+    assert download.suggested_filename.startswith("prototype-")
 
-    page.locator(".view-switcher").get_by_role("button", name="页面", exact=True).click()
+    page.get_by_role("button", name="页面", exact=True).click()
+    page.get_by_role("button", name="打开页面 案件管理").click()
 
     # Page management: create a legal detail page, switch both ways, rename it,
     # then delete it through the confirmed (recoverable in Desktop) flow.
@@ -120,15 +123,14 @@ with sync_playwright() as playwright:
 
     page.screenshot(path=str(OUTPUT), full_page=True)
 
-    page.get_by_role("button", name="需求").click()
-    expect(page.get_by_text("Requirement Model", exact=True)).to_be_visible()
-    page.get_by_role("button", name="生成 Page Plan").click()
-    expect(page.get_by_text("页面规划", exact=True)).to_be_visible()
-    expect(page.get_by_text("结构化 Requirement Model", exact=True)).to_be_visible()
-    page.get_by_role("button", name="确认并生成").click()
-    expect(page.get_by_role("button", name="已生成 DSL")).to_be_disabled()
-    expect(page.get_by_text("页面计划已确认", exact=True)).to_be_visible()
-    page.screenshot(path=str(REQUIREMENT_OUTPUT), full_page=True)
+    page.get_by_role("button", name="画布", exact=True).click()
+    page.get_by_title("新建画布").click()
+    page.get_by_label("画布名称").fill("回款对账")
+    page.locator(".board-page-picker label").filter(has_text="案件管理").locator("input").check()
+    page.get_by_role("button", name="创建画布", exact=True).click()
+    expect(page.get_by_text("回款对账", exact=True).first).to_be_visible()
+    expect(page.get_by_text("1 页面 · 1 对象", exact=False)).to_be_visible()
+    page.screenshot(path=str(BOARD_OUTPUT), full_page=True)
 
     # Removing the final page should leave a usable empty workspace rather than
     # rendering a stale DSL or a broken iframe.
@@ -143,5 +145,5 @@ with sync_playwright() as playwright:
 
     if console_errors:
         raise AssertionError("Browser console errors:\n" + "\n".join(console_errors))
-    print(f"E2E_OK screenshots={OUTPUT},{REQUIREMENT_OUTPUT}")
+    print(f"E2E_OK screenshots={OUTPUT},{BOARD_OUTPUT}")
     browser.close()

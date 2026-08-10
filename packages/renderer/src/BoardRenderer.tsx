@@ -71,6 +71,7 @@ export interface BoardRendererHandle {
 export interface BoardObjectViewProps {
   object: BoardObject;
   pages: Record<string, PageDSL>;
+  boardId: string;
 }
 
 export type BoardObjectView = (props: BoardObjectViewProps) => ReactNode;
@@ -114,13 +115,15 @@ function objectBoundaryPoint(object: BoardObject, toward: Point, pins: Record<st
   return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
-function FlowchartView({ object }: { object: Extract<BoardObject, { type: "flowchart" }> }) {
+function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { type: "flowchart" }>; boardId: string }) {
   const nodes = object.flowchart.nodes;
   const edges = object.flowchart.edges;
   const row = 64;
+  const markerId = `board-arrow-${boardId.replace(/[^a-zA-Z0-9_-]/g, "-")}-${object.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-flow`;
   return (
     <div className="board-flowchart">
       <svg className="board-flowchart-edges" viewBox={`0 0 ${object.width} ${object.height}`} preserveAspectRatio="none">
+        <defs><marker id={markerId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#94a3b8" /></marker></defs>
         {edges.map((edge) => {
           const fromIndex = nodes.findIndex((node) => node.id === edge.from);
           const toIndex = nodes.findIndex((node) => node.id === edge.to);
@@ -134,7 +137,7 @@ function FlowchartView({ object }: { object: Extract<BoardObject, { type: "flowc
                 y2={toIndex * row + 24}
                 stroke="#94a3b8"
                 strokeWidth={1.2}
-                markerEnd="url(#board-arrow)"
+                markerEnd={`url(#${markerId})`}
               />
               {edge.label ? (
                 <text x={object.width / 2 + 8} y={((fromIndex + toIndex) / 2) * row + 24} fill="#64748b" fontSize={8}>
@@ -195,7 +198,7 @@ function ErView({ object }: { object: Extract<BoardObject, { type: "er" }> }) {
   );
 }
 
-registerBoardObjectRenderer("flowchart", ({ object }) => <FlowchartView object={object as Extract<BoardObject, { type: "flowchart" }>} />);
+registerBoardObjectRenderer("flowchart", ({ object, boardId }) => <FlowchartView object={object as Extract<BoardObject, { type: "flowchart" }>} boardId={boardId} />);
 registerBoardObjectRenderer("er", ({ object }) => <ErView object={object as Extract<BoardObject, { type: "er" }>} />);
 
 export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>(function BoardRenderer({
@@ -588,7 +591,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
         ) : object.type === "note" ? (
           <div className="board-note-text">{object.text}</div>
         ) : boardObjectViews.has(object.type) ? (
-          boardObjectViews.get(object.type)!({ object, pages })
+          boardObjectViews.get(object.type)!({ object, pages, boardId: board.id })
         ) : (
           <div className="board-generic">
             <strong>{object.type}</strong>
@@ -638,7 +641,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           const path = linkPath(from, to, link.lineType);
           const color = link.color ?? "#2563eb";
           const width = link.strokeWidth ?? 2.5;
-          const markerId = `board-arrow-${index}`;
+          const markerId = `board-arrow-${board.id.replace(/[^a-zA-Z0-9_-]/g, "-")}-${index}`;
           return (
             <g
               key={link.id}

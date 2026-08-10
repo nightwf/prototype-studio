@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { caseListExample } from "@prototype-studio/dsl-schema/example";
-import { buildProductPackage, createProject, createPage, executeProjectCommands, getPage, importExternalPage, listPages, openProject, redoRevision, undoRevision } from "./index";
+import { buildProductPackage, createBoard, createProject, createPage, executeProjectCommands, getPage, importExternalPage, listPages, openProject, redoRevision, undoRevision } from "./index";
 
 async function temporaryProject(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "prototype-studio-test-"));
@@ -65,12 +65,13 @@ describe("project store", () => {
     const root = await temporaryProject();
     await createProject(root, { name: "案件中台", projectId: "case-center" });
     await createPage(root, caseListExample);
-    await writeFile(path.join(root, "requirements/REQ-001.md"), "# 案件批量分配\n\n最多选择 500 条。", "utf8");
+    await createBoard(root, { name: "案件流程", pageIds: ["case-list"] });
     const productPackage = await buildProductPackage(root, { now: "2026-08-07T12:00:00.000Z" });
     expect(productPackage.project.id).toBe("case-center");
     expect(productPackage.pages).toHaveLength(1);
-    expect(productPackage.board).toMatchObject({ revision: 1, objects: [] });
-    expect(productPackage.requirements[0]?.file).toBe("requirements/REQ-001.md");
+    expect(productPackage.formatVersion).toBe("2.0");
+    expect(productPackage.boards).toHaveLength(2);
+    expect(productPackage.boards[0]).toMatchObject({ id: "main", revision: 1, objects: [] });
     expect(productPackage.preview.type).toBe("local");
   });
 });

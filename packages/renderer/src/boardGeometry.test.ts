@@ -13,6 +13,9 @@ import {
 const board: BoardDSL = {
   dslVersion: DSL_VERSION,
   id: "board-test",
+  name: "测试画布",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z",
   revision: 1,
   objects: [
     { id: "obj-home", type: "page", pageId: "home", x: 120, y: 80, width: 960, height: 640, source: "default" },
@@ -63,7 +66,16 @@ describe("boardGeometry", () => {
   });
 
   it("falls back to a default canvas area for an empty board", () => {
-    const empty: BoardDSL = { dslVersion: DSL_VERSION, id: "e", revision: 1, objects: [], links: [] };
+    const empty: BoardDSL = {
+      dslVersion: DSL_VERSION,
+      id: "e",
+      name: "空画布",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+      revision: 1,
+      objects: [],
+      links: []
+    };
     expect(boardContentBounds(empty, {})).toEqual({ minX: 0, minY: 0, maxX: 1600, maxY: 1200 });
   });
 

@@ -1,29 +1,39 @@
 import { randomUUID } from "node:crypto";
 import { join, normalize, resolve, sep } from "node:path";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
-import { ZipArchive } from "archiver";
+import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import unzipper from "unzipper";
 import {
   buildProductPackage,
+  createBoard,
+  createBoards,
   createProject,
+  deleteBoard,
   executeBoardCommands,
   executeProjectCommands,
   getPage,
+  listBoards,
+  listTrashedBoards,
   openProject,
   deletePage,
   readBoard,
+  restoreBoard,
   persistPageSnapshot,
   writePage,
+  updateBoard,
+  type BoardSummary,
+  type TrashedBoardSummary,
+  type CreateBoardInput,
+  type UpdateBoardInput,
   type PersistPageSnapshotInput,
   type ExecuteBoardCommandsInput
 } from "@prototype-studio/project-store";
 import type { ExecuteCommandsInput } from "@prototype-studio/command-engine";
 import { validateDSL } from "@prototype-studio/dsl-validator";
-import type { PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardDSL, PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, ProjectRow, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { newToken } from "./auth";
-import { renderBoardHtml } from "./export";
+import { renderBoardsHtml } from "./export";
 
 export class SpaceError extends Error {
   constructor(
@@ -100,7 +110,7 @@ export class ProjectSpaceManager {
   async tree(userId: string, projectId: string) {
     const row = await this.requireProject(userId, projectId);
     const opened = await openProject(row.spacePath);
-    return { manifest: opened.manifest, pages: opened.pages, board: opened.board };
+    return { manifest: opened.manifest, pages: opened.pages, boards: opened.boards, board: opened.board };
   }
 
   async getPageDsl(userId: string, projectId: string, pageId: string): Promise<PageDSL> {
@@ -140,14 +150,59 @@ export class ProjectSpaceManager {
     await this.touchProject(projectId);
   }
 
-  async getBoard(userId: string, projectId: string) {
+  async listBoards(userId: string, projectId: string): Promise<BoardSummary[]> {
     const row = await this.requireProject(userId, projectId);
-    return readBoard(row.spacePath);
+    return listBoards(row.spacePath);
   }
 
-  async applyBoardCommands(userId: string, projectId: string, input: ExecuteBoardCommandsInput) {
+  async getBoard(userId: string, projectId: string, boardId?: string) {
     const row = await this.requireProject(userId, projectId);
-    const result = await executeBoardCommands(row.spacePath, input);
+    return readBoard(row.spacePath, boardId);
+  }
+
+  async createBoard(userId: string, projectId: string, input: CreateBoardInput): Promise<BoardDSL> {
+    const row = await this.requireProject(userId, projectId);
+    const board = await createBoard(row.spacePath, input);
+    await this.touchProject(projectId);
+    return board;
+  }
+
+  async createBoards(userId: string, projectId: string, inputs: CreateBoardInput[]): Promise<BoardDSL[]> {
+    const row = await this.requireProject(userId, projectId);
+    const boards = await createBoards(row.spacePath, inputs);
+    await this.touchProject(projectId);
+    return boards;
+  }
+
+  async updateBoard(userId: string, projectId: string, boardId: string, input: UpdateBoardInput): Promise<BoardDSL> {
+    const row = await this.requireProject(userId, projectId);
+    const board = await updateBoard(row.spacePath, boardId, input);
+    await this.touchProject(projectId);
+    return board;
+  }
+
+  async deleteBoard(userId: string, projectId: string, boardId: string) {
+    const row = await this.requireProject(userId, projectId);
+    const result = await deleteBoard(row.spacePath, boardId);
+    await this.touchProject(projectId);
+    return result;
+  }
+
+  async listTrashedBoards(userId: string, projectId: string): Promise<TrashedBoardSummary[]> {
+    const row = await this.requireProject(userId, projectId);
+    return listTrashedBoards(row.spacePath);
+  }
+
+  async restoreBoard(userId: string, projectId: string, trashId: string): Promise<BoardDSL> {
+    const row = await this.requireProject(userId, projectId);
+    const board = await restoreBoard(row.spacePath, trashId);
+    await this.touchProject(projectId);
+    return board;
+  }
+
+  async applyBoardCommands(userId: string, projectId: string, boardId: string, input: ExecuteBoardCommandsInput) {
+    const row = await this.requireProject(userId, projectId);
+    const result = await executeBoardCommands(row.spacePath, boardId, input);
     await this.touchProject(projectId);
     return result;
   }
@@ -164,6 +219,14 @@ export class ProjectSpaceManager {
     }
     for (const objectDir of objectDirs) {
       const dir = join(revisionsRoot, objectDir);
+      if (objectDir === "boards") {
+        const boardDirs = (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
+        for (const boardId of boardDirs) {
+          const files = (await readdir(join(dir, boardId))).filter((file) => file.endsWith(".json")).sort();
+          for (const file of files) entries.push({ object: `boards/${boardId}`, revision: Number(file.slice(0, -5)), path: `boards/${boardId}/${file}` });
+        }
+        continue;
+      }
       const files = (await readdir(dir)).filter((file) => file.endsWith(".json")).sort();
       for (const file of files) {
         entries.push({ object: objectDir, revision: Number(file.slice(0, -5)), path: `${objectDir}/${file}` });
@@ -173,25 +236,6 @@ export class ProjectSpaceManager {
     return entries;
   }
 
-  async requirements(userId: string, projectId: string, idOrFile: string) {
-    const row = await this.requireProject(userId, projectId);
-    const requirementsRoot = resolve(row.spacePath, "requirements");
-    const candidates = idOrFile.includes(".") ? [idOrFile] : [`${idOrFile}.md`, `${idOrFile}.txt`, `${idOrFile}.requirement.json`];
-    for (const candidate of candidates) {
-      const target = resolve(requirementsRoot, candidate);
-      if (target === requirementsRoot || !target.startsWith(`${requirementsRoot}${sep}`)) {
-        throw new SpaceError("INVALID_INPUT", "需求文件名越界。");
-      }
-      try {
-        const content = await readFile(target, "utf8");
-        return { file: candidate, content: content.slice(0, 25_000), truncated: content.length > 25_000 };
-      } catch {
-        // try next candidate
-      }
-    }
-    throw new SpaceError("NOT_FOUND", "需求文件不存在。");
-  }
-
   async productPackage(userId: string, projectId: string) {
     const row = await this.requireProject(userId, projectId);
     return buildProductPackage(row.spacePath, {});
@@ -199,6 +243,7 @@ export class ProjectSpaceManager {
 
   async exportZip(userId: string, projectId: string): Promise<Buffer> {
     const row = await this.requireProject(userId, projectId);
+    const { ZipArchive } = await import("archiver");
     const archive = new ZipArchive({ zlib: { level: 6 } });
     const chunks: Buffer[] = [];
     const output = new Promise<Buffer>((resolve, reject) => {
@@ -244,7 +289,12 @@ export class ProjectSpaceManager {
     for (const summary of opened.pages) {
       pages.push({ id: summary.id, title: summary.title });
     }
-    return { project: { id: row.id, name: row.name, description: row.description }, pages, board: opened.board };
+    const boards = await Promise.all(opened.boards.map((board) => readBoard(row.spacePath, board.id)));
+    return {
+      project: { id: row.id, name: row.name, description: row.description, defaultBoardId: opened.manifest.defaultBoardId ?? opened.board.id },
+      pages,
+      boards
+    };
   }
 
   async shareHtml(token: string): Promise<string> {
@@ -254,7 +304,7 @@ export class ProjectSpaceManager {
     for (const summary of data.pages) {
       pages[summary.id] = await getPage(row!.spacePath, summary.id);
     }
-    return renderBoardHtml(data.board, pages, data.project.name);
+    return renderBoardsHtml(data.boards, pages, data.project.name, data.project.defaultBoardId);
   }
 
   async importZip(userId: string, name: string, zipBase64: string): Promise<ProjectRow> {
@@ -276,6 +326,8 @@ export class ProjectSpaceManager {
       throw new SpaceError("INVALID_INPUT", "导入包缺少 project.yaml，不是有效项目。");
     }
     const row = await this.createSpace(user, name, "从项目整包导入恢复");
+    // Remove the scaffold board so an imported default board (including legacy board.yaml) is the only source of truth.
+    await rm(resolve(row.spacePath, "boards"), { recursive: true, force: true });
     for (const file of files) {
       const target = resolve(row.spacePath, file.path);
       if (target === row.spacePath || !target.startsWith(`${row.spacePath}${sep}`)) continue;

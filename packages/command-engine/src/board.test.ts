@@ -6,6 +6,9 @@ function board(): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
     id: "test-board",
+    name: "测试画布",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
     revision: 3,
     objects: [
       {

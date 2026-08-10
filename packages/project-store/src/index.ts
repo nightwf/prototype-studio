@@ -29,7 +29,10 @@ export class ProjectStoreError extends Error {
       | "PAGE_EXISTS"
       | "PATH_OUTSIDE_PROJECT"
       | "INVALID_DSL_FILE"
-      | "REVISION_NOT_FOUND",
+      | "REVISION_NOT_FOUND"
+      | "BOARD_NOT_FOUND"
+      | "BOARD_EXISTS"
+      | "LAST_BOARD",
     message: string,
     public readonly details?: unknown
   ) {
@@ -58,7 +61,43 @@ export interface OpenedProject {
   root: string;
   manifest: ProjectManifest;
   pages: ProjectPageSummary[];
+  boards: BoardSummary[];
   board: BoardDSL;
+}
+
+export interface BoardSummary {
+  id: string;
+  name: string;
+  description?: string;
+  revision: number;
+  pageCount: number;
+  objectCount: number;
+  createdAt: string;
+  updatedAt: string;
+  isDefault: boolean;
+}
+
+export interface TrashedBoardSummary {
+  trashId: string;
+  boardId: string;
+  name: string;
+  description?: string;
+  deletedAt: string;
+}
+
+export interface CreateBoardInput {
+  name: string;
+  description?: string;
+  pageIds?: string[];
+  boardId?: string;
+  now?: string;
+}
+
+export interface UpdateBoardInput {
+  name?: string;
+  description?: string;
+  isDefault?: boolean;
+  now?: string;
 }
 
 export interface ExternalFileEvent {
@@ -68,7 +107,7 @@ export interface ExternalFileEvent {
   pageId?: string;
 }
 
-const requiredDirectories = ["requirements", "pages", "data", "flows", "assets", ".prototype", ".prototype/revisions", ".prototype/cache"];
+const requiredDirectories = ["pages", "boards", "data", "flows", "assets", ".prototype", ".prototype/revisions", ".prototype/revisions/boards", ".prototype/trash/boards", ".prototype/cache"];
 
 function projectPath(root: string, relative: string): string {
   const absoluteRoot = path.resolve(root);
@@ -84,6 +123,39 @@ function pageRelativePath(pageId: string): string {
     throw new ProjectStoreError("INVALID_PROJECT", `页面 ID“${pageId}”不符合文件命名规则。`);
   }
   return `pages/${pageId}.ui.yaml`;
+}
+
+function assertBoardId(boardId: string): string {
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(boardId)) {
+    throw new ProjectStoreError("INVALID_PROJECT", `画布 ID“${boardId}”不符合文件命名规则。`);
+  }
+  return boardId;
+}
+
+function boardRelativePath(boardId: string): string {
+  return `boards/${assertBoardId(boardId)}.board.yaml`;
+}
+
+function normalizedBoard(raw: Partial<BoardDSL>, options: { id: string; name: string; projectId?: string; now: string }): BoardDSL {
+  return {
+    dslVersion: DSL_VERSION,
+    id: options.id,
+    projectId: raw.projectId ?? options.projectId,
+    name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim() : options.name,
+    description: raw.description,
+    createdAt: typeof raw.createdAt === "string" && raw.createdAt ? raw.createdAt : options.now,
+    updatedAt: typeof raw.updatedAt === "string" && raw.updatedAt ? raw.updatedAt : options.now,
+    revision: typeof raw.revision === "number" && raw.revision > 0 ? raw.revision : 1,
+    objects: Array.isArray(raw.objects) ? raw.objects : [],
+    links: Array.isArray(raw.links) ? raw.links : []
+  };
+}
+
+function slugifyBoardId(name: string): string {
+  const ascii = name.trim().toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return /^[a-z]/.test(ascii) ? ascii : `board-${ascii || randomUUID().slice(0, 8)}`;
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -144,6 +216,8 @@ export async function createProject(root: string, input: CreateProjectInput): Pr
     name: input.name,
     description: input.description,
     status: "active",
+    projectFormatVersion: 2,
+    defaultBoardId: "main",
     dslVersion: DSL_VERSION,
     rendererVersion: RENDERER_VERSION,
     designSystemVersion: DESIGN_SYSTEM_VERSION,
@@ -153,7 +227,11 @@ export async function createProject(root: string, input: CreateProjectInput): Pr
   await atomicWrite(manifestPath, stringify(manifest, { lineWidth: 0 }));
   const board: BoardDSL = {
     dslVersion: DSL_VERSION,
-    id: `${manifest.id}-board`,
+    id: "main",
+    projectId: manifest.id,
+    name: "主画布",
+    createdAt: now,
+    updatedAt: now,
     revision: 1,
     objects: [],
     links: []
@@ -161,7 +239,7 @@ export async function createProject(root: string, input: CreateProjectInput): Pr
   await writeBoard(absoluteRoot, board);
   await atomicWrite(projectPath(absoluteRoot, ".gitignore"), ".prototype/cache/\n*.tmp\n");
   await atomicWrite(projectPath(absoluteRoot, ".prototype/index.json"), JSON.stringify({ version: 1, generatedAt: now, pages: [] }, null, 2));
-  return { root: absoluteRoot, manifest, pages: [], board };
+  return { root: absoluteRoot, manifest, pages: [], boards: [toBoardSummary(board, "main")], board };
 }
 
 export async function getManifest(root: string): Promise<ProjectManifest> {
@@ -172,10 +250,68 @@ export async function getManifest(root: string): Promise<ProjectManifest> {
   try {
     const manifest = parse(await readFile(manifestPath, "utf8")) as ProjectManifest;
     if (!manifest.id || !manifest.name || !manifest.dslVersion) throw new Error("missing required fields");
+    if (manifest.projectFormatVersion !== 2 || !manifest.defaultBoardId) {
+      return migrateProjectToV2(root, manifest);
+    }
     return manifest;
   } catch (error) {
     throw new ProjectStoreError("INVALID_PROJECT", "project.yaml 无法读取或缺少必填字段。", error);
   }
+}
+
+async function migrateProjectToV2(root: string, legacyManifest: ProjectManifest): Promise<ProjectManifest> {
+  await Promise.all(requiredDirectories.map((directory) => mkdir(projectPath(root, directory), { recursive: true })));
+  const now = new Date().toISOString();
+  const targetId = "main";
+  const targetPath = projectPath(root, boardRelativePath(targetId));
+  let board: BoardDSL;
+
+  if (await pathExists(targetPath)) {
+    const raw = parse(await readFile(targetPath, "utf8")) as Partial<BoardDSL>;
+    board = normalizedBoard(raw, { id: targetId, name: "主画布", projectId: legacyManifest.id, now });
+  } else if (await pathExists(projectPath(root, "board.yaml"))) {
+    const raw = parse(await readFile(projectPath(root, "board.yaml"), "utf8")) as Partial<BoardDSL>;
+    board = normalizedBoard(raw, { id: targetId, name: "主画布", projectId: legacyManifest.id, now });
+  } else {
+    const pages = await listPages(root);
+    board = normalizedBoard({ objects: tilePages(pages.map((page) => page.id)), links: [], revision: 1 }, {
+      id: targetId,
+      name: "主画布",
+      projectId: legacyManifest.id,
+      now
+    });
+  }
+  await writeBoard(root, board);
+
+  const oldRevisionDirectory = projectPath(root, ".prototype/revisions/board");
+  const newRevisionDirectory = projectPath(root, `.prototype/revisions/boards/${targetId}`);
+  await mkdir(newRevisionDirectory, { recursive: true });
+  if (await pathExists(oldRevisionDirectory)) {
+    const revisionFiles = (await readdir(oldRevisionDirectory)).filter((file) => file.endsWith(".json"));
+    for (const file of revisionFiles) {
+      const revision = JSON.parse(await readFile(path.join(oldRevisionDirectory, file), "utf8")) as BoardRevisionRecord;
+      const migrated: BoardRevisionRecord = {
+        ...revision,
+        boardId: targetId,
+        before: normalizedBoard(revision.before, { id: targetId, name: board.name, projectId: legacyManifest.id, now: revision.createdAt || now }),
+        after: normalizedBoard(revision.after, { id: targetId, name: board.name, projectId: legacyManifest.id, now: revision.createdAt || now })
+      };
+      await atomicWrite(path.join(newRevisionDirectory, file), JSON.stringify(migrated, null, 2));
+    }
+  }
+
+  // The manifest is deliberately written last: until all file operations succeed the project remains legacy and retryable.
+  await rm(projectPath(root, "requirements"), { recursive: true, force: true });
+  await rm(oldRevisionDirectory, { recursive: true, force: true });
+  await rm(projectPath(root, "board.yaml"), { force: true });
+  const manifest: ProjectManifest = {
+    ...legacyManifest,
+    projectFormatVersion: 2,
+    defaultBoardId: targetId,
+    updatedAt: now
+  };
+  await atomicWrite(projectPath(root, "project.yaml"), stringify(manifest, { lineWidth: 0 }));
+  return manifest;
 }
 
 export async function getPage(root: string, pageId: string): Promise<PageDSL> {
@@ -220,23 +356,35 @@ export async function listPages(root: string): Promise<ProjectPageSummary[]> {
 
 export async function openProject(root: string): Promise<OpenedProject> {
   const manifest = await getManifest(root);
-  return { root: path.resolve(root), manifest, pages: await listPages(root), board: await ensureBoard(root) };
+  const boards = await listBoards(root);
+  return {
+    root: path.resolve(root),
+    manifest,
+    pages: await listPages(root),
+    boards,
+    board: await readBoard(root, manifest.defaultBoardId)
+  };
 }
 
-export async function readBoard(root: string): Promise<BoardDSL> {
-  const filePath = projectPath(root, "board.yaml");
-  if (!(await pathExists(filePath))) throw new ProjectStoreError("PROJECT_NOT_FOUND", "项目缺少 board.yaml。");
+async function readBoardFile(root: string, boardId: string): Promise<BoardDSL> {
+  const filePath = projectPath(root, boardRelativePath(boardId));
+  if (!(await pathExists(filePath))) throw new ProjectStoreError("BOARD_NOT_FOUND", `画布“${boardId}”不存在。`);
   let raw: unknown;
   try {
     raw = parse(await readFile(filePath, "utf8"));
   } catch (error) {
-    throw new ProjectStoreError("INVALID_DSL_FILE", "board.yaml 无法解析。", error);
+    throw new ProjectStoreError("INVALID_DSL_FILE", `画布“${boardId}”无法解析。`, error);
   }
   const validation = validateBoard(raw);
   if (!validation.valid) {
-    throw new ProjectStoreError("INVALID_DSL_FILE", "board.yaml 未通过画布校验。", validation.errors);
+    throw new ProjectStoreError("INVALID_DSL_FILE", `画布“${boardId}”未通过校验。`, validation.errors);
   }
   return raw as BoardDSL;
+}
+
+export async function readBoard(root: string, boardId?: string): Promise<BoardDSL> {
+  const manifest = await getManifest(root);
+  return readBoardFile(root, boardId ?? manifest.defaultBoardId ?? "main");
 }
 
 export async function writeBoard(root: string, board: BoardDSL): Promise<void> {
@@ -244,15 +392,18 @@ export async function writeBoard(root: string, board: BoardDSL): Promise<void> {
   if (!validation.valid) {
     throw new ProjectStoreError("INVALID_DSL_FILE", "画布未通过校验，未写入文件。", validation.errors);
   }
-  await atomicWrite(projectPath(root, "board.yaml"), stringify(board, { lineWidth: 0 }));
+  await atomicWrite(projectPath(root, boardRelativePath(board.id)), stringify(board, { lineWidth: 0 }));
 }
 
-export async function persistBoardRevision(root: string, board: BoardDSL, revision: BoardRevisionRecord): Promise<void> {
+export async function persistBoardRevision(root: string, boardId: string, board: BoardDSL, revision: BoardRevisionRecord): Promise<void> {
   const validation = validateBoard(board);
   if (!validation.valid) {
     throw new ProjectStoreError("INVALID_DSL_FILE", "画布未通过校验，未写入修改。", validation.errors);
   }
-  const revisionFile = projectPath(root, `.prototype/revisions/board/${String(revision.revision).padStart(6, "0")}.json`);
+  if (board.id !== boardId || revision.boardId !== boardId) {
+    throw new ProjectStoreError("INVALID_DSL_FILE", "画布命令结果与目标 board_id 不一致。");
+  }
+  const revisionFile = projectPath(root, `.prototype/revisions/boards/${assertBoardId(boardId)}/${String(revision.revision).padStart(6, "0")}.json`);
   await atomicWrite(revisionFile, JSON.stringify(revision, null, 2));
   await writeBoard(root, board);
   await appendBoardAudit(root, revision);
@@ -260,44 +411,215 @@ export async function persistBoardRevision(root: string, board: BoardDSL, revisi
 
 export type ExecuteBoardCommandsInput = Omit<ApplyBoardCommandsInput, "board">;
 
-export async function executeBoardCommands(root: string, input: ExecuteBoardCommandsInput): Promise<{ board: BoardDSL; revision: BoardRevisionRecord }> {
-  const board = await readBoard(root);
+export async function executeBoardCommands(root: string, boardId: string, input: ExecuteBoardCommandsInput): Promise<{ board: BoardDSL; revision: BoardRevisionRecord }> {
+  const board = await readBoard(root, boardId);
   const result = applyBoardCommands({ ...input, board });
-  await persistBoardRevision(root, result.board, result.revision);
+  result.board.updatedAt = result.revision.createdAt;
+  await persistBoardRevision(root, boardId, result.board, result.revision);
   return result;
 }
 
-export async function getBoardRevision(root: string, revision: number): Promise<BoardRevisionRecord> {
-  const filePath = projectPath(root, `.prototype/revisions/board/${String(revision).padStart(6, "0")}.json`);
+export async function getBoardRevision(root: string, boardId: string, revision: number): Promise<BoardRevisionRecord> {
+  const filePath = projectPath(root, `.prototype/revisions/boards/${assertBoardId(boardId)}/${String(revision).padStart(6, "0")}.json`);
   if (!(await pathExists(filePath))) {
-    throw new ProjectStoreError("REVISION_NOT_FOUND", `找不到画布 revision ${revision}。`);
+    throw new ProjectStoreError("REVISION_NOT_FOUND", `找不到画布“${boardId}”的 revision ${revision}。`);
   }
   return JSON.parse(await readFile(filePath, "utf8")) as BoardRevisionRecord;
 }
 
-/** Backward compatibility: generates a default canvas that tiles existing pages. */
-export async function ensureBoard(root: string): Promise<BoardDSL> {
-  if (await pathExists(projectPath(root, "board.yaml"))) return readBoard(root);
-  const project = await getManifest(root);
-  const pages = await listPages(root);
+function toBoardSummary(board: BoardDSL, defaultBoardId: string): BoardSummary {
+  return {
+    id: board.id,
+    name: board.name,
+    description: board.description,
+    revision: board.revision,
+    pageCount: new Set(board.objects.filter((object) => object.type === "page").map((object) => object.pageId)).size,
+    objectCount: board.objects.length,
+    createdAt: board.createdAt,
+    updatedAt: board.updatedAt,
+    isDefault: board.id === defaultBoardId
+  };
+}
+
+export async function listBoards(root: string): Promise<BoardSummary[]> {
+  const manifest = await getManifest(root);
+  const directory = projectPath(root, "boards");
+  await mkdir(directory, { recursive: true });
+  const files = (await readdir(directory)).filter((file) => file.endsWith(".board.yaml"));
+  const boards = await Promise.all(files.map((file) => readBoardFile(root, file.slice(0, -".board.yaml".length))));
+  return boards
+    .map((board) => toBoardSummary(board, manifest.defaultBoardId ?? "main"))
+    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.createdAt.localeCompare(b.createdAt) || a.name.localeCompare(b.name));
+}
+
+async function uniqueBoardId(root: string, requested: string): Promise<string> {
+  const base = slugifyBoardId(requested);
+  let candidate = base;
+  let index = 2;
+  while (await pathExists(projectPath(root, boardRelativePath(candidate)))) candidate = `${base}-${index++}`;
+  return candidate;
+}
+
+async function assertUniqueBoardName(root: string, name: string, exceptId?: string): Promise<string> {
+  const normalized = name.trim();
+  if (!normalized) throw new ProjectStoreError("INVALID_PROJECT", "画布名称不能为空。");
+  const duplicate = (await listBoards(root)).find((board) => board.id !== exceptId && board.name.localeCompare(normalized, undefined, { sensitivity: "accent" }) === 0);
+  if (duplicate) throw new ProjectStoreError("BOARD_EXISTS", `画布名称“${normalized}”已存在。`);
+  return normalized;
+}
+
+function tilePages(pageIds: string[]): BoardDSL["objects"] {
+  return pageIds.map((pageId, index) => ({
+    id: `obj-${pageId}`,
+    type: "page" as const,
+    pageId,
+    x: 120 + (index % 2) * 1040,
+    y: 80 + Math.floor(index / 2) * 720,
+    width: 960,
+    height: 640,
+    source: "default" as const
+  }));
+}
+
+export async function createBoard(root: string, input: CreateBoardInput): Promise<BoardDSL> {
+  const manifest = await getManifest(root);
+  const name = await assertUniqueBoardName(root, input.name);
+  const boardId = input.boardId ? assertBoardId(input.boardId) : await uniqueBoardId(root, name);
+  if (await pathExists(projectPath(root, boardRelativePath(boardId)))) {
+    throw new ProjectStoreError("BOARD_EXISTS", `画布 ID“${boardId}”已存在。`);
+  }
+  const pageIds = [...new Set(input.pageIds ?? [])];
+  const existingPages = new Set((await listPages(root)).map((page) => page.id));
+  const missing = pageIds.filter((pageId) => !existingPages.has(pageId));
+  if (missing.length) throw new ProjectStoreError("PAGE_NOT_FOUND", `以下页面不存在：${missing.join("、")}。`);
+  const now = input.now ?? new Date().toISOString();
   const board: BoardDSL = {
     dslVersion: DSL_VERSION,
-    id: `${project.id}-board`,
+    id: boardId,
+    projectId: manifest.id,
+    name,
+    description: input.description?.trim() || undefined,
+    createdAt: now,
+    updatedAt: now,
     revision: 1,
-    objects: pages.map((page, index) => ({
-      id: `obj-${page.id}`,
-      type: "page",
-      pageId: page.id,
-      x: 120,
-      y: 80 + index * 720,
-      width: 960,
-      height: 640,
-      source: "default"
-    })),
+    objects: tilePages(pageIds),
     links: []
   };
   await writeBoard(root, board);
   return board;
+}
+
+export async function createBoards(root: string, inputs: CreateBoardInput[]): Promise<BoardDSL[]> {
+  if (!inputs.length) return [];
+  const existing = await listBoards(root);
+  const names = new Set(existing.map((board) => board.name.toLocaleLowerCase()));
+  const ids = new Set(existing.map((board) => board.id));
+  const pages = new Set((await listPages(root)).map((page) => page.id));
+  for (const input of inputs) {
+    const name = input.name.trim();
+    const key = name.toLocaleLowerCase();
+    if (!name || names.has(key)) throw new ProjectStoreError("BOARD_EXISTS", `画布名称“${name || "(空)"}”重复。`);
+    names.add(key);
+    if (input.boardId) {
+      const id = assertBoardId(input.boardId);
+      if (ids.has(id)) throw new ProjectStoreError("BOARD_EXISTS", `画布 ID“${id}”重复。`);
+      ids.add(id);
+    }
+    const missing = [...new Set(input.pageIds ?? [])].filter((pageId) => !pages.has(pageId));
+    if (missing.length) throw new ProjectStoreError("PAGE_NOT_FOUND", `画布“${name}”引用了不存在的页面：${missing.join("、")}。`);
+  }
+  const created: BoardDSL[] = [];
+  try {
+    for (const input of inputs) created.push(await createBoard(root, input));
+    return created;
+  } catch (error) {
+    await Promise.all(created.map((board) => rm(projectPath(root, boardRelativePath(board.id)), { force: true })));
+    throw error;
+  }
+}
+
+export async function updateBoard(root: string, boardId: string, input: UpdateBoardInput): Promise<BoardDSL> {
+  const manifest = await getManifest(root);
+  const board = await readBoard(root, boardId);
+  if (input.name !== undefined) board.name = await assertUniqueBoardName(root, input.name, boardId);
+  if (input.description !== undefined) board.description = input.description.trim() || undefined;
+  board.updatedAt = input.now ?? new Date().toISOString();
+  await writeBoard(root, board);
+  if (input.isDefault && manifest.defaultBoardId !== boardId) {
+    await atomicWrite(projectPath(root, "project.yaml"), stringify({ ...manifest, defaultBoardId: boardId, updatedAt: board.updatedAt }, { lineWidth: 0 }));
+  }
+  return board;
+}
+
+export async function deleteBoard(root: string, boardId: string): Promise<{ deletedBoardId: string; defaultBoardId: string }> {
+  const manifest = await getManifest(root);
+  const summaries = await listBoards(root);
+  if (summaries.length <= 1) throw new ProjectStoreError("LAST_BOARD", "项目必须至少保留一个画布。");
+  await readBoard(root, boardId);
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const trashRoot = projectPath(root, `.prototype/trash/boards/${assertBoardId(boardId)}-${stamp}`);
+  await mkdir(trashRoot, { recursive: true });
+  await rename(projectPath(root, boardRelativePath(boardId)), path.join(trashRoot, `${boardId}.board.yaml`));
+  const revisionDirectory = projectPath(root, `.prototype/revisions/boards/${boardId}`);
+  if (await pathExists(revisionDirectory)) await rename(revisionDirectory, path.join(trashRoot, "revisions"));
+  const defaultBoardId = manifest.defaultBoardId === boardId
+    ? summaries.find((board) => board.id !== boardId)?.id ?? "main"
+    : manifest.defaultBoardId ?? "main";
+  if (defaultBoardId !== manifest.defaultBoardId) {
+    await atomicWrite(projectPath(root, "project.yaml"), stringify({ ...manifest, defaultBoardId, updatedAt: new Date().toISOString() }, { lineWidth: 0 }));
+  }
+  return { deletedBoardId: boardId, defaultBoardId };
+}
+
+function assertTrashId(trashId: string): string {
+  if (!/^[A-Za-z0-9._-]+$/.test(trashId)) throw new ProjectStoreError("BOARD_NOT_FOUND", "回收站记录不存在。");
+  return trashId;
+}
+
+export async function listTrashedBoards(root: string): Promise<TrashedBoardSummary[]> {
+  await getManifest(root);
+  const trashDirectory = projectPath(root, ".prototype/trash/boards");
+  const entries = await readdir(trashDirectory, { withFileTypes: true }).catch(() => []);
+  const summaries: TrashedBoardSummary[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const trashId = assertTrashId(entry.name);
+    const directory = path.join(trashDirectory, trashId);
+    const boardFile = (await readdir(directory)).find((file) => file.endsWith(".board.yaml"));
+    if (!boardFile) continue;
+    const board = parse(await readFile(path.join(directory, boardFile), "utf8")) as BoardDSL;
+    if (!validateBoard(board).valid) continue;
+    const metadata = await stat(directory);
+    summaries.push({ trashId, boardId: board.id, name: board.name, description: board.description, deletedAt: metadata.mtime.toISOString() });
+  }
+  return summaries.sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));
+}
+
+export async function restoreBoard(root: string, trashId: string): Promise<BoardDSL> {
+  const safeTrashId = assertTrashId(trashId);
+  const trashDirectory = projectPath(root, `.prototype/trash/boards/${safeTrashId}`);
+  const boardFile = (await readdir(trashDirectory).catch(() => [] as string[])).find((file) => file.endsWith(".board.yaml"));
+  if (!boardFile) throw new ProjectStoreError("BOARD_NOT_FOUND", "回收站记录不存在。");
+  const board = parse(await readFile(path.join(trashDirectory, boardFile), "utf8")) as BoardDSL;
+  const validation = validateBoard(board);
+  if (!validation.valid) throw new ProjectStoreError("INVALID_DSL_FILE", "回收站中的画布无效。", validation.errors);
+  await assertUniqueBoardName(root, board.name);
+  const destination = projectPath(root, boardRelativePath(board.id));
+  if (await pathExists(destination)) throw new ProjectStoreError("BOARD_EXISTS", `画布 ID“${board.id}”已存在。`);
+  await rename(path.join(trashDirectory, boardFile), destination);
+  const trashedRevisions = path.join(trashDirectory, "revisions");
+  if (await pathExists(trashedRevisions)) {
+    const revisionsDestination = projectPath(root, `.prototype/revisions/boards/${board.id}`);
+    await mkdir(path.dirname(revisionsDestination), { recursive: true });
+    await rename(trashedRevisions, revisionsDestination);
+  }
+  await rm(trashDirectory, { recursive: true, force: true });
+  return board;
+}
+
+/** Backward compatibility: returns the default board after upgrading legacy projects. */
+export async function ensureBoard(root: string): Promise<BoardDSL> {
+  return readBoard(root);
 }
 
 export async function writePage(root: string, dsl: PageDSL, options: { overwrite?: boolean } = {}): Promise<void> {
@@ -416,12 +738,11 @@ export async function redoRevision(root: string, pageId: string, revision: numbe
 }
 
 export interface ProductPackage {
-  formatVersion: "1.0";
+  formatVersion: "2.0";
   generatedAt: string;
   project: ProjectManifest;
-  requirements: Array<{ file: string; content: string }>;
   pages: PageDSL[];
-  board: BoardDSL;
+  boards: BoardDSL[];
   flows: Array<{ file: string; content: string }>;
   designSystem: {
     id: string;
@@ -455,14 +776,14 @@ export async function buildProductPackage(
   const project = await getManifest(root);
   const summaries = await listPages(root);
   const pages = await Promise.all(summaries.map((page) => getPage(root, page.id)));
-  const board = await ensureBoard(root);
+  const boardSummaries = await listBoards(root);
+  const boards = await Promise.all(boardSummaries.map((board) => readBoard(root, board.id)));
   return {
-    formatVersion: "1.0",
+    formatVersion: "2.0",
     generatedAt: options.now ?? new Date().toISOString(),
     project,
-    requirements: await readTextDirectory(root, "requirements"),
     pages,
-    board,
+    boards,
     flows: await readTextDirectory(root, "flows"),
     designSystem: { id: "prototype-studio-default", version: project.designSystemVersion },
     acceptanceCriteria: options.acceptanceCriteria ?? [
@@ -487,15 +808,18 @@ export async function exportProductPackage(
   const exportDirectory = projectPath(root, `.prototype/exports/product-package-${safeTimestamp}`);
   await mkdir(exportDirectory, { recursive: true });
   await atomicWrite(path.join(exportDirectory, "product-package.json"), JSON.stringify(productPackage, null, 2));
-  await atomicWrite(path.join(exportDirectory, "board.yaml"), stringify(productPackage.board, { lineWidth: 0 }));
+  await Promise.all(productPackage.boards.map((board) => atomicWrite(
+    path.join(exportDirectory, "boards", `${board.id}.board.yaml`),
+    stringify(board, { lineWidth: 0 })
+  )));
   const summary = [
     `# ${productPackage.project.name} · Product Package`,
     "",
     `生成时间：${productPackage.generatedAt}`,
     "",
-    `- 需求文件：${productPackage.requirements.length}`,
     `- 页面：${productPackage.pages.length}`,
-    `- 画布对象：${productPackage.board.objects.length}`,
+    `- 画布：${productPackage.boards.length}`,
+    `- 画布对象：${productPackage.boards.reduce((total, board) => total + board.objects.length, 0)}`,
     `- Flow：${productPackage.flows.length}`,
     `- DSL：${productPackage.project.dslVersion}`,
     `- Renderer：${productPackage.project.rendererVersion}`,
@@ -526,7 +850,7 @@ export async function importExternalPage(root: string, relativePath: string): Pr
 }
 
 export function watchProject(root: string, onEvent: (event: ExternalFileEvent) => void): FSWatcher {
-  const patterns = ["project.yaml", "requirements", "pages", "data", "flows"].map((entry) => projectPath(root, entry));
+  const patterns = ["project.yaml", "pages", "boards", "data", "flows"].map((entry) => projectPath(root, entry));
   const watcher = chokidar.watch(patterns, { ignoreInitial: true, awaitWriteFinish: { stabilityThreshold: 180, pollInterval: 40 } });
   const handle = async (kind: ExternalFileEvent["kind"], filePath: string) => {
     const relativePath = path.relative(path.resolve(root), filePath);

@@ -1,22 +1,12 @@
 import {
   deletePage,
-  executeBoardCommands,
   executeProjectCommands,
   getManifest,
   getPage,
   listPages,
-  readBoard,
-  writeBoard,
   writePage
 } from "@prototype-studio/project-store";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
-import {
-  confirmPagePlan,
-  createBoardFromTemplates,
-  createPagePlanFromTemplates,
-  generateConfirmedPageDSLs,
-  parseRequirementTemplates
-} from "@prototype-studio/requirement-engine";
 import type { BoardCommand, BoardDSL, Command, PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore } from "../metadata";
 import type { ProjectSpaceManager } from "../spaces";
@@ -56,20 +46,6 @@ export class CloudMcpService {
     return this.spaces.createSpace(user, name, description);
   }
 
-  async createProjectFromRequirement(userId: string, name: string, input: string) {
-    const templates = parseRequirementTemplates(input);
-    if (!templates) throw new Error("需求无法解析为结构化页面模板。");
-    const plan = createPagePlanFromTemplates(templates);
-    const generated = generateConfirmedPageDSLs(confirmPagePlan(plan));
-    const user = await this.metadata.getUserById(userId);
-    if (!user) throw new McpUnauthorizedError();
-    const row = await this.spaces.createSpace(user, name ?? templates.title, "由 Codex 从需求创建");
-    for (const { dsl } of generated) await writePage(row.spacePath, dsl);
-    const board = createBoardFromTemplates(templates);
-    if (board) await writeBoard(row.spacePath, { ...board, id: `${row.id}-board`, revision: 1 });
-    return { project: row, pages: generated.map((item) => item.dsl.page.id) };
-  }
-
   async project(userId: string, projectId: string) {
     const path = await this.projectPath(userId, projectId);
     const manifest = await getManifest(path);
@@ -92,13 +68,28 @@ export class CloudMcpService {
     return { component: location.component, dsl_path: location.path, parent_id: location.parentId, revision: dsl.revision };
   }
 
-  async getRequirement(userId: string, projectId: string, requirementId: string) {
-    const result = await this.spaces.requirements(userId, projectId, requirementId);
-    return { requirement_id: requirementId, file: result.file, content: result.content, truncated: result.truncated };
+  async listBoards(userId: string, projectId: string) {
+    return this.spaces.listBoards(userId, projectId);
   }
 
-  async getBoard(userId: string, projectId: string): Promise<BoardDSL> {
-    return readBoard(await this.projectPath(userId, projectId));
+  async getBoard(userId: string, projectId: string, boardId: string): Promise<BoardDSL> {
+    return this.spaces.getBoard(userId, projectId, boardId);
+  }
+
+  async createBoard(userId: string, projectId: string, input: { name: string; description?: string; pageIds?: string[]; boardId?: string }) {
+    return this.spaces.createBoard(userId, projectId, input);
+  }
+
+  async createBoards(userId: string, projectId: string, inputs: Array<{ name: string; description?: string; pageIds?: string[]; boardId?: string }>) {
+    return this.spaces.createBoards(userId, projectId, inputs);
+  }
+
+  async updateBoard(userId: string, projectId: string, boardId: string, input: { name?: string; description?: string; isDefault?: boolean }) {
+    return this.spaces.updateBoard(userId, projectId, boardId, input);
+  }
+
+  async deleteBoard(userId: string, projectId: string, boardId: string) {
+    return this.spaces.deleteBoard(userId, projectId, boardId);
   }
 
   async createPage(userId: string, projectId: string, dsl: PageDSL) {
@@ -125,9 +116,8 @@ export class CloudMcpService {
     return { revision: result.revision.revision, changed_component_ids: result.revision.changedComponentIds };
   }
 
-  async applyBoardCommands(userId: string, projectId: string, baseRevision: number, commands: BoardCommand[], source: string, operator: string) {
-    const path = await this.projectPath(userId, projectId);
-    const result = await executeBoardCommands(path, { baseRevision, commands, source: source as "manual", operator });
+  async applyBoardCommands(userId: string, projectId: string, boardId: string, baseRevision: number, commands: BoardCommand[], source: string, operator: string) {
+    const result = await this.spaces.applyBoardCommands(userId, projectId, boardId, { baseRevision, commands, source: source as "manual", operator });
     return { revision: result.revision.revision, changed_object_ids: result.revision.changedObjectIds };
   }
 

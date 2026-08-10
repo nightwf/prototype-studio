@@ -7,6 +7,7 @@ export default defineConfig({
   platform: "node",
   bundle: true,
   noExternal: [/@prototype-studio\/.*/],
+  external: ["archiver"],
   splitting: false,
   sourcemap: false,
   clean: true
