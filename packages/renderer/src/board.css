@@ -22,7 +22,13 @@
 .board-page-head { height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; background: #222b32; color: #c7d1d6; font-size: 10px; cursor: grab; user-select: none; }
 .board-page-head:active { cursor: grabbing; }
 .board-page-head small { color: #7f8c94; font: 8px/1 var(--ps-font-mono); }
-.board-page-body { flex: 1; overflow: auto; background: #f2f3f1; cursor: default; }
+.board-page-body { position: relative; flex: 1; overflow: auto; isolation: isolate; background: #f2f3f1; cursor: default; }
+.board-page-body .proto-overlay-backdrop { position: absolute; inset: 0; }
+.board-page-body .proto-overlay:not(.proto-overlay--drawer) { width: min(520px, calc(100% - 32px)); max-height: calc(100% - 32px); }
+.board-page-body .proto-overlay:not(.proto-overlay--drawer) .proto-overlay-card { width: 100%; max-height: 100%; overflow: auto; }
+.board-page-body .proto-overlay--drawer { position: absolute; width: min(420px, 88%); }
+.board-page-body .proto-overlay--drawer .proto-overlay-card { width: 100%; height: 100%; }
+.board-page-body .proto-notice { position: absolute; }
 .board-page-missing { padding: 20px; color: #b04a5a; font-size: 11px; }
 .board-object--note { padding: 14px; overflow: auto; background: #fff8ec; border-color: #e4c98b; }
 .board-note-text { white-space: pre-wrap; color: #7a5b1d; font-size: 11px; line-height: 1.6; }
