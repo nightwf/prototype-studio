@@ -25,7 +25,7 @@
 .board-page-missing { padding: 20px; color: #b04a5a; font-size: 11px; }
 .board-object--note { padding: 14px; overflow: auto; background: #fff8ec; border-color: #e4c98b; }
 .board-note-text { white-space: pre-wrap; color: #7a5b1d; font-size: 11px; line-height: 1.6; }
-.board-object--flowchart, .board-object--er { overflow: hidden; background: #101820; border-color: #33424d; }
+.board-object--flowchart, .board-object--er { overflow: hidden; border-color: #c7d2dc; background-color: #f8fafc; background-image: radial-gradient(circle, rgba(100,116,139,.16) 1px, transparent 1px); background-size: 20px 20px; }
 .board-flowchart, .board-er { position: relative; width: 100%; height: 100%; }
 .board-flowchart-edges, .board-er-edges { position: absolute; inset: 0; width: 100%; height: 100%; }
 .board-flowchart-nodes { position: absolute; inset: 0; }
