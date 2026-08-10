@@ -417,6 +417,9 @@ export function App() {
   const initialPages = useMemo(() => (isDesktopRuntime() ? [] : [structuredClone(caseListExample)]), []);
   const [pages, setPages] = useState<PageDSL[]>(initialPages);
   const [currentPageId, setCurrentPageId] = useState<string | null>(initialPages[0]?.page.id ?? null);
+  const pagesRef = useRef<PageDSL[]>(initialPages);
+  const currentPageIdRef = useRef<string | null>(initialPages[0]?.page.id ?? null);
+  const pageCommandQueuesRef = useRef<Map<string, Promise<boolean>>>(new Map());
   const [selectedId, setSelectedId] = useState<string>(initialPages[0] ? "search.status" : "");
   const [history, setHistory] = useState<RevisionRecord[]>([]);
   const [redoStack, setRedoStack] = useState<RevisionRecord[]>([]);
@@ -496,6 +499,14 @@ export function App() {
       if (page.page.id !== currentPageId) return page;
       return typeof next === "function" ? next(page) : next;
     }));
+  }, [currentPageId]);
+
+  useEffect(() => {
+    pagesRef.current = pages;
+  }, [pages]);
+
+  useEffect(() => {
+    currentPageIdRef.current = currentPageId;
   }, [currentPageId]);
 
   const selectedLocation = useMemo(() => selectedId ? getComponentLocation(dsl, selectedId) : undefined, [dsl, selectedId]);
@@ -902,24 +913,64 @@ export function App() {
     else setBoardDraft({ x: object.x, y: object.y, width: object.width, height: object.height });
   }, [board.objects, boardSelectedId]);
 
-  const runCommands = useCallback(async (commands: Command[], source: RevisionRecord["source"] = "manual", message = "修改已保存"): Promise<boolean> => {
-    try {
-      const result = executeCommands({ dsl, baseRevision: dsl.revision, commands, source, operator: source === "ai" ? "Codex" : "jojo" });
-      if (webMode && webProjectId) {
-        await webSpace.commands(webProjectId, result.dsl.page.id, dsl.revision, commands, source, source === "ai" ? "Codex" : "jojo");
-      } else {
-        await persistDesktopPage(result.dsl, result.revision);
-      }
-      setDsl(result.dsl);
-      setHistory((items) => [...items, result.revision]);
-      setRedoStack([]);
-      toast("success", message, `Revision ${result.dsl.revision} · 影响 ${result.revision.changedComponentIds.length} 个组件`);
-      return true;
-    } catch (error) {
-      toast("danger", "修改未执行", error instanceof Error ? error.message : "未知错误");
-      return false;
+  const runCommands = useCallback((commands: Command[], source: RevisionRecord["source"] = "manual"): Promise<boolean> => {
+    const pageId = currentPageIdRef.current;
+    if (!pageId) {
+      toast("danger", "修改未执行", "当前没有可编辑页面");
+      return Promise.resolve(false);
     }
-  }, [dsl, persistDesktopPage, toast, webProjectId]);
+
+    // 同一页面的修改必须串行提交。否则连续编辑会同时读取同一个旧 revision：
+    // 第一个请求成功后，后续请求会被服务器判定为 revision 冲突。
+    const previous = pageCommandQueuesRef.current.get(pageId) ?? Promise.resolve(true);
+    const task = previous.catch(() => false).then(async (): Promise<boolean> => {
+      try {
+        const latest = pagesRef.current.find((page) => page.page.id === pageId);
+        if (!latest) throw new Error(`找不到页面“${pageId}”。`);
+        const operator = source === "ai" ? "Codex" : "jojo";
+        const result = executeCommands({ dsl: latest, baseRevision: latest.revision, commands, source, operator });
+        if (webMode && webProjectId) {
+          await webSpace.commands(webProjectId, pageId, latest.revision, commands, source, operator);
+        } else {
+          await persistDesktopPage(result.dsl, result.revision);
+        }
+
+        const replacePage = (items: PageDSL[]) => items.map((page) => page.page.id === pageId ? result.dsl : page);
+        pagesRef.current = replacePage(pagesRef.current);
+        setPages(replacePage);
+        if (currentPageIdRef.current === pageId) {
+          setHistory((items) => [...items, result.revision]);
+          setRedoStack([]);
+        }
+        // 常规保存属于高频后台反馈，仅失败时提示，避免连续编辑产生通知堆叠。
+        return true;
+      } catch (error) {
+        let detail = error instanceof Error ? error.message : "未知错误";
+        if (webMode && webProjectId && (error as Error & { status?: number }).status === 409) {
+          try {
+            const fresh = (await webSpace.getPage(webProjectId, pageId)).dsl;
+            const replacePage = (items: PageDSL[]) => items.map((page) => page.page.id === pageId ? fresh : page);
+            pagesRef.current = replacePage(pagesRef.current);
+            setPages(replacePage);
+            if (currentPageIdRef.current === pageId) {
+              setHistory([]);
+              setRedoStack([]);
+            }
+            detail = `${detail} 已自动重新读取最新页面，请重试刚才的操作。`;
+          } catch {
+            detail = `${detail} 自动刷新页面失败，请手动重新打开项目。`;
+          }
+        }
+        toast("danger", "修改未执行", detail);
+        return false;
+      }
+    });
+    pageCommandQueuesRef.current.set(pageId, task);
+    void task.finally(() => {
+      if (pageCommandQueuesRef.current.get(pageId) === task) pageCommandQueuesRef.current.delete(pageId);
+    });
+    return task;
+  }, [persistDesktopPage, toast, webProjectId]);
 
   useEffect(() => {
     boardRef.current = board;
@@ -1411,7 +1462,7 @@ window.addEventListener('DOMContentLoaded', function () {
     if (!target) return;
     const changes = target.commands;
     if (!changes.length) return;
-    if (await runCommands(changes, "redo", "已重做修改")) {
+    if (await runCommands(changes, "redo")) {
       setRedoStack((items) => items.slice(0, -1));
     }
   };
@@ -1420,7 +1471,7 @@ window.addEventListener('DOMContentLoaded', function () {
     const fields = dsl.search?.fields ?? [];
     const index = fields.findIndex((field) => field.id === target);
     if (index >= 0 && fields.some((field) => field.id === dragged)) {
-      void runCommands([{ type: "MOVE_COMPONENT", target: dragged, container: "search.fields", index }], "manual", "字段顺序已更新");
+      void runCommands([{ type: "MOVE_COMPONENT", target: dragged, container: "search.fields", index }], "manual");
     } else toast("warning", "当前仅支持同容器排序", "MVP 可拖动查询区字段调整顺序");
   };
 
@@ -1428,7 +1479,7 @@ window.addEventListener('DOMContentLoaded', function () {
     if (!command.trim()) return;
     const commands = parseLocalCommand(command, selected);
     if (commands) {
-      void runCommands(commands, "ai", "AI Command 已执行");
+      void runCommands(commands, "ai");
       setCommand("");
     } else {
       toast("warning", "需要外部 Codex", "该复杂语义将在 MCP 接入后生成 Change Plan");
