@@ -40,10 +40,12 @@ export interface BoardRendererProps {
   pages: Record<string, PageDSL>;
   selectedId?: string;
   selectedIds?: string[];
+  selectedLinkId?: string;
   interactive?: boolean;
   picking?: boolean;
   onSelectObject?: (id: string) => void;
   onSelectMany?: (ids: string[]) => void;
+  onSelectLink?: (id: string) => void;
   onOpenPage?: (pageId: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveObjects?: (ids: string[], dx: number, dy: number) => void;
@@ -87,8 +89,28 @@ function objectCenter(object: BoardObject, pins: Record<string, Point>, canvasX:
   return { x: object.x - canvasX + object.width / 2, y: object.y - canvasY + object.height / 2 };
 }
 
-function linkPath(from: Point, to: Point): string {
-  return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+function linkPath(from: Point, to: Point, type: BoardLink["lineType"] = "curve"): string {
+  if (type === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+  if (type === "orthogonal") {
+    const middleX = Math.round((from.x + to.x) / 2);
+    return `M ${from.x} ${from.y} L ${middleX} ${from.y} L ${middleX} ${to.y} L ${to.x} ${to.y}`;
+  }
+  const distance = Math.abs(to.x - from.x);
+  const bend = Math.max(60, distance * 0.45);
+  const direction = to.x >= from.x ? 1 : -1;
+  return `M ${from.x} ${from.y} C ${from.x + bend * direction} ${from.y}, ${to.x - bend * direction} ${to.y}, ${to.x} ${to.y}`;
+}
+
+function objectBoundaryPoint(object: BoardObject, toward: Point, pins: Record<string, Point>, canvasX: number, canvasY: number): Point {
+  const center = objectCenter(object, pins, canvasX, canvasY);
+  if (object.type === "marker") return center;
+  const dx = toward.x - center.x;
+  const dy = toward.y - center.y;
+  if (!dx && !dy) return center;
+  const halfWidth = object.width / 2;
+  const halfHeight = object.height / 2;
+  const scale = Math.min(dx ? halfWidth / Math.abs(dx) : Infinity, dy ? halfHeight / Math.abs(dy) : Infinity);
+  return { x: center.x + dx * scale, y: center.y + dy * scale };
 }
 
 function FlowchartView({ object }: { object: Extract<BoardObject, { type: "flowchart" }> }) {
@@ -180,10 +202,12 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   pages,
   selectedId,
   selectedIds = [],
+  selectedLinkId,
   interactive = true,
   picking = false,
   onSelectObject,
   onSelectMany,
+  onSelectLink,
   onOpenPage,
   onMoveObject,
   onMoveObjects,
@@ -202,6 +226,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   const [view, setView] = useState<BoardView>({ x: 0, y: 0, zoom: 1 });
   const [containerSize, setContainerSize] = useState({ width: 1200, height: 800 });
   const [pins, setPins] = useState<Record<string, Point>>({});
+  const [linkAnchors, setLinkAnchors] = useState<Record<string, Point>>({});
   const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; objectIds: string[] } | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -261,7 +286,27 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       };
     }
     setPins((previous) => (JSON.stringify(previous) === JSON.stringify(next) ? previous : next));
-  }, [board, pages, view.zoom]);
+    const nextLinkAnchors: Record<string, Point> = {};
+    const measureLinkAnchor = (objectId: string, componentId: string): void => {
+      const frame = frameRefs.current.get(objectId);
+      const pageObject = board.objects.find((item) => item.id === objectId);
+      if (!frame || !pageObject || pageObject.type !== "page") return;
+      const component = frame.querySelector<HTMLElement>(`[data-component-id="${componentId}"]`);
+      const objectElement = frame.closest<HTMLElement>("[data-board-object]");
+      if (!component || !objectElement) return;
+      const objectBounds = objectElement.getBoundingClientRect();
+      const componentBounds = component.getBoundingClientRect();
+      nextLinkAnchors[`${objectId}:${componentId}`] = {
+        x: pageObject.x - canvasX + (componentBounds.left - objectBounds.left + componentBounds.width / 2) / view.zoom,
+        y: pageObject.y - canvasY + (componentBounds.top - objectBounds.top + componentBounds.height / 2) / view.zoom
+      };
+    };
+    for (const link of board.links) {
+      if (link.fromComponentId) measureLinkAnchor(link.from, link.fromComponentId);
+      if (link.toComponentId) measureLinkAnchor(link.to, link.toComponentId);
+    }
+    setLinkAnchors((previous) => (JSON.stringify(previous) === JSON.stringify(nextLinkAnchors) ? previous : nextLinkAnchors));
+  }, [board, pages, view.zoom, canvasX, canvasY]);
 
   const viewportRect = useCallback(() => viewportRef.current?.getBoundingClientRect() ?? { left: 0, top: 0 }, []);
 
@@ -521,6 +566,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
 
   const centers = new Map<string, Point>();
   board.objects.forEach((object) => centers.set(object.id, objectCenter(object, pins, canvasX, canvasY)));
+  const objectMap = new Map(board.objects.map((object) => [object.id, object] as const));
 
   const visibleNonMarkers = useMemo(() => {
     const nonMarkers = (objects: BoardObject[]): Array<Exclude<BoardObject, BoardMarkerObject>> =>
@@ -536,22 +582,45 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
 
   const canvas = (
     <div className={`board-canvas ${picking ? "is-picking" : ""}`} style={{ left: canvasX, top: canvasY, width: canvasWidth, height: canvasHeight }}>
+      {visibleNonMarkers.map((object) => renderObject(object))}
       <svg className="board-links" width={canvasWidth} height={canvasHeight}>
-        <defs>
-          <marker id="board-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
-            <polygon points="0 0, 8 3, 0 6" fill="#fb923c" />
-          </marker>
-        </defs>
-        {board.links.map((link: BoardLink) => {
-          const from = centers.get(link.from);
-          const to = centers.get(link.to);
-          if (!from || !to) return null;
-          const path = linkPath(from, to);
+        {board.links.map((link: BoardLink, index) => {
+          const fromObject = objectMap.get(link.from);
+          const toObject = objectMap.get(link.to);
+          const fromCenter = centers.get(link.from);
+          const toCenter = centers.get(link.to);
+          if (!fromObject || !toObject || !fromCenter || !toCenter) return null;
+          const from = link.fromComponentId
+            ? linkAnchors[`${link.from}:${link.fromComponentId}`] ?? objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY)
+            : objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY);
+          const to = link.toComponentId
+            ? linkAnchors[`${link.to}:${link.toComponentId}`] ?? objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY)
+            : objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY);
+          const path = linkPath(from, to, link.lineType);
+          const color = link.color ?? "#2563eb";
+          const width = link.strokeWidth ?? 2.5;
+          const markerId = `board-arrow-${index}`;
           return (
-            <g key={link.id} data-board-link={link.id}>
-              <path d={path} fill="none" stroke="#fb923c" strokeWidth={1.5} strokeDasharray="5,3" markerEnd="url(#board-arrow)" />
+            <g
+              key={link.id}
+              className={`board-link ${selectedLinkId === link.id ? "is-selected" : ""}`}
+              data-board-link={link.id}
+              data-link-from={link.from}
+              data-link-to={link.to}
+              data-from-component={link.fromComponentId}
+              data-to-component={link.toComponentId}
+              data-line-type={link.lineType ?? "curve"}
+            >
+              <defs>
+                <marker id={markerId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" markerUnits="strokeWidth">
+                  <polygon points="0 0, 10 4, 0 8" fill={color} />
+                </marker>
+              </defs>
+              <path className="board-link-halo" d={path} fill="none" stroke="white" strokeWidth={width + 4} />
+              <path className="board-link-line" d={path} fill="none" stroke={color} strokeWidth={width} markerEnd={`url(#${markerId})`} />
+              {interactive ? <path className="board-link-hit" d={path} fill="none" stroke="transparent" strokeWidth={Math.max(14, width + 10)} onClick={(event) => { event.stopPropagation(); onSelectLink?.(link.id); }} /> : null}
               {link.label ? (
-                <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 6} fill="#fb923c" fontSize={9} textAnchor="middle">
+                <text className="board-link-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
                   {link.label}
                 </text>
               ) : null}
@@ -559,7 +628,6 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           );
         })}
       </svg>
-      {visibleNonMarkers.map((object) => renderObject(object))}
       {markerObjects.map((object) => renderObject(object))}
       {showAnnotationPanel && markerObjects.length ? (
         <div className="board-annotation-panel" style={{ left: panelX }}>

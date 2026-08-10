@@ -45,7 +45,7 @@ const board: BoardDSL = {
       }
     }
   ],
-  links: [{ id: "link-1", from: "obj-home", to: "note-1", label: "约束" }]
+  links: [{ id: "link-1", from: "obj-home", to: "note-1", label: "约束", fromComponentId: "search.status", lineType: "orthogonal", strokeWidth: 4, color: "#dc2626" }]
 };
 
 describe("BoardRenderer", () => {
@@ -64,6 +64,10 @@ describe("BoardRenderer", () => {
     expect(first).toContain('data-board-object="flow-1"');
     expect(first).toContain('data-board-object="er-1"');
     expect(first).toContain('data-board-link="link-1"');
+    expect(first).toContain('data-line-type="orthogonal"');
+    expect(first).toContain('stroke="#dc2626"');
+    expect(first).toContain('stroke-width="4"');
+    expect(first.indexOf('data-board-object="obj-home"')).toBeLessThan(first.indexOf('data-board-link="link-1"'));
     expect(first).toContain('data-board-marker="marker-1"');
     expect(first).toContain('data-marker-anchor="obj-home:search.status:20:-10"');
     expect(first).toContain("勾选案件");

@@ -2,7 +2,13 @@
 .board-canvas.is-picking .board-object--page { cursor: crosshair; }
 .board-canvas.is-picking .board-object--page .board-page-body [data-component-id] { cursor: pointer; }
 .board-grid-layer { position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(circle, rgba(15, 23, 42, 0.16) 1px, transparent 1px); }
-.board-links { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+.board-links { position: absolute; z-index: 20; inset: 0; overflow: visible; pointer-events: none; }
+.board-link-line, .board-link-halo { vector-effect: non-scaling-stroke; transition: stroke-width .14s ease, filter .14s ease; }
+.board-link-halo { opacity: .92; }
+.board-link-hit { pointer-events: stroke; cursor: pointer; }
+.board-link:hover .board-link-line, .board-link.is-selected .board-link-line { filter: drop-shadow(0 1px 3px rgba(15, 23, 42, .38)); }
+.board-link.is-selected .board-link-halo { stroke: #dbeafe; stroke-width: 9; }
+.board-link-label { paint-order: stroke; stroke: white; stroke-width: 4px; stroke-linejoin: round; }
 .board-object { position: absolute; box-sizing: border-box; border: 1px solid #9aa7ad; border-radius: 9px; background: white; box-shadow: 0 10px 30px rgba(26, 35, 42, 0.14); }
 .board-object.is-selected { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35); }
 .board-object--page { display: flex; flex-direction: column; overflow: hidden; }
@@ -31,7 +37,7 @@
 .board-marker-pin--green { background: #22c55e; }
 .board-marker-pin--red { background: #ef4444; }
 .board-marker-pin--purple { background: #a855f7; }
-.board-annotation-panel { position: absolute; top: 0; width: 300px; max-height: 480px; overflow: auto; border: 1px solid #3a4650; border-radius: 10px; background: #141b21; color: #dfe4e7; box-shadow: 0 18px 50px rgba(5, 11, 15, 0.3); }
+.board-annotation-panel { position: absolute; z-index: 35; top: 0; width: 300px; max-height: 480px; overflow: auto; border: 1px solid #3a4650; border-radius: 10px; background: #141b21; color: #dfe4e7; box-shadow: 0 18px 50px rgba(5, 11, 15, 0.3); }
 .board-annotation-head { padding: 11px 13px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #2b353d; }
 .board-annotation-head strong { font-size: 11px; }
 .board-annotation-head span { color: #7f8c94; font: 8px/1 var(--ps-font-mono); }

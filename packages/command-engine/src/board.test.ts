@@ -68,6 +68,20 @@ describe("board command engine", () => {
     expect(result.board.links).toHaveLength(0);
   });
 
+  it("updates link anchors and visual style", () => {
+    const base = board();
+    base.objects.push({ id: "obj-target", type: "page", pageId: "target", x: 1200, y: 80, width: 960, height: 640 });
+    base.links = [{ id: "link-1", from: "obj-home", to: "obj-target" }];
+    const result = applyBoardCommands({
+      board: base,
+      baseRevision: 3,
+      source: "manual",
+      operator: "jojo",
+      commands: [{ type: "UPDATE_BOARD_LINK", target: "link-1", changes: { fromComponentId: "toolbar.submit", toComponentId: "detail.title", lineType: "orthogonal", strokeWidth: 4, color: "#dc2626" } }]
+    });
+    expect(result.board.links[0]).toMatchObject({ fromComponentId: "toolbar.submit", toComponentId: "detail.title", lineType: "orthogonal", strokeWidth: 4, color: "#dc2626" });
+  });
+
   it("rejects stale revisions and dangling links", () => {
     expect(() =>
       applyBoardCommands({

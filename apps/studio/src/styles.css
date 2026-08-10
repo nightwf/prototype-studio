@@ -355,10 +355,23 @@ button { color: inherit; }
 .board-anchor-info { margin-top: 10px; padding: 8px; border-radius: 6px; background: #f1f5f7; color: var(--ps-ink-500); font: 8px/1.5 var(--ps-font-mono); word-break: break-all; }
 .board-link-row { min-height: 30px; padding: 6px 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid var(--ps-ink-100); border-radius: 6px; margin-bottom: 6px; font-size: 9px; }
 .board-link-row button { border: 0; background: transparent; color: var(--ps-ink-400); cursor: pointer; }
+.board-link-row-main { min-width: 0; flex: 1; padding: 0 !important; display: flex; align-items: center; gap: 8px; text-align: left; color: var(--ps-ink-700) !important; }
+.board-link-row-main > i { width: 28px; flex: none; border-radius: 99px; box-shadow: 0 0 0 2px white, 0 0 0 3px var(--ps-ink-100); }
+.board-link-row-main > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.board-link-row-main small { color: var(--ps-ink-400); font: 7px/1 var(--ps-font-mono); }
 .board-link-add { margin-top: 8px; display: grid; gap: 6px; }
 .board-link-add select, .board-link-add input { width: 100%; height: 30px; padding: 0 8px; border: 1px solid var(--ps-ink-200); border-radius: 6px; font-size: 9px; }
 .board-link-add button { height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--ps-cobalt); border-radius: 6px; background: var(--ps-cobalt); color: white; font-size: 9px; cursor: pointer; }
 .board-link-add button:disabled { opacity: 0.45; cursor: not-allowed; }
+.board-link-endpoints { min-height: 42px; margin-bottom: 14px; padding: 8px; display: grid; grid-template-columns: minmax(0,1fr) 18px minmax(0,1fr); align-items: center; gap: 5px; border: 1px solid #d7e1f8; border-radius: 7px; background: #f5f8ff; color: var(--ps-cobalt); }
+.board-link-endpoints > span { min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 8px/1 var(--ps-font-mono); }
+.board-link-endpoints i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--ps-cobalt); }
+.board-link-anchor-grid, .board-link-style-grid { margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.board-link-anchor-grid label > span, .board-link-style-grid label > span { display: block; margin-bottom: 5px; color: var(--ps-ink-500); font-size: 8px; font-weight: 650; }
+.board-link-anchor-grid select, .board-link-style-grid select { width: 100%; height: 32px; padding: 0 7px; border: 1px solid var(--ps-ink-200); border-radius: 6px; background: white; color: var(--ps-ink-800); font-size: 8px; }
+.board-color-field > div { height: 34px; padding: 4px 8px 4px 4px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--ps-ink-200); border-radius: 6px; background: white; }
+.board-color-field input[type="color"] { width: 42px; height: 26px; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
+.board-color-field code { color: var(--ps-ink-600); font: 8px/1 var(--ps-font-mono); text-transform: uppercase; }
 .inspector-action { width: 100%; height: 32px; margin-top: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--ps-cobalt); border-radius: 6px; background: white; color: var(--ps-cobalt); font-size: 9px; cursor: pointer; }
 .board-editor { margin-top: 4px; }
 .board-editor-sub { margin: 10px 0 6px; display: flex; align-items: center; justify-content: space-between; }

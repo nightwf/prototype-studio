@@ -40,6 +40,7 @@ import {
   Trash2,
   Undo2,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   X,
   Zap
@@ -52,6 +53,7 @@ import {
   DSL_VERSION,
   type BoardCommand,
   type BoardDSL,
+  type BoardLink,
   type BoardMarkerObject,
   type BoardNoteObject,
   type BoardObject,
@@ -70,6 +72,7 @@ import {
   ANNOTATION_PANEL_WIDTH,
   CONTENT_PADDING,
   BoardRenderer,
+  boardExportRuntimeScript,
   boardContentBounds,
   snapValue,
   type BoardRendererHandle,
@@ -448,6 +451,7 @@ export function App() {
   const [viewMode, setViewMode] = useState<"canvas" | "page">("page");
   const [boardSelectedId, setBoardSelectedId] = useState<string>();
   const [boardSelectedIds, setBoardSelectedIds] = useState<string[]>([]);
+  const [boardSelectedLinkId, setBoardSelectedLinkId] = useState<string>();
   const [boardZoom, setBoardZoom] = useState(1);
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
@@ -884,11 +888,23 @@ export function App() {
   }, [pages]);
 
   useEffect(() => {
+    const link = board.links.find((item) => item.id === boardSelectedLinkId);
+    if (link) {
+      setBoardDraft({
+        label: link.label ?? "",
+        fromComponentId: link.fromComponentId ?? "",
+        toComponentId: link.toComponentId ?? "",
+        lineType: link.lineType ?? "curve",
+        strokeWidth: link.strokeWidth ?? 2.5,
+        color: link.color ?? "#2563eb"
+      });
+      return;
+    }
     const object = board.objects.find((item) => item.id === boardSelectedId);
     if (!object) { setBoardDraft({}); return; }
     if (object.type === "note" || object.type === "marker") setBoardDraft({ text: object.text });
     else setBoardDraft({ x: object.x, y: object.y, width: object.width, height: object.height });
-  }, [board.objects, boardSelectedId]);
+  }, [board.links, board.objects, boardSelectedId, boardSelectedLinkId]);
 
   const runCommands = useCallback((commands: Command[], source: RevisionRecord["source"] = "manual"): Promise<boolean> => {
     const pageId = currentPageIdRef.current;
@@ -1054,6 +1070,18 @@ export function App() {
   const boardPageObjects = useMemo(() => board.objects.filter((object): object is Extract<BoardObject, { type: "page" }> => object.type === "page"), [board.objects]);
 
   const boardSelectedObject = useMemo(() => board.objects.find((object) => object.id === boardSelectedId), [board.objects, boardSelectedId]);
+  const boardSelectedLink = useMemo(() => board.links.find((link) => link.id === boardSelectedLinkId), [board.links, boardSelectedLinkId]);
+
+  const boardComponentOptions = (objectId: string) => {
+    const object = board.objects.find((item) => item.id === objectId);
+    if (!object || object.type !== "page") return [];
+    const page = boardPageMap[object.pageId];
+    if (!page) return [];
+    return collectComponentLocations(page).map(({ component }) => ({
+      id: component.id,
+      label: component.label ?? component.title ?? component.text ?? component.id
+    }));
+  };
 
   const nextMarkerNumber = () => Math.max(0, ...board.objects.filter((object) => object.type === "marker").map((object) => (object as BoardMarkerObject).number)) + 1;
 
@@ -1143,10 +1171,28 @@ export function App() {
     }
   };
 
-  const addBoardLink = async (from: string, to: string, label: string) => {
+  const addBoardLink = async (from: string, to: string, label: string, fromComponentId?: string, toComponentId?: string) => {
     await runBoardCommands([
-      { type: "ADD_BOARD_LINK", link: { id: `link-${Date.now()}`, from, to, ...(label.trim() ? { label: label.trim() } : {}) } }
+      {
+        type: "ADD_BOARD_LINK",
+        link: {
+          id: `link-${Date.now()}`,
+          from,
+          to,
+          ...(label.trim() ? { label: label.trim() } : {}),
+          ...(fromComponentId ? { fromComponentId } : {}),
+          ...(toComponentId ? { toComponentId } : {}),
+          lineType: "curve",
+          strokeWidth: 2.5,
+          color: "#2563eb"
+        }
+      }
     ], "连线已添加");
+  };
+
+  const updateBoardLink = (changes: Partial<BoardLink>) => {
+    if (!boardSelectedLink) return;
+    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: boardSelectedLink.id, changes }], "连线已更新");
   };
 
   const commitBoardPosition = () => {
@@ -1179,13 +1225,21 @@ export function App() {
   };
 
   const selectBoardObject = (id: string) => {
+    setBoardSelectedLinkId(undefined);
     setBoardSelectedId(id);
     setBoardSelectedIds((previous) => (previous.includes(id) ? previous : [id]));
   };
 
   const selectBoardMany = (ids: string[]) => {
+    setBoardSelectedLinkId(undefined);
     setBoardSelectedIds(ids);
     setBoardSelectedId(ids.length ? ids[ids.length - 1] : undefined);
+  };
+
+  const selectBoardLink = (id: string) => {
+    setBoardSelectedLinkId(id);
+    setBoardSelectedId(undefined);
+    setBoardSelectedIds([]);
   };
 
   const deleteBoardObjects = async (ids: string[]) => {
@@ -1308,28 +1362,7 @@ export function App() {
 <body>
 <div class="export-canvas" style="position:relative;width:${canvasWidth}px;height:${canvasHeight}px;">${body}</div>
 <script>
-window.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('[data-board-marker]').forEach(function (pin) {
-    var anchor = pin.getAttribute('data-marker-anchor') || '';
-    var parts = anchor.split(':');
-    if (parts.length < 4) return;
-    var pageObjectId = parts[0];
-    var componentId = parts[1];
-    var offsetX = Number(parts[2] || 0);
-    var offsetY = Number(parts[3] || 0);
-    var frame = document.querySelector('[data-board-object="' + pageObjectId + '"] .board-page-body');
-    if (!frame) return;
-    var component = frame.querySelector('[data-component-id="' + componentId + '"]');
-    if (!component) return;
-    var objectEl = document.querySelector('[data-board-object="' + pageObjectId + '"]');
-    var objectX = parseFloat(objectEl && objectEl.style ? objectEl.style.left : '0') || 0;
-    var objectY = parseFloat(objectEl && objectEl.style ? objectEl.style.top : '0') || 0;
-    var objectRect = objectEl.getBoundingClientRect();
-    var componentRect = component.getBoundingClientRect();
-    pin.style.left = (objectX + componentRect.left - objectRect.left + frame.scrollLeft + offsetX) + 'px';
-    pin.style.top = (objectY + componentRect.top - objectRect.top + frame.scrollTop + offsetY) + 'px';
-  });
-});
+${boardExportRuntimeScript}
 </script>
 </body>
 </html>`;
@@ -1653,8 +1686,10 @@ window.addEventListener('DOMContentLoaded', function () {
           pages={boardPageMap}
           selectedId={boardSelectedId}
           selectedIds={boardSelectedIds}
+          selectedLinkId={boardSelectedLinkId}
           onSelectObject={selectBoardObject}
           onSelectMany={selectBoardMany}
+          onSelectLink={selectBoardLink}
           onOpenPage={openPageFromBoard}
           onMoveObject={moveBoardObject}
           onMoveObjects={moveBoardObjects}
@@ -1736,8 +1771,26 @@ window.addEventListener('DOMContentLoaded', function () {
           <div className="requirement-unresolved"><SectionTitle>未明确项 · {requirementModel.unresolved.length}</SectionTitle>{requirementModel.unresolved.map((item, index) => <div key={index}><CircleHelp size={12} /><span>{item.value}</span></div>)}</div>
         </div>}
       </> : viewMode === "canvas" ? <>
-        <PanelHeader eyebrow="BOARD OBJECT" title={boardSelectedObject ? (boardSelectedObject.type === "page" ? "页面对象" : boardSelectedObject.type === "marker" ? "标注" : boardSelectedObject.type === "note" ? "说明" : "画布对象") : "画布对象"} action={<ToolButton compact onClick={() => setViewMode("page")}><Monitor size={13} /></ToolButton>} />
-        {!boardSelectedObject ? <EmptyState icon={<LayoutGrid size={18} />} title="选择一个画布对象" description="点击画布上的页面、说明或标注，在这里编辑位置、内容与连线。" /> : <div className="board-inspector">
+        <PanelHeader eyebrow={boardSelectedLink ? "BOARD LINK" : "BOARD OBJECT"} title={boardSelectedLink ? "连接线" : boardSelectedObject ? (boardSelectedObject.type === "page" ? "页面对象" : boardSelectedObject.type === "marker" ? "标注" : boardSelectedObject.type === "note" ? "说明" : "画布对象") : "画布对象"} action={<ToolButton compact onClick={() => setViewMode("page")}><Monitor size={13} /></ToolButton>} />
+        {boardSelectedLink ? <div className="board-inspector board-link-inspector">
+          <div className="selected-path"><span>{board.id}</span><ChevronRight size={10} /><b>{boardSelectedLink.id}</b></div>
+          <div className="inspector-body">
+            <SectionTitle>连接关系</SectionTitle>
+            <div className="board-link-endpoints"><span><i />{boardSelectedLink.from}</span><ArrowRight size={14} /><span><i />{boardSelectedLink.to}</span></div>
+            <label className="inspector-field"><span>连线说明</span><input value={String(boardDraft.label ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, label: event.target.value })} onBlur={() => updateBoardLink({ label: String(boardDraft.label ?? "") || undefined })} placeholder="例如：提交后进入" /></label>
+            <div className="board-link-anchor-grid">
+              <label><span>起点元素</span><select value={String(boardDraft.fromComponentId ?? "")} onChange={(event) => { const value = event.target.value; setBoardDraft({ ...boardDraft, fromComponentId: value }); updateBoardLink({ fromComponentId: value || undefined }); }}><option value="">页面边缘</option>{boardComponentOptions(boardSelectedLink.from).map((option) => <option key={option.id} value={option.id}>{option.label} · {option.id}</option>)}</select></label>
+              <label><span>终点元素</span><select value={String(boardDraft.toComponentId ?? "")} onChange={(event) => { const value = event.target.value; setBoardDraft({ ...boardDraft, toComponentId: value }); updateBoardLink({ toComponentId: value || undefined }); }}><option value="">页面边缘</option>{boardComponentOptions(boardSelectedLink.to).map((option) => <option key={option.id} value={option.id}>{option.label} · {option.id}</option>)}</select></label>
+            </div>
+            <SectionTitle>线条样式</SectionTitle>
+            <div className="board-link-style-grid">
+              <label><span>路径类型</span><select value={String(boardDraft.lineType ?? "curve")} onChange={(event) => { const lineType = event.target.value as NonNullable<BoardLink["lineType"]>; setBoardDraft({ ...boardDraft, lineType }); updateBoardLink({ lineType }); }}><option value="curve">曲线</option><option value="straight">直线</option><option value="orthogonal">折线</option></select></label>
+              <label><span>粗细</span><select value={String(boardDraft.strokeWidth ?? 2.5)} onChange={(event) => { const strokeWidth = Number(event.target.value); setBoardDraft({ ...boardDraft, strokeWidth }); updateBoardLink({ strokeWidth }); }}><option value="1">细 · 1px</option><option value="2.5">标准 · 2.5px</option><option value="4">粗 · 4px</option><option value="6">强调 · 6px</option></select></label>
+            </div>
+            <label className="inspector-field board-color-field"><span>颜色</span><div><input type="color" value={String(boardDraft.color ?? "#2563eb")} onChange={(event) => { const color = event.target.value; setBoardDraft({ ...boardDraft, color }); updateBoardLink({ color }); }} /><code>{String(boardDraft.color ?? "#2563eb")}</code></div></label>
+          </div>
+          <div className="inspector-footer"><button className="is-danger" onClick={() => { void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: boardSelectedLink.id }], "连线已删除"); setBoardSelectedLinkId(undefined); }}><Trash2 size={13} />删除连线</button><span>{boardSelectedLink.lineType ?? "curve"}</span></div>
+        </div> : !boardSelectedObject ? <EmptyState icon={<LayoutGrid size={18} />} title="选择画布对象或连线" description="点击画布上的页面、说明、标注或连线，在这里编辑它们的属性。" /> : <div className="board-inspector">
           <div className="selected-path"><span>{board.id}</span><ChevronRight size={10} /><b>{boardSelectedObject.id}</b></div>
           <div className="inspector-body">
             {boardSelectedObject.type !== "marker" ? <>
@@ -1775,15 +1828,17 @@ window.addEventListener('DOMContentLoaded', function () {
             </> : null}
             <SectionTitle>连线</SectionTitle>
             {board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).length ? board.links.filter((link) => link.from === boardSelectedObject.id || link.to === boardSelectedObject.id).map((link) => (
-              <div className="board-link-row" key={link.id}><span>{link.label || `${link.from} → ${link.to}`}</span><button title="删除连线" onClick={() => void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: link.id }])}><X size={12} /></button></div>
+              <div className="board-link-row" key={link.id}><button className="board-link-row-main" onClick={() => selectBoardLink(link.id)}><i style={{ background: link.color ?? "#2563eb", height: link.strokeWidth ?? 2.5 }} /><span>{link.label || `${link.from} → ${link.to}`}<small>{link.lineType === "straight" ? "直线" : link.lineType === "orthogonal" ? "折线" : "曲线"} · {link.strokeWidth ?? 2.5}px</small></span></button><button title="删除连线" onClick={() => void runBoardCommands([{ type: "DELETE_BOARD_LINK", target: link.id }])}><X size={12} /></button></div>
             )) : <div className="requirement-result-empty">当前对象没有连线</div>}
             <div className="board-link-add">
-              <select value={String(boardDraft.linkTarget ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkTarget: event.target.value })}>
+              <select value={String(boardDraft.linkTarget ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkTarget: event.target.value, linkToComponent: "" })}>
                 <option value="">选择连线目标</option>
                 {board.objects.filter((object) => object.id !== boardSelectedObject.id).map((object) => <option key={object.id} value={object.id}>{object.id}</option>)}
               </select>
+              {boardComponentOptions(boardSelectedObject.id).length ? <select value={String(boardDraft.linkFromComponent ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkFromComponent: event.target.value })}><option value="">起点：页面边缘</option>{boardComponentOptions(boardSelectedObject.id).map((option) => <option key={option.id} value={option.id}>起点：{option.label}</option>)}</select> : null}
+              {boardDraft.linkTarget && boardComponentOptions(String(boardDraft.linkTarget)).length ? <select value={String(boardDraft.linkToComponent ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkToComponent: event.target.value })}><option value="">终点：页面边缘</option>{boardComponentOptions(String(boardDraft.linkTarget)).map((option) => <option key={option.id} value={option.id}>终点：{option.label}</option>)}</select> : null}
               <input value={String(boardDraft.linkLabel ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, linkLabel: event.target.value })} placeholder="连线说明（可选）" />
-              <button disabled={!boardDraft.linkTarget} onClick={() => { void addBoardLink(boardSelectedObject.id, String(boardDraft.linkTarget), String(boardDraft.linkLabel ?? "")); setBoardDraft({ ...boardDraft, linkTarget: "", linkLabel: "" }); }}><Link2 size={12} />连线</button>
+              <button disabled={!boardDraft.linkTarget} onClick={() => { void addBoardLink(boardSelectedObject.id, String(boardDraft.linkTarget), String(boardDraft.linkLabel ?? ""), String(boardDraft.linkFromComponent ?? "") || undefined, String(boardDraft.linkToComponent ?? "") || undefined); setBoardDraft({ ...boardDraft, linkTarget: "", linkLabel: "", linkFromComponent: "", linkToComponent: "" }); }}><Link2 size={12} />连线</button>
             </div>
           </div>
           <div className="inspector-footer"><button className="is-danger" onClick={() => void deleteBoardObject(boardSelectedObject.id)}><Trash2 size={13} />删除对象</button><span>{boardSelectedObject.type}</span></div>

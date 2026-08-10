@@ -122,6 +122,7 @@ function Selectable({ component, selectedId, onSelect, className = "", children,
 
 export { BoardRenderer } from "./BoardRenderer";
 export type { BoardRendererHandle, BoardRendererProps } from "./BoardRenderer";
+export { boardExportRuntimeScript } from "./exportRuntime";
 export {
   ANNOTATION_PANEL_GAP,
   ANNOTATION_PANEL_WIDTH,

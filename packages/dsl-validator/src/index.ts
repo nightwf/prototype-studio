@@ -1,5 +1,6 @@
 import Ajv2020, { type ErrorObject } from "ajv/dist/2020.js";
 import {
+  boardLinkTypes,
   componentTypes,
   conditionOperators,
   eventTypes,
@@ -172,6 +173,15 @@ export function validateBoard(value: unknown): BoardValidationResult {
       }
       if (record.from === record.to) {
         errors.push(boardIssue("INVALID_EVENT_TARGET", "连线不能连接对象自身。", path));
+      }
+      if (record.lineType && !boardLinkTypes.includes(record.lineType)) {
+        errors.push(boardIssue("SCHEMA_INVALID", `连线类型无效：${record.lineType}`, `${path}.lineType`));
+      }
+      if (record.strokeWidth !== undefined && (!Number.isFinite(record.strokeWidth) || record.strokeWidth < 1 || record.strokeWidth > 8)) {
+        errors.push(boardIssue("SCHEMA_INVALID", "连线粗细必须在 1–8 之间。", `${path}.strokeWidth`));
+      }
+      if (record.color && !/^#[0-9a-f]{6}$/i.test(record.color)) {
+        errors.push(boardIssue("SCHEMA_INVALID", "连线颜色必须是 6 位十六进制颜色。", `${path}.color`));
       }
     });
   }

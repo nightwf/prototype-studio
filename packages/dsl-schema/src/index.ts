@@ -363,11 +363,20 @@ export interface BoardErObject extends BoardObjectBase {
 
 export type BoardObject = BoardPageObject | BoardNoteObject | BoardMarkerObject | BoardFlowchartObject | BoardErObject;
 
+export const boardLinkTypes = ["straight", "curve", "orthogonal"] as const;
+export type BoardLinkType = (typeof boardLinkTypes)[number];
+
 export interface BoardLink {
   id: string;
   from: string;
   to: string;
   label?: string;
+  /** Optional component anchors for links whose endpoint is a page object. */
+  fromComponentId?: string;
+  toComponentId?: string;
+  lineType?: BoardLinkType;
+  strokeWidth?: number;
+  color?: string;
 }
 
 export interface BoardDSL {

@@ -57,4 +57,19 @@ describe("validateBoard with open object types", () => {
     expect(invalid.valid).toBe(false);
     expect(invalid.errors.some((error) => error.message.includes("data"))).toBe(true);
   });
+
+  it("rejects invalid link types, widths and colors", () => {
+    const result = validateBoard({
+      dslVersion: "1.0",
+      id: "board",
+      revision: 1,
+      objects: [
+        { id: "a", type: "note", x: 0, y: 0, width: 100, height: 50, text: "A" },
+        { id: "b", type: "note", x: 200, y: 0, width: 100, height: 50, text: "B" }
+      ],
+      links: [{ id: "link", from: "a", to: "b", lineType: "zigzag", strokeWidth: 10, color: "red" }]
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.map((error) => error.path)).toEqual(expect.arrayContaining(["$.links[0].lineType", "$.links[0].strokeWidth", "$.links[0].color"]));
+  });
 });
