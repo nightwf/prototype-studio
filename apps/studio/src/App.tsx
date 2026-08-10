@@ -56,6 +56,7 @@ import {
   type BoardNoteObject,
   type BoardObject,
   type Command,
+  type ComponentOption,
   type MarkerTone,
   type PageDSL,
   type RevisionRecord,
@@ -299,6 +300,60 @@ function OutlineNode({ component, depth = 0, selectedId, onSelect, onMove }: {
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (value: boolean) => void; label: string }) {
   return <button type="button" role="switch" aria-checked={checked} className={`inspector-toggle ${checked ? "is-on" : ""}`} onClick={() => onChange(!checked)}><i /><span>{label}</span></button>;
+}
+
+function OptionsEditor({ component, onChange }: { component: UIComponent; onChange: (options: ComponentOption[]) => void }) {
+  const signature = JSON.stringify(component.options ?? []);
+  const [options, setOptions] = useState<ComponentOption[]>(() => structuredClone(component.options ?? []));
+  useEffect(() => { setOptions(structuredClone(component.options ?? [])); }, [component.id, signature]);
+
+  const duplicateValues = new Set<string>();
+  const seenValues = new Set<string>();
+  options.forEach((option) => {
+    const value = String(option.value);
+    if (seenValues.has(value)) duplicateValues.add(value);
+    seenValues.add(value);
+  });
+  const commit = (next: ComponentOption[]) => {
+    setOptions(next);
+    const values = next.map((option) => String(option.value));
+    if (new Set(values).size === values.length) onChange(next);
+  };
+  const updateDraft = (index: number, changes: Partial<ComponentOption>) => setOptions((items) => items.map((option, optionIndex) => optionIndex === index ? { ...option, ...changes } : option));
+  const commitDraft = () => commit(options.map((option, index) => ({
+    ...option,
+    label: option.label.trim() || `选项 ${index + 1}`,
+    value: typeof option.value === "string" ? option.value.trim() || `option-${index + 1}` : option.value
+  })));
+  const addOption = () => {
+    let suffix = options.length + 1;
+    while (options.some((option) => String(option.value) === `option-${suffix}`)) suffix += 1;
+    commit([...options, { label: `选项 ${suffix}`, value: `option-${suffix}` }]);
+  };
+  const moveOption = (index: number, offset: -1 | 1) => {
+    const target = index + offset;
+    if (target < 0 || target >= options.length) return;
+    const next = [...options];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    commit(next);
+  };
+
+  return <div className="option-editor">
+    <div className="option-editor-head"><span>显示文字</span><span>选项值</span><i>状态 / 排序</i></div>
+    <div className="option-editor-list">
+      {options.map((option, index) => <div className={`option-editor-row ${duplicateValues.has(String(option.value)) ? "has-error" : ""}`} key={index}>
+        <input aria-label={`选项 ${index + 1} 显示文字`} value={option.label} onChange={(event) => updateDraft(index, { label: event.target.value })} onBlur={commitDraft} />
+        <input aria-label={`选项 ${index + 1} 选项值`} value={String(option.value)} onChange={(event) => updateDraft(index, { value: event.target.value })} onBlur={commitDraft} />
+        <button type="button" className={option.disabled ? "is-disabled" : ""} aria-label={`${option.disabled ? "启用" : "禁用"}选项 ${index + 1}`} title={option.disabled ? "当前禁用，点击启用" : "点击禁用"} onClick={() => commit(options.map((item, optionIndex) => optionIndex === index ? { ...item, disabled: !item.disabled } : item))}><i /></button>
+        <button type="button" aria-label={`上移选项 ${index + 1}`} disabled={index === 0} onClick={() => moveOption(index, -1)}><ArrowUp size={11} /></button>
+        <button type="button" aria-label={`下移选项 ${index + 1}`} disabled={index === options.length - 1} onClick={() => moveOption(index, 1)}><ArrowDown size={11} /></button>
+        <button type="button" className="is-danger" aria-label={`删除选项 ${index + 1}`} onClick={() => commit(options.filter((_, optionIndex) => optionIndex !== index))}><Trash2 size={11} /></button>
+      </div>)}
+    </div>
+    {duplicateValues.size ? <div className="option-editor-error">选项值不能重复，请修改后再离开输入框。</div> : null}
+    {!options.length ? <div className="option-editor-empty">暂无选项，添加后可在原型中选择。</div> : null}
+    <button type="button" className="option-editor-add" onClick={addOption}><Plus size={12} />添加选项</button>
+  </div>;
 }
 
 function DiffView({ entries }: { entries: DslDiffEntry[] }) {
@@ -1910,6 +1965,7 @@ ${boardExportRuntimeScript}
           <label className="inspector-field"><span>{selected.type === "button" ? "按钮文字" : selected.title ? "标题" : "名称"}</span><input value={String(selected.text ?? selected.title ?? selected.label ?? "")} onChange={(event) => updateSelected(selected.type === "button" ? { text: event.target.value } : selected.title ? { title: event.target.value } : { label: event.target.value })} /></label>
           <label className="inspector-field"><span>组件类型</span><select value={selected.type} onChange={(event) => updateSelected({ type: event.target.value as UIComponent["type"] })}>{[selected.type, ...(selected.type === "modal" ? ["drawer"] : selected.type === "drawer" ? ["modal"] : [])].filter((value, index, array) => array.indexOf(value) === index).map((type) => <option key={type}>{type}</option>)}</select></label>
           {!["button", "table", "modal", "drawer", "popover"].includes(selected.type) ? <label className="inspector-field"><span>Placeholder</span><input value={String(selected.placeholder ?? "")} placeholder="未设置" onChange={(event) => updateSelected({ placeholder: event.target.value })} /></label> : null}
+          {["select", "tree-select", "radio"].includes(selected.type) ? <><SectionTitle>选择项配置</SectionTitle><OptionsEditor component={selected} onChange={(options) => updateSelected({ options })} /></> : null}
           <SectionTitle>行为与状态</SectionTitle>
           <div className="inspector-toggle-list">
             <Toggle checked={selected.visible !== false} onChange={(value) => updateSelected({ visible: value })} label="显示组件" />
