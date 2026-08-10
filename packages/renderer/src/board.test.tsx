@@ -81,4 +81,13 @@ describe("BoardRenderer", () => {
     expect(markup).toContain('class="board-canvas is-picking"');
     expect(markup).toMatch(/board-object--page\s+is-picking/);
   });
+
+  it("shows draggable endpoint handles for the selected link", () => {
+    const markup = renderToStaticMarkup(
+      <BoardRenderer board={board} pages={{ "case-list": caseListExample }} interactive selectedLinkId="link-1" />
+    );
+    expect(markup).toContain('data-link-endpoint="from"');
+    expect(markup).toContain('data-link-endpoint="to"');
+    expect(markup).toContain("board-link-handle--to");
+  });
 });

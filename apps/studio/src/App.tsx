@@ -1242,6 +1242,20 @@ export function App() {
     setBoardSelectedIds([]);
   };
 
+  const relinkBoardLink = (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => {
+    const link = board.links.find((item) => item.id === linkId);
+    if (!link) return;
+    const oppositeObjectId = endpoint === "from" ? link.to : link.from;
+    if (objectId === oppositeObjectId) {
+      toast("warning", "无法吸附", "连线的起点和终点不能位于同一个画布对象");
+      return;
+    }
+    const changes: Partial<BoardLink> = endpoint === "from"
+      ? { from: objectId, fromComponentId: componentId }
+      : { to: objectId, toComponentId: componentId };
+    void runBoardCommands([{ type: "UPDATE_BOARD_LINK", target: linkId, changes }], componentId ? `已吸附到 ${componentId}` : `已吸附到 ${objectId}`);
+  };
+
   const deleteBoardObjects = async (ids: string[]) => {
     if (!ids.length) return;
     if (await runBoardCommands(ids.map((id) => ({ type: "DELETE_BOARD_OBJECT", target: id })), `已删除 ${ids.length} 个对象`)) {
@@ -1690,6 +1704,7 @@ ${boardExportRuntimeScript}
           onSelectObject={selectBoardObject}
           onSelectMany={selectBoardMany}
           onSelectLink={selectBoardLink}
+          onRelink={relinkBoardLink}
           onOpenPage={openPageFromBoard}
           onMoveObject={moveBoardObject}
           onMoveObjects={moveBoardObjects}
@@ -1777,6 +1792,7 @@ ${boardExportRuntimeScript}
           <div className="inspector-body">
             <SectionTitle>连接关系</SectionTitle>
             <div className="board-link-endpoints"><span><i />{boardSelectedLink.from}</span><ArrowRight size={14} /><span><i />{boardSelectedLink.to}</span></div>
+            <div className="board-link-drag-hint"><Link2 size={12} /><span>画布上拖动连线两端圆点，可重新吸附页面或具体组件</span></div>
             <label className="inspector-field"><span>连线说明</span><input value={String(boardDraft.label ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, label: event.target.value })} onBlur={() => updateBoardLink({ label: String(boardDraft.label ?? "") || undefined })} placeholder="例如：提交后进入" /></label>
             <div className="board-link-anchor-grid">
               <label><span>起点元素</span><select value={String(boardDraft.fromComponentId ?? "")} onChange={(event) => { const value = event.target.value; setBoardDraft({ ...boardDraft, fromComponentId: value }); updateBoardLink({ fromComponentId: value || undefined }); }}><option value="">页面边缘</option>{boardComponentOptions(boardSelectedLink.from).map((option) => <option key={option.id} value={option.id}>{option.label} · {option.id}</option>)}</select></label>

@@ -366,6 +366,8 @@ button { color: inherit; }
 .board-link-endpoints { min-height: 42px; margin-bottom: 14px; padding: 8px; display: grid; grid-template-columns: minmax(0,1fr) 18px minmax(0,1fr); align-items: center; gap: 5px; border: 1px solid #d7e1f8; border-radius: 7px; background: #f5f8ff; color: var(--ps-cobalt); }
 .board-link-endpoints > span { min-width: 0; display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 8px/1 var(--ps-font-mono); }
 .board-link-endpoints i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: var(--ps-cobalt); }
+.board-link-drag-hint { margin: -6px 0 14px; padding: 8px 9px; display: flex; align-items: flex-start; gap: 7px; border: 1px dashed #b8c9ee; border-radius: 6px; background: #f8faff; color: #5570a8; font-size: 8px; line-height: 1.5; }
+.board-link-drag-hint svg { flex: none; margin-top: 1px; color: var(--ps-cobalt); }
 .board-link-anchor-grid, .board-link-style-grid { margin-bottom: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .board-link-anchor-grid label > span, .board-link-style-grid label > span { display: block; margin-bottom: 5px; color: var(--ps-ink-500); font-size: 8px; font-weight: 650; }
 .board-link-anchor-grid select, .board-link-style-grid select { width: 100%; height: 32px; padding: 0 7px; border: 1px solid var(--ps-ink-200); border-radius: 6px; background: white; color: var(--ps-ink-800); font-size: 8px; }

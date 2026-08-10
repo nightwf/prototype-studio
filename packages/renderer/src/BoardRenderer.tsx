@@ -46,6 +46,7 @@ export interface BoardRendererProps {
   onSelectObject?: (id: string) => void;
   onSelectMany?: (ids: string[]) => void;
   onSelectLink?: (id: string) => void;
+  onRelink?: (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => void;
   onOpenPage?: (pageId: string) => void;
   onMoveObject?: (id: string, x: number, y: number) => void;
   onMoveObjects?: (ids: string[], dx: number, dy: number) => void;
@@ -208,6 +209,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   onSelectObject,
   onSelectMany,
   onSelectLink,
+  onRelink,
   onOpenPage,
   onMoveObject,
   onMoveObjects,
@@ -227,6 +229,12 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   const [containerSize, setContainerSize] = useState({ width: 1200, height: 800 });
   const [pins, setPins] = useState<Record<string, Point>>({});
   const [linkAnchors, setLinkAnchors] = useState<Record<string, Point>>({});
+  const [linkDrag, setLinkDrag] = useState<{
+    linkId: string;
+    endpoint: "from" | "to";
+    point: Point;
+    snap?: { objectId: string; componentId?: string; label: string; point?: Point };
+  }>();
   const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; objectIds: string[] } | null>(null);
   const [spacePressed, setSpacePressed] = useState(false);
@@ -371,6 +379,33 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
 
   const select = (id: string): void => {
     if (interactive) onSelectObject?.(id);
+  };
+
+  const pointerCanvasPoint = (clientX: number, clientY: number): Point => {
+    const rect = viewportRect();
+    const world = screenToWorld(view, clientX, clientY, rect.left, rect.top);
+    return { x: world.x - canvasX, y: world.y - canvasY };
+  };
+
+  const findLinkSnap = (clientX: number, clientY: number): { objectId: string; componentId?: string; label: string; point?: Point } | undefined => {
+    for (const element of document.elementsFromPoint(clientX, clientY)) {
+      const component = element.closest?.("[data-component-id]") as HTMLElement | null;
+      const objectElement = (component ?? element).closest?.("[data-board-object]") as HTMLElement | null;
+      const objectId = objectElement?.dataset.boardObject;
+      if (!objectId) continue;
+      const componentId = component?.dataset.componentId;
+      if (componentId) {
+        const bounds = component.getBoundingClientRect();
+        return {
+          objectId,
+          componentId,
+          label: componentId,
+          point: pointerCanvasPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
+        };
+      }
+      return { objectId, label: objectId };
+    }
+    return undefined;
   };
 
   const startPanOrMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
@@ -590,12 +625,16 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
           const fromCenter = centers.get(link.from);
           const toCenter = centers.get(link.to);
           if (!fromObject || !toObject || !fromCenter || !toCenter) return null;
-          const from = link.fromComponentId
+          const resolvedFrom = link.fromComponentId
             ? linkAnchors[`${link.from}:${link.fromComponentId}`] ?? objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY)
             : objectBoundaryPoint(fromObject, toCenter, pins, canvasX, canvasY);
-          const to = link.toComponentId
+          const resolvedTo = link.toComponentId
             ? linkAnchors[`${link.to}:${link.toComponentId}`] ?? objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY)
             : objectBoundaryPoint(toObject, fromCenter, pins, canvasX, canvasY);
+          const activeDrag = linkDrag?.linkId === link.id ? linkDrag : undefined;
+          const dragPoint = activeDrag?.snap?.point ?? activeDrag?.point;
+          const from = activeDrag?.endpoint === "from" && dragPoint ? dragPoint : resolvedFrom;
+          const to = activeDrag?.endpoint === "to" && dragPoint ? dragPoint : resolvedTo;
           const path = linkPath(from, to, link.lineType);
           const color = link.color ?? "#2563eb";
           const width = link.strokeWidth ?? 2.5;
@@ -623,6 +662,46 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                 <text className="board-link-label" x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 8} fill={color} fontSize={10} fontWeight={700} textAnchor="middle">
                   {link.label}
                 </text>
+              ) : null}
+              {interactive && (selectedLinkId === link.id || activeDrag) ? ([
+                ["from", from],
+                ["to", to]
+              ] as const).map(([endpoint, point]) => (
+                <circle
+                  key={endpoint}
+                  className={`board-link-handle board-link-handle--${endpoint} ${activeDrag?.endpoint === endpoint ? "is-dragging" : ""}`}
+                  data-link-endpoint={endpoint}
+                  cx={point.x}
+                  cy={point.y}
+                  r={endpoint === "to" ? 7 : 6}
+                  fill={endpoint === "to" ? color : "white"}
+                  stroke={color}
+                  strokeWidth={2.5}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setLinkDrag({ linkId: link.id, endpoint, point });
+                  }}
+                  onPointerMove={(event) => {
+                    if (!linkDrag || linkDrag.linkId !== link.id || linkDrag.endpoint !== endpoint) return;
+                    const snap = findLinkSnap(event.clientX, event.clientY);
+                    setLinkDrag({ linkId: link.id, endpoint, point: pointerCanvasPoint(event.clientX, event.clientY), snap });
+                  }}
+                  onPointerUp={(event) => {
+                    if (!linkDrag || linkDrag.linkId !== link.id || linkDrag.endpoint !== endpoint) return;
+                    const snap = findLinkSnap(event.clientX, event.clientY);
+                    if (snap) onRelink?.(link.id, endpoint, snap.objectId, snap.componentId);
+                    setLinkDrag(undefined);
+                  }}
+                  onPointerCancel={() => setLinkDrag(undefined)}
+                />
+              )) : null}
+              {activeDrag?.snap ? (
+                <g className="board-link-snap-label" transform={`translate(${(dragPoint?.x ?? 0) + 12} ${(dragPoint?.y ?? 0) - 12})`}>
+                  <rect x="0" y="-18" width={Math.max(76, activeDrag.snap.label.length * 7 + 24)} height="24" rx="6" />
+                  <text x="10" y="-2">吸附 · {activeDrag.snap.label}</text>
+                </g>
               ) : null}
             </g>
           );
