@@ -739,11 +739,29 @@ export function App() {
   /** 弹窗靠近鼠标位置显示，超出视口时自动收拢。 */
   const aiBarStyle = (pos: { x: number; y: number } | null): CSSProperties | undefined => {
     if (!pos) return undefined;
-    const width = 640;
-    const height = 320;
-    const left = Math.max(8, Math.min(pos.x + 14, window.innerWidth - width - 8));
-    const top = Math.max(8, Math.min(pos.y + 14, window.innerHeight - height - 8));
-    return { position: "fixed", left, top, zIndex: 320, margin: 0, transform: "none" };
+    const width = 560;
+    const estHeight = 340;
+    const gap = 14;
+    const margin = 8;
+    let left = pos.x + gap;
+    let top = pos.y + gap;
+    // 靠近右 / 下边缘时翻转到鼠标另一侧，避免弹窗超出视口
+    if (left + width > window.innerWidth - margin) left = pos.x - width - gap;
+    if (top + estHeight > window.innerHeight - margin) top = pos.y - estHeight - gap;
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
+    top = Math.max(margin, Math.min(top, window.innerHeight - estHeight - margin));
+    return {
+      position: "fixed",
+      left,
+      top,
+      zIndex: 320,
+      margin: 0,
+      transform: "none",
+      width: `min(${width}px, calc(100vw - ${margin * 2}px))`,
+      maxHeight: `calc(100vh - ${margin * 2}px)`,
+      overflowY: "auto",
+      boxSizing: "border-box"
+    };
   };
 
   const persistDesktopPage = useCallback(async (page: PageDSL, revision?: RevisionRecord) => {
