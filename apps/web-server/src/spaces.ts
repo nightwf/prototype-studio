@@ -280,6 +280,13 @@ export class ProjectSpaceManager {
 
   async createShare(userId: string, projectId: string, baseUrl: string, expiresInSeconds?: number) {
     await this.requireProject(userId, projectId);
+    // 同一项目只保留一条有效发布链接：重新发布前先撤销旧链接。
+    const existing = await this.metadata.listShareLinksByProject(projectId);
+    for (const link of existing) {
+      if (!link.expiresAt || new Date(link.expiresAt).getTime() >= Date.now()) {
+        await this.metadata.deleteShareLink(link.token);
+      }
+    }
     const token = newToken();
     await this.metadata.createShareLink({
       id: randomUUID(),
@@ -296,13 +303,19 @@ export class ProjectSpaceManager {
   async listShares(userId: string, projectId: string, baseUrl: string) {
     await this.requireProject(userId, projectId);
     const links = await this.metadata.listShareLinksByProject(projectId);
-    const active = links.filter((link) => !link.expiresAt || new Date(link.expiresAt).getTime() >= Date.now());
-    return active.map((link) => ({
-      token: link.token,
-      url: `${baseUrl}/share/${link.token}`,
-      expiresAt: link.expiresAt,
-      createdAt: link.createdAt
-    }));
+    const active = links
+      .filter((link) => !link.expiresAt || new Date(link.expiresAt).getTime() >= Date.now())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    // 兼容历史重复发布：只保留最新一条有效链接，其余自动撤销。
+    const [latest, ...stale] = active;
+    for (const link of stale) await this.metadata.deleteShareLink(link.token);
+    if (!latest) return [];
+    return [{
+      token: latest.token,
+      url: `${baseUrl}/share/${latest.token}`,
+      expiresAt: latest.expiresAt,
+      createdAt: latest.createdAt
+    }];
   }
 
   async revokeShare(userId: string, projectId: string, token: string): Promise<void> {

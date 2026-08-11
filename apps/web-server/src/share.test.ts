@@ -82,6 +82,28 @@ describe("read-only sharing", () => {
     expect(afterExpiry.statusCode).toBe(404);
   });
 
+  it("re-publishing replaces the old active link instead of stacking duplicates", async () => {
+    const { app } = await testServer();
+    const { apiToken, projectId } = await login(app);
+    const auth = { authorization: `Bearer ${apiToken}` };
+
+    const first = await app.inject({ method: "POST", url: `/api/projects/${projectId}/share`, payload: {}, headers: auth });
+    const firstToken = first.json().token as string;
+
+    const second = await app.inject({ method: "POST", url: `/api/projects/${projectId}/share`, payload: {}, headers: auth });
+    const secondToken = second.json().token as string;
+
+    const list = await app.inject({ method: "GET", url: `/api/projects/${projectId}/share`, headers: auth });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().links).toHaveLength(1);
+    expect(list.json().links[0].token).toBe(secondToken);
+
+    const oldData = await app.inject({ method: "GET", url: `/api/share/${firstToken}` });
+    expect(oldData.statusCode).toBe(404);
+    const newData = await app.inject({ method: "GET", url: `/api/share/${secondToken}` });
+    expect(newData.statusCode).toBe(200);
+  });
+
   it("exports a zip and restores it into a new project", async () => {
     const { app } = await testServer();
     const { apiToken, projectId } = await login(app);
