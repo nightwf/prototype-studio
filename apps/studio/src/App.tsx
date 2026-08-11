@@ -2318,7 +2318,7 @@ ${boardExportRuntimeScript}
         {aiSelectMode && boardAiBarIds.length > 0 ? <div className="board-ai-bar">
           <div className="board-ai-bar-head">
             <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardAiBarIds.length} 个对象</span>
-            <button className="board-ai-close" onClick={() => setBoardAiBarIds([])} aria-label="关闭指令输入框"><X size={13} /></button>
+            <button className="board-ai-close" onClick={() => toggleAiSelect(false)} aria-label="关闭指令输入框并退出框选"><X size={13} /></button>
           </div>
           <pre className="board-ai-preview">{buildAiInstruction("board", boardAiBarIds, boardAiText)}</pre>
           <textarea
@@ -2329,7 +2329,7 @@ ${boardExportRuntimeScript}
             aria-label="框选修改指令"
             rows={3}
           />
-          <button onClick={() => { void copyText(buildAiInstruction("board", boardAiBarIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
+          <button className="board-ai-action" onClick={() => { void copyText(buildAiInstruction("board", boardAiBarIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
         </div> : null}
         {boardTool === "page" ? <div className="board-tool-panel">
           <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
@@ -2362,7 +2362,7 @@ ${boardExportRuntimeScript}
           {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar">
             <div className="board-ai-bar-head">
               <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
-              <button className="board-ai-close" onClick={() => setPageAiSelectedIds([])} aria-label="关闭指令输入框"><X size={13} /></button>
+              <button className="board-ai-close" onClick={() => toggleAiSelect(false)} aria-label="关闭指令输入框并退出框选"><X size={13} /></button>
             </div>
             <pre className="board-ai-preview">{buildAiInstruction("page", pageAiSelectedIds, pageAiText)}</pre>
             <textarea
@@ -2373,7 +2373,7 @@ ${boardExportRuntimeScript}
               aria-label="页面框选修改指令"
               rows={3}
             />
-            <button onClick={() => { void copyText(buildAiInstruction("page", pageAiSelectedIds, pageAiText)); setPageAiText(""); }}><Copy size={13} />复制指令</button>
+            <button className="board-ai-action" onClick={() => { void copyText(buildAiInstruction("page", pageAiSelectedIds, pageAiText)); setPageAiText(""); }}><Copy size={13} />复制指令</button>
           </div> : null}
         </div>
       </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div>}
