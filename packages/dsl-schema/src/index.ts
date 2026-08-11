@@ -187,6 +187,8 @@ export interface PageDSL {
   layout: {
     type: "standard" | "compact";
     density?: "compact" | "normal" | "comfortable";
+    /** 后台系统外壳导航：定义后渲染器在页面外层渲染左侧菜单。 */
+    navigation?: Navigation;
   };
   search?: {
     id: string;
@@ -209,6 +211,29 @@ export interface PageDSL {
     ref: string;
   };
   meta?: Record<string, unknown>;
+}
+
+export interface NavigationItem {
+  /** 稳定唯一标识，如 "case-center"、"case-center.list"。 */
+  key: string;
+  /** 菜单显示文字。 */
+  label: string;
+  /** 图标名，渲染器映射到内置图标子集；未知名称显示占位图标。 */
+  icon?: string;
+  /** 目标页面 id 或路由路径，用于点击导航与选中态匹配。 */
+  path?: string;
+  /** 当前菜单是否选中；缺省时按 path 与当前页面 id 匹配。 */
+  active?: boolean;
+  /** 可选角标文字，如 "12"、"新"。 */
+  badge?: string;
+  /** 二级菜单；支持一层子菜单。 */
+  children?: NavigationItem[];
+}
+
+export interface Navigation {
+  /** 侧边栏顶部标题，缺省显示"业务工作台"。 */
+  title?: string;
+  items: NavigationItem[];
 }
 
 export const commandTypes = [
@@ -477,7 +502,55 @@ export const pageDslJsonSchema = {
         status: { enum: pageStatuses }
       }
     },
-    layout: { type: "object", required: ["type"] },
+    layout: {
+      type: "object",
+      required: ["type"],
+      properties: {
+        type: { enum: ["standard", "compact"] },
+        density: { enum: ["compact", "normal", "comfortable"] },
+        navigation: {
+          type: "object",
+          properties: {
+            title: { type: "string", minLength: 1 },
+            items: {
+              type: "array",
+              minItems: 1,
+              items: {
+                type: "object",
+                required: ["key", "label"],
+                properties: {
+                  key: { type: "string", minLength: 1 },
+                  label: { type: "string", minLength: 1 },
+                  icon: { type: "string", minLength: 1 },
+                  path: { type: "string", minLength: 1 },
+                  active: { type: "boolean" },
+                  badge: { type: "string", minLength: 1 },
+                  children: {
+                    type: "array",
+                    minItems: 1,
+                    items: {
+                      type: "object",
+                      required: ["key", "label"],
+                      properties: {
+                        key: { type: "string", minLength: 1 },
+                        label: { type: "string", minLength: 1 },
+                        icon: { type: "string", minLength: 1 },
+                        path: { type: "string", minLength: 1 },
+                        active: { type: "boolean" },
+                        badge: { type: "string", minLength: 1 }
+                      },
+                      additionalProperties: true
+                    }
+                  }
+                },
+                additionalProperties: true
+              }
+            }
+          },
+          additionalProperties: true
+        }
+      }
+    },
     overlays: { type: "array" },
     rules: { type: "array" },
     events: { type: "array" }

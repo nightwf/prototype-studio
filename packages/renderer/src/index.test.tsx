@@ -120,6 +120,46 @@ describe("page body rendering", () => {
   });
 });
 
+describe("navigation shell", () => {
+  it("renders a sidebar with menu labels, badges and the active state when layout.navigation exists", () => {
+    const dsl = page({
+      page: { id: "case-list", type: "list", title: "案件列表", status: "Draft" },
+      layout: {
+        type: "standard",
+        density: "normal",
+        navigation: {
+          title: "业务工作台",
+          items: [
+            { key: "case-center", label: "案件管理", icon: "table", path: "case-list", active: true, badge: "4" },
+            { key: "config", label: "系统配置", icon: "settings", children: [
+              { key: "config.users", label: "用户管理", path: "user-list" }
+            ] }
+          ]
+        }
+      }
+    });
+    const markup = renderToStaticMarkup(<PrototypeRenderer dsl={dsl} interactive={false} />);
+
+    expect(markup).toContain("proto-app");
+    expect(markup).toContain("proto-sidebar");
+    expect(markup).toContain("业务工作台");
+    expect(markup).toContain("案件管理");
+    expect(markup).toContain("系统配置");
+    expect(markup).toContain("用户管理");
+    expect(markup).toContain("proto-nav-badge");
+    expect(markup).toContain("is-active");
+    expect(markup).toContain("proto-app-body");
+    expect(markup).toContain("<h1>案件列表</h1>");
+  });
+
+  it("keeps the plain page shell when layout.navigation is absent", () => {
+    const markup = renderToStaticMarkup(<PrototypeRenderer dsl={page({})} interactive={false} />);
+    expect(markup).not.toContain("proto-app");
+    expect(markup).not.toContain("proto-sidebar");
+    expect(markup).toContain("proto-root");
+  });
+});
+
 describe("visibleWhen condition evaluation", () => {
   const values = {
     status: "active",
