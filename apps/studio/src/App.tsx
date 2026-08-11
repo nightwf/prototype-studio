@@ -2288,7 +2288,7 @@ ${boardExportRuntimeScript}
         {viewMode === "page" ? <>
             <div className="canvas-toolbar-left">
               <div className="viewport-switcher"><button className="is-active"><Monitor size={14} />桌面</button><button><PanelRight size={14} />平板</button></div>
-              <div className="canvas-meta"><span>1280 × 820</span><i /><span className="board-hint-text">可点选模式</span></div>
+              <div className="canvas-meta"><span>1280 × 820</span></div>
             </div>
             <div className="canvas-toolbar-actions">
               {isModulePage ? <div className="doc-tools">
@@ -2302,7 +2302,7 @@ ${boardExportRuntimeScript}
             </div>
         </> : <>
             <div className="canvas-toolbar-left">
-              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">页面标题栏拖动 · 页面内容可直接操作 · 双击标题进入编辑</span></div>
+              <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span></div>
             </div>
             <div className="canvas-toolbar-actions">
               <div className="board-tools">
@@ -2311,6 +2311,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
+                <i className="board-tools-divider" />
                 <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选画布对象生成修改指令"><MousePointer2 size={13} />框选修改</button>
                 <div className="board-more">
                   <button className={boardMoreOpen ? "is-active" : ""} onClick={() => setBoardMoreOpen((value) => !value)} title="更多操作"><MoreHorizontal size={13} />更多</button>
