@@ -63,6 +63,7 @@ export interface MetadataStore {
   hasProjectMember(projectId: string, userId: string): Promise<boolean>;
   createShareLink(row: ShareLinkRow): Promise<void>;
   getShareLinkByToken(token: string): Promise<ShareLinkRow | undefined>;
+  listShareLinksByProject(projectId: string): Promise<ShareLinkRow[]>;
   deleteShareLink(token: string): Promise<void>;
 }
 
@@ -228,6 +229,11 @@ export class MemoryMetadataStore implements MetadataStore {
   async getShareLinkByToken(token: string): Promise<ShareLinkRow | undefined> {
     await this.ready;
     return this.shareLinks.get(token);
+  }
+
+  async listShareLinksByProject(projectId: string): Promise<ShareLinkRow[]> {
+    await this.ready;
+    return [...this.shareLinks.values()].filter((link) => link.projectId === projectId);
   }
 
   async deleteShareLink(token: string): Promise<void> {

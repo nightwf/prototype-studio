@@ -194,6 +194,12 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     reply.code(201).send({ ok: true, ...share });
   });
 
+  app.get("/api/projects/:projectId/share", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const links = await options.spaces.listShares(user.id, projectIdOf(request.params), baseUrl);
+    return { ok: true, links };
+  });
+
   app.delete("/api/projects/:projectId/share/:token", async (request, reply) => {
     const user = await requireUser(request, reply);
     const params = request.params as { token?: string };

@@ -390,6 +390,10 @@ export function App() {
   const [mcpState, setMcpState] = useState<"stopped" | "running" | "unavailable">("stopped");
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"account" | "connection" | "local">("account");
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishLinks, setPublishLinks] = useState<Array<{ token: string; url: string; expiresAt?: string; createdAt: string }>>([]);
+  const [publishExpiry, setPublishExpiry] = useState("30");
+  const [publishBusy, setPublishBusy] = useState(false);
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
   const [appModal, setAppModal] = useState<AppModal>();
   const [modalValue, setModalValue] = useState("");
@@ -481,7 +485,6 @@ export function App() {
       setViewMode(requestedPageId && loadedPages.some((page) => page.page.id === requestedPageId) ? "page" : "canvas");
       setActiveWorkspace(requestedPageId ? "pages" : "boards");
       setWebProjectId(projectId);
-      toast("success", "项目已打开", tree.manifest.name);
     } catch (error) {
       toast("danger", "无法打开项目", error instanceof Error ? error.message : "未知错误");
     }
@@ -705,7 +708,6 @@ export function App() {
     setActiveWorkspace("boards");
     await startProjectWatcher();
     void startLocalMcp().then((status) => setMcpState(status.state)).catch(() => setMcpState("unavailable"));
-    toast("success", "本地项目已打开", `${snapshot.manifest.name} · ${snapshot.pageIds.length} 个页面`);
   }, [toast]);
 
   const openLocalProject = useCallback(async () => {
@@ -1718,14 +1720,43 @@ ${boardExportRuntimeScript}
     }
   };
 
-  const shareWebProject = async () => {
+  const refreshPublishLinks = useCallback(async () => {
     if (!webProjectId) return;
     try {
-      const share = await webSpace.shareCreate(webProjectId);
-      await copyText(share.url);
-      toast("success", "分享链接已复制", share.url);
+      const result = await webSpace.shareList(webProjectId);
+      setPublishLinks(result.links);
+    } catch { /* 忽略查询失败 */ }
+  }, [webProjectId]);
+
+  const openPublishDrawer = useCallback(() => {
+    setPublishOpen(true);
+    void refreshPublishLinks();
+  }, [refreshPublishLinks]);
+
+  const publishWebProject = async () => {
+    if (!webProjectId || publishBusy) return;
+    setPublishBusy(true);
+    try {
+      const expiresInSeconds = publishExpiry === "forever" ? undefined : Number(publishExpiry) * 86400;
+      await webSpace.shareCreate(webProjectId, expiresInSeconds);
+      await refreshPublishLinks();
     } catch (error) {
-      toast("danger", "创建分享链接失败", error instanceof Error ? error.message : "未知错误");
+      toast("danger", "发布失败", error instanceof Error ? error.message : "未知错误");
+    } finally {
+      setPublishBusy(false);
+    }
+  };
+
+  const closePublishWebProject = async (token: string) => {
+    if (!webProjectId || publishBusy) return;
+    setPublishBusy(true);
+    try {
+      await webSpace.shareRevoke(webProjectId, token);
+      await refreshPublishLinks();
+    } catch (error) {
+      toast("danger", "关闭发布失败", error instanceof Error ? error.message : "未知错误");
+    } finally {
+      setPublishBusy(false);
     }
   };
 
@@ -1988,7 +2019,7 @@ ${boardExportRuntimeScript}
         <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
-        <ToolButton><Share2 size={14} />分享</ToolButton>
+        <ToolButton disabled={!webMode || !webProjectId} onClick={openPublishDrawer}><Share2 size={14} />发布</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setSettingsSection("account"); setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
       </div>
     </header>
@@ -2095,7 +2126,7 @@ ${boardExportRuntimeScript}
                     <i />
                     <button onClick={() => { setBoardMoreOpen(false); setBoardExportOpen(true); }}><Download size={12} />导出 HTML</button>
                     {webMode && webProjectId ? <>
-                      <button onClick={() => { setBoardMoreOpen(false); void shareWebProject(); }}><Share2 size={12} />分享</button>
+                      <button onClick={() => { setBoardMoreOpen(false); openPublishDrawer(); }}><Share2 size={12} />发布</button>
                       <button onClick={() => { setBoardMoreOpen(false); void downloadWebZip(); }}><Save size={12} />整包</button>
                     </> : null}
                   </div> : null}
@@ -2415,6 +2446,53 @@ bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
               </div>
             </> : <div className="settings-note">正在读取连接信息…</div>) : null}
           </div>
+        </div>
+      </section>
+    </div> : null}
+
+    {publishOpen ? <div className="settings-overlay" onClick={() => setPublishOpen(false)}>
+      <section className="publish-drawer" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div><span>PUBLISH</span><h2>发布项目</h2></div>
+          <button onClick={() => setPublishOpen(false)} aria-label="关闭发布"><X size={14} /></button>
+        </header>
+        <div className="publish-body">
+          {publishLinks.length ? publishLinks.map((link) => {
+            const expires = link.expiresAt ? new Date(link.expiresAt) : null;
+            return (
+              <div className="publish-live" key={link.token}>
+                <div className="publish-live-head"><StatusDot tone="success">已发布</StatusDot><small>任何人可访问</small></div>
+                <div className="publish-link-row">
+                  <code>{link.url}</code>
+                  <button onClick={() => void copyText(link.url)} disabled={publishBusy}><Copy size={13} />复制</button>
+                </div>
+                <div className="publish-meta">
+                  <span>有效期</span>
+                  <strong>{expires ? `${expires.toLocaleDateString("zh-CN")} ${expires.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} 过期` : "永久有效"}</strong>
+                </div>
+                <div className="publish-meta">
+                  <span>创建时间</span>
+                  <strong>{new Date(link.createdAt).toLocaleString("zh-CN")}</strong>
+                </div>
+                <button className="publish-close" onClick={() => void closePublishWebProject(link.token)} disabled={publishBusy}><X size={13} />关闭发布</button>
+              </div>
+            );
+          }) : <>
+            <div className="publish-intro">
+              <strong>发布为公共链接</strong>
+              <p>发布后，任何人可以通过链接查看当前项目画布，无需登录。发布内容随项目修改实时更新。</p>
+            </div>
+            <label className="publish-expiry-field"><span>有效期</span>
+              <select value={publishExpiry} onChange={(event) => setPublishExpiry(event.target.value)}>
+                <option value="7">7 天</option>
+                <option value="30">30 天</option>
+                <option value="90">90 天</option>
+                <option value="365">365 天</option>
+                <option value="forever">永久有效</option>
+              </select>
+            </label>
+            <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "发布中…" : "发布"}</button>
+          </>}
         </div>
       </section>
     </div> : null}

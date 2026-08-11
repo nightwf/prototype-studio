@@ -151,6 +151,19 @@ export class PostgresMetadataStore implements MetadataStore {
     } : undefined;
   }
 
+  async listShareLinksByProject(projectId: string): Promise<ShareLinkRow[]> {
+    const result = await this.pool.query("select * from share_links where project_id = $1 order by created_at asc", [projectId]);
+    return result.rows.map((row) => ({
+      id: String(row.id),
+      projectId: String(row.project_id),
+      token: String(row.token),
+      mode: String(row.mode),
+      createdBy: String(row.created_by),
+      expiresAt: row.expires_at == null ? undefined : String(row.expires_at),
+      createdAt: String(row.created_at)
+    }));
+  }
+
   async deleteShareLink(token: string): Promise<void> {
     await this.pool.query("delete from share_links where token = $1", [token]);
   }

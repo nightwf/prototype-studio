@@ -293,6 +293,18 @@ export class ProjectSpaceManager {
     return { token, url: `${baseUrl}/share/${token}` };
   }
 
+  async listShares(userId: string, projectId: string, baseUrl: string) {
+    await this.requireProject(userId, projectId);
+    const links = await this.metadata.listShareLinksByProject(projectId);
+    const active = links.filter((link) => !link.expiresAt || new Date(link.expiresAt).getTime() >= Date.now());
+    return active.map((link) => ({
+      token: link.token,
+      url: `${baseUrl}/share/${link.token}`,
+      expiresAt: link.expiresAt,
+      createdAt: link.createdAt
+    }));
+  }
+
   async revokeShare(userId: string, projectId: string, token: string): Promise<void> {
     await this.requireProject(userId, projectId);
     await this.metadata.deleteShareLink(token);

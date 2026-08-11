@@ -210,5 +210,13 @@ export const webSpace = {
       method: "POST",
       body: JSON.stringify(expiresInSeconds ? { expires_in_seconds: expiresInSeconds } : {})
     });
+  },
+  shareList(projectId: string) {
+    return request<{ ok: true; links: Array<{ token: string; url: string; expiresAt?: string; createdAt: string }> }>(`/api/projects/${projectId}/share`);
+  },
+  shareRevoke(projectId: string, token: string) {
+    return request<{ ok: true }>(`/api/projects/${projectId}/share/${encodeURIComponent(token)}`, {
+      method: "DELETE"
+    });
   }
 };
