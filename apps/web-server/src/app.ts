@@ -55,7 +55,18 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     ? resolve(process.env.WEB_STATIC_DIR)
     : resolve(process.cwd(), "apps", "studio", "dist");
   if (existsSync(resolve(staticRoot, "index.html"))) {
-    await app.register(fastifyStatic, { root: staticRoot });
+    await app.register(fastifyStatic, {
+      root: staticRoot,
+      setHeaders: (res, path) => {
+        if (path.endsWith(".html")) {
+          // 入口页永不缓存，避免浏览器加载到旧版界面
+          res.header("cache-control", "no-cache, no-store, must-revalidate");
+        } else {
+          // 带内容哈希的静态资源可长期缓存
+          res.header("cache-control", "public, max-age=31536000, immutable");
+        }
+      }
+    });
   }
 
   for (const code of options.inviteCodes ?? ["PROTOTYPE-DEV"]) {
