@@ -15,6 +15,7 @@ import type {
   TableColumn,
   UIComponent
 } from "@prototype-studio/dsl-schema";
+import { diagramPath, materializeEr, materializeFlowchart } from "./diagramLayout";
 import "@prototype-studio/design-system/styles.css";
 import "./styles.css";
 
@@ -467,6 +468,99 @@ function TableBlock(props: ComponentRenderProps) {
   );
 }
 
+/** 文档用流程图（浅色，适合说明/文档页内嵌）。 */
+export function DocumentFlowchart({ flowchart }: { flowchart: NonNullable<UIComponent["flowchart"]> }) {
+  const materialized = materializeFlowchart(flowchart);
+  const width = 800;
+  const height = Math.max(140, materialized.nodes.length * 116 + 60);
+  const arrowId = `doc-flow-arrow-${flowchart.nodes[0]?.id ?? "f"}`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="proto-doc-diagram" role="img" aria-label="流程图">
+      <defs><marker id={arrowId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#94a3b8" /></marker></defs>
+      {materialized.edges.map((edge) => {
+        const from = materialized.nodes.find((node) => node.id === edge.from);
+        const to = materialized.nodes.find((node) => node.id === edge.to);
+        if (!from?.position || !from.size || !to?.position || !to.size) return null;
+        const start = { x: from.position.x + from.size.width / 2, y: from.position.y + from.size.height };
+        const end = { x: to.position.x + to.size.width / 2, y: to.position.y };
+        return <path key={edge.id} d={diagramPath(start, end, edge.lineType)} fill="none" stroke={edge.color ?? "#94a3b8"} strokeWidth={edge.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
+      })}
+      {materialized.nodes.map((node) => {
+        const x = node.position?.x ?? 0;
+        const y = node.position?.y ?? 0;
+        const w = node.size?.width ?? 168;
+        const h = node.size?.height ?? 64;
+        return (
+          <g key={node.id}>
+            <rect x={x} y={y} width={w} height={h} rx={node.kind === "start" || node.kind === "end" ? 28 : 8} fill="#f1f5f9" stroke="#94a3b8" strokeWidth={1.5} />
+            <text x={x + w / 2} y={y + h / 2 + (node.description ? 0 : 5)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#334155">{node.label}</text>
+            {node.description ? <text x={x + w / 2} y={y + h / 2 + 18} textAnchor="middle" fontSize={10} fill="#64748b">{node.description}</text> : null}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** 文档用 ER 图（浅色）。 */
+export function DocumentEr({ er }: { er: NonNullable<UIComponent["er"]> }) {
+  const materialized = materializeEr(er);
+  const width = Math.max(800, materialized.entities.length * 240 + 80);
+  const height = Math.max(220, Math.ceil(materialized.entities.length / 3) * 260 + 80);
+  const arrowId = `doc-er-arrow-${er.entities[0]?.id ?? "e"}`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="proto-doc-diagram" role="img" aria-label="ER 图">
+      <defs><marker id={arrowId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><polygon points="0 0, 10 4, 0 8" fill="#a78bfa" /></marker></defs>
+      {materialized.relations.map((relation) => {
+        const from = materialized.entities.find((entity) => entity.id === relation.from);
+        const to = materialized.entities.find((entity) => entity.id === relation.to);
+        if (!from?.position || !to?.position) return null;
+        const start = { x: from.position.x + (from.width ?? 220), y: from.position.y + 24 };
+        const end = { x: to.position.x, y: to.position.y + 24 };
+        return <path key={relation.id} d={diagramPath(start, end, relation.lineType)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
+      })}
+      {materialized.entities.map((entity) => {
+        const x = entity.position?.x ?? 0;
+        const y = entity.position?.y ?? 0;
+        const w = entity.width ?? 220;
+        const headerHeight = 30;
+        const rowHeight = 22;
+        const h = headerHeight + entity.fields.length * rowHeight + 8;
+        return (
+          <g key={entity.id}>
+            <rect x={x} y={y} width={w} height={h} rx={8} fill="#faf5ff" stroke="#c4b5fd" strokeWidth={1.5} />
+            <rect x={x} y={y} width={w} height={headerHeight} rx={8} fill="#ede9fe" />
+            <text x={x + 10} y={y + 20} fontSize={13} fontWeight={700} fill="#5b21b6">{entity.name}</text>
+            {entity.fields.map((field, fieldIndex) => (
+              <text key={field.id} x={x + 10} y={y + headerHeight + fieldIndex * rowHeight + 16} fontSize={11} fill="#64748b">
+                {field.key ? "🔑 " : ""}{field.name} · {field.type}
+              </text>
+            ))}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+/** 文档用表格（浅色，纯展示）。 */
+export function DocumentTable({ table }: { table: Pick<UIComponent, "columns" | "rows" | "rowKey"> }) {
+  const columns = table.columns ?? [];
+  const rows = table.rows ?? [];
+  return (
+    <div className="proto-doc-table-wrap">
+      <table className="proto-doc-table">
+        <thead><tr>{columns.map((column) => <th key={column.id}>{column.title ?? column.id}</th>)}</tr></thead>
+        <tbody>{rows.map((row, rowIndex) => (
+          <tr key={String(row[table.rowKey ?? "id"] ?? rowIndex)}>
+            {columns.map((column) => <td key={column.id}>{String(row[column.dataIndex] ?? "")}</td>)}
+          </tr>
+        ))}</tbody>
+      </table>
+    </div>
+  );
+}
+
 function ComponentView(props: ComponentRenderProps) {
   const { component } = props;
   if (fieldTypes.has(component.type)) {
@@ -485,6 +579,10 @@ function ComponentView(props: ComponentRenderProps) {
       return <TabsBlock {...props} />;
     case "table":
       return <TableBlock {...props} />;
+    case "flowchart":
+      return <Selectable component={component} selectedId={props.selectedId} onSelect={props.onSelect} className="proto-doc-block"><DocumentFlowchart flowchart={component.flowchart ?? { nodes: [], edges: [] }} /></Selectable>;
+    case "er":
+      return <Selectable component={component} selectedId={props.selectedId} onSelect={props.onSelect} className="proto-doc-block"><DocumentEr er={component.er ?? { entities: [], relations: [] }} /></Selectable>;
     case "modal":
     case "drawer":
     case "popover":

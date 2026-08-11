@@ -22,6 +22,8 @@ export const componentTypes = [
   "button",
   "table",
   "table-column",
+  "flowchart",
+  "er",
   "tabs",
   "card",
   "description",
@@ -140,6 +142,16 @@ export interface UIComponent {
   rows?: Record<string, unknown>[];
   rowKey?: string;
   selectable?: boolean;
+  /** 页面级流程图（说明/文档页内嵌）。 */
+  flowchart?: {
+    nodes: BoardFlowNode[];
+    edges: BoardFlowEdge[];
+  };
+  /** 页面级 ER 图（说明/文档页内嵌）。 */
+  er?: {
+    entities: BoardErEntity[];
+    relations: BoardErRelation[];
+  };
   children?: UIComponent[];
   fields?: UIComponent[];
   actions?: UIComponent[];

@@ -34,6 +34,7 @@ import {
   Settings2,
   Share2,
   StickyNote,
+  Table2,
   Trash2,
   Undo2,
   ArrowDown,
@@ -58,6 +59,7 @@ import {
   type MarkerTone,
   type PageDSL,
   type RevisionRecord,
+  type TableColumn,
   type UIComponent
 } from "@prototype-studio/dsl-schema";
 import { applyBoardCommands, createRevertRevision, executeCommands, type ApplyBoardCommandsResult } from "@prototype-studio/command-engine";
@@ -1707,6 +1709,136 @@ ${boardExportRuntimeScript}
     void runCommands([{ type, target: selected.id, changes } as Command]);
   };
 
+  const isModulePage = dsl.page.title.includes("模块说明");
+
+  const updatePageSections = async (sections: UIComponent[]): Promise<boolean> => {
+    if (!currentPageId) return false;
+    const next: PageDSL = { ...dsl, revision: dsl.revision + 1, sections };
+    try {
+      if (webMode && webProjectId) {
+        await webSpace.putPage(webProjectId, next.page.id, next, dsl.revision, "manual", "jojo");
+      } else {
+        toast("warning", "文档编辑仅网页端可用");
+        return false;
+      }
+      setDsl(next);
+      setPages((items) => items.map((item) => item.page.id === next.page.id ? next : item));
+      return true;
+    } catch (error) {
+      toast("danger", "保存文档失败", error instanceof Error ? error.message : "未知错误");
+      return false;
+    }
+  };
+
+  const addDocCard = async () => {
+    const id = `doc-card-${Date.now()}`;
+    await updatePageSections([...(dsl.sections ?? []), { id, type: "card", title: "说明卡", description: "在这里填写说明内容…", source: "explicit", children: [], actions: [] }]);
+  };
+
+  const addDocTable = () => {
+    askText({
+      title: "新增表格",
+      label: "行数与列数（如 3,4）",
+      defaultValue: "3,4",
+      confirmText: "添加",
+      onConfirm: async (value) => {
+        const parts = value.split(/[,，xX]/).map((part) => Math.min(20, Math.max(1, parseInt(part.trim(), 10) || 1)));
+        const rowCount = parts[0] ?? 3;
+        const colCount = parts[1] ?? 4;
+        const id = `doc-table-${Date.now()}`;
+        const columns: TableColumn[] = Array.from({ length: colCount }, (_, c) => ({
+          id: `${id}.col-${c + 1}`,
+          type: "table-column",
+          title: `列${c + 1}`,
+          dataIndex: `c${c + 1}`
+        }));
+        const rows: Record<string, unknown>[] = Array.from({ length: rowCount }, (_, r) => {
+          const row: Record<string, unknown> = { id: r + 1 };
+          columns.forEach((column) => { row[column.dataIndex] = ""; });
+          return row;
+        });
+        await updatePageSections([...(dsl.sections ?? []), { id, type: "table", columns, rows, rowKey: "id", source: "default" }]);
+      }
+    });
+  };
+
+  const addDocFlowchart = async () => {
+    const id = `doc-flow-${Date.now()}`;
+    await updatePageSections([...(dsl.sections ?? []), {
+      id,
+      type: "flowchart",
+      title: "流程图",
+      flowchart: {
+        nodes: [{ id: "n1", label: "开始" }, { id: "n2", label: "处理" }, { id: "n3", label: "结束" }],
+        edges: [{ id: "e1", from: "n1", to: "n2" }, { id: "e2", from: "n2", to: "n3" }]
+      },
+      source: "explicit"
+    }]);
+  };
+
+  const addDocEr = async () => {
+    const id = `doc-er-${Date.now()}`;
+    await updatePageSections([...(dsl.sections ?? []), {
+      id,
+      type: "er",
+      title: "ER 图",
+      er: {
+        entities: [{ id: "e1", name: "实体A", fields: [{ name: "id", type: "string", key: true }] }],
+        relations: []
+      },
+      source: "explicit"
+    }]);
+  };
+
+  const updateSelectedColumn = (index: number, changes: Partial<TableColumn>) => {
+    const columns = [...(selected?.columns ?? [])];
+    if (!columns[index]) return;
+    columns[index] = { ...columns[index], ...changes };
+    updateSelected({ columns });
+  };
+
+  const addTableColumn = () => {
+    if (!selected) return;
+    const columns = [...(selected.columns ?? [])];
+    const dataIndex = `c${columns.length + 1}`;
+    columns.push({ id: `${selected.id}.col-${columns.length + 1}`, type: "table-column", title: `列${columns.length + 1}`, dataIndex });
+    const rows = (selected.rows ?? []).map((row) => ({ ...row, [dataIndex]: "" }));
+    updateSelected({ columns, rows });
+  };
+
+  const deleteTableColumn = (index: number) => {
+    if (!selected) return;
+    const columns = [...(selected.columns ?? [])];
+    const removed = columns.splice(index, 1);
+    const rows = (selected.rows ?? []).map((row) => {
+      const next = { ...row };
+      if (removed[0]) delete next[removed[0].dataIndex];
+      return next;
+    });
+    updateSelected({ columns, rows });
+  };
+
+  const addTableRow = () => {
+    if (!selected) return;
+    const row: Record<string, unknown> = { id: (selected.rows?.length ?? 0) + 1 };
+    (selected.columns ?? []).forEach((column) => { row[column.dataIndex] = ""; });
+    updateSelected({ rows: [...(selected.rows ?? []), row] });
+  };
+
+  const deleteTableRow = (index: number) => {
+    if (!selected) return;
+    const rows = [...(selected.rows ?? [])];
+    rows.splice(index, 1);
+    updateSelected({ rows });
+  };
+
+  const updateTableCell = (rowIndex: number, dataIndex: string, value: string) => {
+    if (!selected) return;
+    const rows = [...(selected.rows ?? [])];
+    rows[rowIndex] = { ...rows[rowIndex], [dataIndex]: value };
+    updateSelected({ rows });
+  };
+
   const undo = async () => {
     const target = history.at(-1);
     if (!target) return;
@@ -1797,7 +1929,18 @@ ${boardExportRuntimeScript}
     </header>
 
     <aside className="studio-left">
-      <div className="left-tabs"><button className={activeWorkspace === "pages" ? "is-active" : ""} onClick={() => setActiveWorkspace("pages")}><Layers3 size={14} />页面</button><button className={activeWorkspace === "boards" ? "is-active" : ""} onClick={() => setActiveWorkspace("boards")}><LayoutGrid size={14} />画布</button></div>
+      <div className="left-tabs">
+        <button className={activeWorkspace === "pages" ? "is-active" : ""} onClick={() => {
+          setActiveWorkspace("pages");
+          setViewMode("page");
+          if (!currentPageId && pages[0]) selectPage(pages[0].page.id);
+        }}><Layers3 size={14} />页面</button>
+        <button className={activeWorkspace === "boards" ? "is-active" : ""} onClick={() => {
+          setActiveWorkspace("boards");
+          setViewMode("canvas");
+          if (!currentBoardId && boards[0]) void selectBoard(boards[0].id);
+        }}><LayoutGrid size={14} />画布</button>
+      </div>
       {activeWorkspace === "pages" ? <>
         <div className="left-project-label"><span>页面结构 · {pages.length}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
         {showPageCreator ? <div className="page-creator">
@@ -1860,7 +2003,15 @@ ${boardExportRuntimeScript}
               <div className="viewport-switcher"><button className="is-active"><Monitor size={14} />桌面</button><button><PanelRight size={14} />平板</button></div>
               <div className="canvas-meta"><span>1280 × 820</span><i /><span className="board-hint-text">可点选模式</span></div>
             </div>
-            <div className="canvas-toolbar-actions"><div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div></div>
+            <div className="canvas-toolbar-actions">
+              {isModulePage ? <div className="doc-tools">
+                <button onClick={() => void addDocCard()}><Plus size={12} />说明卡</button>
+                <button onClick={() => void addDocTable()}><Table2 size={12} />表格</button>
+                <button onClick={() => void addDocFlowchart()}><GitBranch size={12} />流程图</button>
+                <button onClick={() => void addDocEr()}><Database size={12} />ER 图</button>
+              </div> : null}
+              <div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div>
+            </div>
         </> : <>
             <div className="canvas-toolbar-left">
               <div className="canvas-meta"><strong>{board.name}</strong><i /><span>{board.objects.length} 个对象 · Revision {board.revision}</span><i /><span className="board-hint-text">页面标题栏拖动 · 页面内容可直接操作 · 双击标题进入编辑</span></div>
@@ -2059,6 +2210,32 @@ ${boardExportRuntimeScript}
           <div className="segmented-control">{["small", "medium", "large", "full"].map((size) => <button key={size} className={(selected.size ?? "medium") === size ? "is-active" : ""} onClick={() => updateSelected({ size: size as UIComponent["size"] })}>{size[0]!.toUpperCase()}</button>)}</div>
           <SectionTitle>来源</SectionTitle>
           <div className="source-card"><div className={`source-badge source-badge--${selected.source ?? "default"}`}>{selected.source ?? "Default"}</div><div><strong>{selected.source === "explicit" ? "需求明确说明" : selected.source === "inferred" ? "AI 推断" : "系统默认"}</strong><span>来源信息不会随属性编辑丢失</span></div></div>
+          {selected.type === "table" && isModulePage ? <>
+            <SectionTitle>文档表格</SectionTitle>
+            <div className="doc-table-editor">
+              <div className="doc-table-editor-cols">
+                {(selected.columns ?? []).map((column, columnIndex) => (
+                  <div className="doc-table-editor-col" key={column.id}>
+                    <input value={column.title ?? ""} placeholder={`列${columnIndex + 1}`} onChange={(event) => updateSelectedColumn(columnIndex, { title: event.target.value })} />
+                    <button title="删除列" onClick={() => deleteTableColumn(columnIndex)}><X size={11} /></button>
+                  </div>
+                ))}
+                <button className="doc-table-editor-add" onClick={addTableColumn}><Plus size={11} />加列</button>
+              </div>
+              <div className="doc-table-editor-rows">
+                {(selected.rows ?? []).map((row, rowIndex) => (
+                  <div className="doc-table-editor-row" key={String(row[selected.rowKey ?? "id"] ?? rowIndex)}>
+                    <span className="doc-table-editor-index">{rowIndex + 1}</span>
+                    {(selected.columns ?? []).map((column) => (
+                      <input key={column.id} value={String(row[column.dataIndex] ?? "")} onChange={(event) => updateTableCell(rowIndex, column.dataIndex, event.target.value)} />
+                    ))}
+                    <button title="删除行" onClick={() => deleteTableRow(rowIndex)}><X size={11} /></button>
+                  </div>
+                ))}
+                <button className="doc-table-editor-add" onClick={addTableRow}><Plus size={11} />加行</button>
+              </div>
+            </div>
+          </> : null}
           <SectionTitle>画布</SectionTitle>
           <button className="inspector-action" onClick={() => void addMarkerToCurrentComponent()}><MapPin size={13} />添加标注（挂靠此组件）</button>
         </div>

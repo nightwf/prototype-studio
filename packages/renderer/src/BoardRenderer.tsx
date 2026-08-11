@@ -13,7 +13,7 @@ import {
   type ReactNode
 } from "react";
 import type { BoardDSL, BoardLink, BoardMarkerObject, BoardObject, BoardPageObject, PageDSL } from "@prototype-studio/dsl-schema";
-import { PrototypeRenderer } from "./index";
+import { DocumentEr, DocumentFlowchart, DocumentTable, PrototypeRenderer } from "./index";
 import {
   ANNOTATION_PANEL_GAP,
   ANNOTATION_PANEL_WIDTH,
@@ -719,18 +719,29 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                   <h3>{(pages[object.pageId]?.page.title ?? object.pageId).replace(/\s*·?\s*模块说明\s*$/, "")}</h3>
                   {pages[object.pageId]?.page.description ? <p>{pages[object.pageId]!.page.description}</p> : null}
                 </div>
-                {(pages[object.pageId]?.sections ?? []).filter((section) => section.type === "card").map((section) => (
-                  <div className="board-module-block" key={section.id}>
-                    {section.title ? <strong>{section.title}</strong> : null}
-                    {section.description ? <p>{section.description}</p> : null}
-                    {(section.children ?? []).filter((child) => child.type === "card").map((child) => (
-                      <div className="board-module-item" key={child.id}>
-                        {child.title ? <b>{child.title}</b> : null}
-                        {child.description ? <p>{child.description}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                ))}
+                {(pages[object.pageId]?.sections ?? []).map((section) => {
+                  if (section.type === "table") {
+                    return <div className="board-module-block" key={section.id}><DocumentTable table={section} /></div>;
+                  }
+                  if (section.type === "flowchart") {
+                    return <div className="board-module-block" key={section.id}><DocumentFlowchart flowchart={section.flowchart ?? { nodes: [], edges: [] }} /></div>;
+                  }
+                  if (section.type === "er") {
+                    return <div className="board-module-block" key={section.id}><DocumentEr er={section.er ?? { entities: [], relations: [] }} /></div>;
+                  }
+                  return (
+                    <div className="board-module-block" key={section.id}>
+                      {section.title ? <strong>{section.title}</strong> : null}
+                      {section.description ? <p>{section.description}</p> : null}
+                      {(section.children ?? []).filter((child) => child.type === "card").map((child) => (
+                        <div className="board-module-item" key={child.id}>
+                          {child.title ? <b>{child.title}</b> : null}
+                          {child.description ? <p>{child.description}</p> : null}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               </div>
             </>
           ) : (
