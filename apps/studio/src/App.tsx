@@ -398,6 +398,7 @@ export function App() {
   const [publishBusy, setPublishBusy] = useState(false);
   const [boardAiText, setBoardAiText] = useState("");
   const [aiSelectMode, setAiSelectMode] = useState(false);
+  const [boardAiBarIds, setBoardAiBarIds] = useState<string[]>([]);
   const [pageAiSelectedIds, setPageAiSelectedIds] = useState<string[]>([]);
   const [pageAiText, setPageAiText] = useState("");
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
@@ -716,6 +717,7 @@ export function App() {
       setPageAiSelectedIds([]);
       setPageAiText("");
       setBoardAiText("");
+      setBoardAiBarIds([]);
       setBoardSelectedId(undefined);
       setBoardSelectedIds([]);
       sendPreview({ type: "prototype:ai-select", enabled: true });
@@ -723,6 +725,7 @@ export function App() {
       setPageAiSelectedIds([]);
       setPageAiText("");
       setBoardAiText("");
+      setBoardAiBarIds([]);
       sendPreview({ type: "prototype:ai-select", enabled: false });
     }
   }, [sendPreview]);
@@ -1575,12 +1578,14 @@ export function App() {
     setBoardSelectedLinkId(undefined);
     setBoardSelectedId(id);
     setBoardSelectedIds((previous) => (previous.includes(id) ? previous : [id]));
+    if (aiSelectMode && id) setBoardAiBarIds([id]);
   };
 
   const selectBoardMany = (ids: string[]) => {
     setBoardSelectedLinkId(undefined);
     setBoardSelectedIds(ids);
     setBoardSelectedId(ids.length ? ids[ids.length - 1] : undefined);
+    if (aiSelectMode && ids.length) setBoardAiBarIds(ids);
   };
 
   const selectBoardLink = (id: string) => {
@@ -2310,9 +2315,12 @@ ${boardExportRuntimeScript}
           onZOrder={(ids, position) => void zOrderBoardObjects(ids, position)}
           snapToGrid={boardSnap}
         />
-        {aiSelectMode && boardSelectedIds.length > 0 ? <div className="board-ai-bar">
-          <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardSelectedIds.length} 个对象</span>
-          <pre className="board-ai-preview">{buildAiInstruction("board", boardSelectedIds, boardAiText)}</pre>
+        {aiSelectMode && boardAiBarIds.length > 0 ? <div className="board-ai-bar">
+          <div className="board-ai-bar-head">
+            <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardAiBarIds.length} 个对象</span>
+            <button className="board-ai-close" onClick={() => setBoardAiBarIds([])} aria-label="关闭指令输入框"><X size={13} /></button>
+          </div>
+          <pre className="board-ai-preview">{buildAiInstruction("board", boardAiBarIds, boardAiText)}</pre>
           <textarea
             className="board-ai-textarea"
             value={boardAiText}
@@ -2321,7 +2329,7 @@ ${boardExportRuntimeScript}
             aria-label="框选修改指令"
             rows={3}
           />
-          <button onClick={() => { void copyText(buildAiInstruction("board", boardSelectedIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
+          <button onClick={() => { void copyText(buildAiInstruction("board", boardAiBarIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
         </div> : null}
         {boardTool === "page" ? <div className="board-tool-panel">
           <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
@@ -2352,7 +2360,10 @@ ${boardExportRuntimeScript}
             <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => { sendPreview({ type: "prototype:dsl", dsl }); if (aiSelectMode) sendPreview({ type: "prototype:ai-select", enabled: true }); }} sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
           {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar">
-            <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
+            <div className="board-ai-bar-head">
+              <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
+              <button className="board-ai-close" onClick={() => setPageAiSelectedIds([])} aria-label="关闭指令输入框"><X size={13} /></button>
+            </div>
             <pre className="board-ai-preview">{buildAiInstruction("page", pageAiSelectedIds, pageAiText)}</pre>
             <textarea
               className="board-ai-textarea"
