@@ -75,19 +75,24 @@ window.addEventListener('DOMContentLoaded', function () {
     var fromObject = objectElement(group.getAttribute('data-link-from') || '');
     var toObject = objectElement(group.getAttribute('data-link-to') || '');
     if (!fromObject || !toObject) return;
+    var boardCanvas = group.closest('.board-canvas');
+    var canvasX = boardCanvas ? parseFloat(boardCanvas.style.left || '0') || 0 : 0;
+    var canvasY = boardCanvas ? parseFloat(boardCanvas.style.top || '0') || 0 : 0;
     var fromRect = fromObject.getBoundingClientRect();
     var toRect = toObject.getBoundingClientRect();
     var fromCenter = center(fromRect);
     var toCenter = center(toRect);
     var from = componentPoint(fromObject, group.getAttribute('data-from-component') || '') || edgePoint(fromRect, toCenter);
     var to = componentPoint(toObject, group.getAttribute('data-to-component') || '') || edgePoint(toRect, fromCenter);
+    // SVG 画布本身有 left/top 偏移，端点需换算为画布相对坐标，避免连线整体错位。
+    from.x -= canvasX;
+    from.y -= canvasY;
+    to.x -= canvasX;
+    to.y -= canvasY;
     var rawWx = group.getAttribute('data-waypoint-x');
     var rawWy = group.getAttribute('data-waypoint-y');
     var waypoint = null;
     if (rawWx !== null && rawWx !== '' && rawWy !== null && rawWy !== '' && Number.isFinite(Number(rawWx)) && Number.isFinite(Number(rawWy))) {
-      var boardCanvas = group.closest('.board-canvas');
-      var canvasX = boardCanvas ? parseFloat(boardCanvas.style.left || '0') || 0 : 0;
-      var canvasY = boardCanvas ? parseFloat(boardCanvas.style.top || '0') || 0 : 0;
       waypoint = { x: Number(rawWx) - canvasX, y: Number(rawWy) - canvasY };
     }
     var path = pathFor(from, to, group.getAttribute('data-line-type') || 'curve', waypoint);
