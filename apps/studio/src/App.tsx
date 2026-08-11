@@ -31,6 +31,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  KeyRound,
   Settings2,
   Share2,
   StickyNote,
@@ -38,6 +39,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  UserRound,
   ArrowDown,
   ArrowUp,
   X,
@@ -387,6 +389,7 @@ export function App() {
   const [openPageMenuId, setOpenPageMenuId] = useState<string>();
   const [mcpState, setMcpState] = useState<"stopped" | "running" | "unavailable">("stopped");
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<"account" | "connection" | "local">("account");
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
   const [appModal, setAppModal] = useState<AppModal>();
   const [modalValue, setModalValue] = useState("");
@@ -1986,7 +1989,7 @@ ${boardExportRuntimeScript}
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
         <ToolButton><Share2 size={14} />分享</ToolButton>
-        <ToolButton compact title="设置" onClick={() => { setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
+        <ToolButton compact title="设置" onClick={() => { setSettingsSection("account"); setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
       </div>
     </header>
 
@@ -2352,32 +2355,44 @@ ${boardExportRuntimeScript}
           <div><span>SETTINGS</span><h2>设置</h2></div>
           <button onClick={() => setShowSettings(false)} aria-label="关闭设置"><X size={14} /></button>
         </header>
-        <div className="settings-body">
-          <div className="settings-block">
-            <div className="settings-profile">
-              <div className="settings-avatar">{(webSession?.name ?? isDesktopRuntime() ? "本" : "未").slice(0, 1).toUpperCase()}</div>
-              <div><strong>{webSession?.name ?? (isDesktopRuntime() ? "桌面端" : "未登录")}</strong><small>{webSession?.email ?? (isDesktopRuntime() ? "本地项目 · Local" : "请登录后使用云端功能")}</small></div>
-            </div>
-          </div>
-          {webMode ? <>
-            <div className="settings-block">
-              <div className="settings-block-head"><div><span>API TOKEN</span><strong>Codex / WorkBuddy 连接令牌</strong><small>复制后用于 MCP 认证</small></div></div>
-              <div className="settings-token-row">
-                <code className="settings-token">{webApiToken ? `${webApiToken.slice(0, 12)}…${webApiToken.slice(-4)}` : "获取中…"}</code>
-                <button onClick={() => void copyText(webApiToken)} disabled={!webApiToken}><Copy size={13} />复制</button>
+        <div className="settings-layout">
+          <nav className="settings-nav">
+            <button className={settingsSection === "account" ? "is-active" : ""} onClick={() => setSettingsSection("account")}><UserRound size={13} />账户信息</button>
+            {webMode ? <button className={settingsSection === "connection" ? "is-active" : ""} onClick={() => setSettingsSection("connection")}><KeyRound size={13} />连接 Codex</button> : null}
+            {isDesktopRuntime() ? <button className={settingsSection === "local" ? "is-active" : ""} onClick={() => setSettingsSection("local")}><FolderOpen size={13} />本地项目</button> : null}
+          </nav>
+          <div className="settings-content">
+            {settingsSection === "account" ? <>
+              <div className="settings-block">
+                <div className="settings-profile">
+                  <div className="settings-avatar">{(webSession?.name ?? isDesktopRuntime() ? "本" : "未").slice(0, 1).toUpperCase()}</div>
+                  <div><strong>{webSession?.name ?? (isDesktopRuntime() ? "桌面端" : "未登录")}</strong><small>{webSession?.email ?? (isDesktopRuntime() ? "本地项目 · Local" : "请登录后使用云端功能")}</small></div>
+                </div>
               </div>
-            </div>
-            <div className="settings-block">
-              <div className="settings-block-head"><div><span>MCP TUTORIAL</span><strong>连接 Codex / WorkBuddy 教程</strong></div></div>
-              <div className="settings-step"><span className="settings-step-no">1</span><p>复制上方 <b>API Token</b>，然后在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</p></div>
-              <pre className="settings-code">{`[mcp_servers.prototype-studio]
+              {webMode ? <div className="settings-block settings-account-actions">
+                <button className="settings-logout" onClick={() => void handleLogout()}><LogOut size={13} />退出登录</button>
+              </div> : null}
+            </> : null}
+            {settingsSection === "connection" && webMode ? <>
+              <div className="settings-block">
+                <div className="settings-block-head"><div><span>API TOKEN</span><strong>Codex / WorkBuddy 连接令牌</strong><small>复制后用于 MCP 认证</small></div></div>
+                <div className="settings-token-row">
+                  <code className="settings-token">{webApiToken ? `${webApiToken.slice(0, 12)}…${webApiToken.slice(-4)}` : "获取中…"}</code>
+                  <button onClick={() => void copyText(webApiToken)} disabled={!webApiToken}><Copy size={13} />复制</button>
+                </div>
+              </div>
+              <div className="settings-block">
+                <div className="settings-block-head"><div><span>MCP TUTORIAL</span><strong>连接 Codex / WorkBuddy 教程</strong></div></div>
+                <div className="settings-step"><span className="settings-step-no">1</span><p>复制上方 <b>API Token</b>，然后在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</p></div>
+                <pre className="settings-code">{`[mcp_servers.prototype-studio]
 type = "http"
 url = "${window.location.origin}/mcp"
 bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
-              <div className="settings-step"><span className="settings-step-no">2</span><p>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>，重启 Codex 即可连接。</p></div>
-              <div className="settings-step"><span className="settings-step-no">3</span><p>WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</p></div>
-            </div>
-          </> : isDesktopRuntime() ? (mcpConnection ? <>
+                <div className="settings-step"><span className="settings-step-no">2</span><p>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>，重启 Codex 即可连接。</p></div>
+                <div className="settings-step"><span className="settings-step-no">3</span><p>WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</p></div>
+              </div>
+            </> : null}
+            {settingsSection === "local" && isDesktopRuntime() ? (mcpConnection ? <>
               <div className="settings-block">
                 <div className="settings-block-head"><div><span>LOCAL MCP</span><strong>本地项目连接</strong></div></div>
                 <div className="settings-row"><span>项目目录</span><code>{mcpConnection.projectRoot ?? "未打开项目"}</code></div>
@@ -2398,10 +2413,8 @@ bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
                 </div>
                 <pre>{mcpConnection.connectPrompt ?? "需要先打开本地项目"}</pre>
               </div>
-            </> : <div className="settings-note">正在读取连接信息…</div>) : <div className="settings-note">当前是浏览器体验模式，不能读写本地项目。</div>}
-          {webMode ? <div className="settings-block settings-account-actions">
-            <button className="settings-logout" onClick={() => void handleLogout()}><LogOut size={13} />退出登录</button>
-          </div> : null}
+            </> : <div className="settings-note">正在读取连接信息…</div>) : null}
+          </div>
         </div>
       </section>
     </div> : null}
