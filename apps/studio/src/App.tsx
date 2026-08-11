@@ -396,9 +396,10 @@ export function App() {
   const [publishLinks, setPublishLinks] = useState<Array<{ token: string; url: string; expiresAt?: string; createdAt: string }>>([]);
   const [publishExpiry, setPublishExpiry] = useState("30");
   const [publishBusy, setPublishBusy] = useState(false);
-  const [aiPromptOpen, setAiPromptOpen] = useState(false);
-  const [aiPromptText, setAiPromptText] = useState("");
   const [boardAiText, setBoardAiText] = useState("");
+  const [aiSelectMode, setAiSelectMode] = useState(false);
+  const [pageAiSelectedIds, setPageAiSelectedIds] = useState<string[]>([]);
+  const [pageAiText, setPageAiText] = useState("");
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
   const [appModal, setAppModal] = useState<AppModal>();
   const [modalValue, setModalValue] = useState("");
@@ -662,6 +663,7 @@ export function App() {
       return [
         ...head,
         `页面：${dsl.page.id}（${dsl.page.title}）`,
+        ...(targets.length ? [`对象：${targets.map((id) => `组件 ${id}`).join("、")}`] : []),
         "",
         "需求：",
         "（在这里说明你想怎么修改这个页面）",
@@ -681,10 +683,6 @@ export function App() {
     ].join("\n");
   }, [board, dsl.page.id, dsl.page.title, projectName, selected, selectedLocation]);
 
-  const openAiPrompt = useCallback((kind: "component" | "page" | "board", targets: string[] = []) => {
-    setAiPromptText(buildAiInstruction(kind, targets));
-    setAiPromptOpen(true);
-  }, [buildAiInstruction]);
 
   const askText = useCallback((modal: { title: string; label: string; defaultValue: string; confirmText: string; onConfirm: (value: string) => void }) => {
     setModalValue(modal.defaultValue);
@@ -714,6 +712,23 @@ export function App() {
   const sendPreview = useCallback((message: unknown) => {
     iframeRef.current?.contentWindow?.postMessage(message, window.location.origin);
   }, []);
+
+  const toggleAiSelect = useCallback((enabled: boolean) => {
+    setAiSelectMode(enabled);
+    if (enabled) {
+      setPageAiSelectedIds([]);
+      setPageAiText("");
+      setBoardAiText("");
+      setBoardSelectedId(undefined);
+      setBoardSelectedIds([]);
+      sendPreview({ type: "prototype:ai-select", enabled: true });
+    } else {
+      setPageAiSelectedIds([]);
+      setPageAiText("");
+      setBoardAiText("");
+      sendPreview({ type: "prototype:ai-select", enabled: false });
+    }
+  }, [sendPreview]);
 
   const persistDesktopPage = useCallback(async (page: PageDSL, revision?: RevisionRecord) => {
     if (!projectRoot || !isDesktopRuntime()) return;
@@ -1116,6 +1131,7 @@ export function App() {
       if (!fromPreview) return;
       if (event.data?.type === "preview:ready") setPreviewReady(true);
       if (event.data?.type === "component:selected") setSelectedId(event.data.componentId);
+      if (event.data?.type === "components:selected") setPageAiSelectedIds(event.data.componentIds ?? []);
       if (event.data?.type === "runtime:event" && event.data.payload?.type !== "select") {
         if (event.data.payload?.type === "validation-error") toast("warning", "原型校验已触发", "请在 Preview 中补齐必填字段");
       }
@@ -2232,6 +2248,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => void addDocFlowchart()}><GitBranch size={12} />流程图</button>
                 <button onClick={() => void addDocEr()}><Database size={12} />ER 图</button>
               </div> : null}
+              <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选页面组件生成修改指令"><MousePointer2 size={13} />框选修改</button>
               <div className="zoom-control"><button onClick={() => setPreviewScale(Math.max(55, previewScale - 5))}>−</button><span>{previewScale}%</span><button onClick={() => setPreviewScale(Math.min(100, previewScale + 5))}>+</button><button><Maximize2 size={13} /></button></div>
             </div>
         </> : <>
@@ -2245,7 +2262,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
-                <button className={boardSelectedIds.length > 1 ? "is-active" : ""} onClick={() => openAiPrompt("board", boardSelectedIds.length ? boardSelectedIds : (boardSelectedId ? [boardSelectedId] : []))} title="把当前选中的画布对象生成为修改指令"><Zap size={13} />复制指令{boardSelectedIds.length > 1 ? `（${boardSelectedIds.length}）` : ""}</button>
+                <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选画布对象生成修改指令"><MousePointer2 size={13} />框选修改</button>
                 <div className="board-more">
                   <button className={boardMoreOpen ? "is-active" : ""} onClick={() => setBoardMoreOpen((value) => !value)} title="更多操作"><MoreHorizontal size={13} />更多</button>
                   {boardMoreOpen ? <div className="board-more-menu">
@@ -2296,7 +2313,7 @@ ${boardExportRuntimeScript}
           onZOrder={(ids, position) => void zOrderBoardObjects(ids, position)}
           snapToGrid={boardSnap}
         />
-        {boardSelectedIds.length > 1 ? <div className="board-ai-bar">
+        {aiSelectMode && boardSelectedIds.length > 0 ? <div className="board-ai-bar">
           <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardSelectedIds.length} 个对象</span>
           <input
             value={boardAiText}
@@ -2330,11 +2347,22 @@ ${boardExportRuntimeScript}
           }}
         /> : null}
       </div> : currentPage ? <>
-        <div className="canvas-stage">
+        <div className={`canvas-stage ${aiSelectMode ? "ai-select-stage" : ""}`}>
           <div className="preview-device" style={{ width: `${100 / (previewScale / 100)}%`, height: `${100 / (previewScale / 100)}%`, transform: `scale(${previewScale / 100})` }}>
             <div className="preview-browser-bar"><div><i /><i /><i /></div><span>prototype://local/{dsl.page.id}</span><button><RotateCcw size={12} /></button></div>
-            <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => sendPreview({ type: "prototype:dsl", dsl })} sandbox="allow-scripts allow-same-origin allow-forms" />
+            <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => { sendPreview({ type: "prototype:dsl", dsl }); if (aiSelectMode) sendPreview({ type: "prototype:ai-select", enabled: true }); }} sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
+          {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar">
+            <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
+            <input
+              value={pageAiText}
+              onChange={(event) => setPageAiText(event.target.value)}
+              onKeyDown={(event) => { if (event.key === "Enter") { void copyText(buildAiInstruction("page", pageAiSelectedIds) + `\n\n需求：${pageAiText}`); setPageAiText(""); } }}
+              placeholder="输入想怎么改这些组件，例如：把标题改成“还款流水”"
+              aria-label="页面框选修改指令"
+            />
+            <button onClick={() => { void copyText(buildAiInstruction("page", pageAiSelectedIds) + `\n\n需求：${pageAiText}`); setPageAiText(""); }}><Copy size={13} />复制指令</button>
+          </div> : null}
         </div>
       </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div>}
     </main>
@@ -2473,8 +2501,8 @@ ${boardExportRuntimeScript}
           <SectionTitle>画布</SectionTitle>
           <button className="inspector-action" onClick={() => void addMarkerToCurrentComponent()}><MapPin size={13} />添加标注（挂靠此组件）</button>
         </div>
-        <div className="inspector-footer"><button className="is-primary" onClick={() => openAiPrompt("component")}><Zap size={13} />复制指令</button><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
-      </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" action={<button className="inspector-action" onClick={() => openAiPrompt("page")}><Zap size={13} />复制页面指令</button>} />}
+        <div className="inspector-footer"><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
+      </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" />}
       </div>
     </aside>
 
@@ -2632,23 +2660,6 @@ bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
             <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "发布中…" : "发布"}</button>
           </>}
         </div>
-      </section>
-    </div> : null}
-
-    {aiPromptOpen ? <div className="settings-overlay" onClick={() => setAiPromptOpen(false)}>
-      <section className="app-modal ai-prompt-modal" onClick={(event) => event.stopPropagation()}>
-        <header>
-          <div><span>AI COMMAND</span><h2>修改指令</h2></div>
-          <button onClick={() => setAiPromptOpen(false)} aria-label="关闭指令"><X size={14} /></button>
-        </header>
-        <div className="app-modal-body">
-          <p>指令已按当前选区生成，可直接编辑，也可以先复制到 Codex 对话。</p>
-          <label><span>提示词（可编辑）</span><textarea className="ai-prompt-textarea" value={aiPromptText} onChange={(event) => setAiPromptText(event.target.value)} rows={12} /></label>
-        </div>
-        <footer>
-          <button onClick={() => setAiPromptOpen(false)}>取消</button>
-          <button className="is-primary" onClick={() => { void copyText(aiPromptText); setAiPromptOpen(false); }}><Copy size={13} />复制指令</button>
-        </footer>
       </section>
     </div> : null}
 

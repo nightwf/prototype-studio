@@ -338,6 +338,15 @@ button { color: inherit; }
 .board-ai-bar input:focus { border-color: #3f7fd1; }
 .board-ai-bar button { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #2563eb; border-radius: 6px; background: #2563eb; color: #fff; font-size: 10px; cursor: pointer; }
 .board-ai-bar button:hover { background: #1d4ed8; }
+.ai-select-stage { position: relative; }
+.page-ai-bar { position: sticky; top: 8px; z-index: 30; width: min(560px, 92%); margin: 0 auto 10px; display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid #cfd7dc; border-radius: 10px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14); }
+.page-ai-bar input { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid #d5dde8; border-radius: 6px; background: #fff; color: #263241; font-size: 11px; outline: none; }
+.page-ai-bar input:focus { border-color: #3f7fd1; }
+.page-ai-bar button { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #2563eb; border-radius: 6px; background: #2563eb; color: #fff; font-size: 10px; cursor: pointer; }
+.page-ai-bar button:hover { background: #1d4ed8; }
+.preview-ai-wrap { position: relative; min-height: 100%; }
+.preview-ai-overlay { position: absolute; inset: 0; z-index: 40; cursor: crosshair; touch-action: none; }
+.proto-marquee { position: fixed; z-index: 50; border: 1px dashed #2563eb; background: rgba(37, 99, 235, 0.12); pointer-events: none; }
 .board-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; background: #e6eaed; cursor: grab; touch-action: none; }
 .board-viewport:active { cursor: grabbing; }
 .board-viewport-inner { position: absolute; inset: 0; }
