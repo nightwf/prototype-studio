@@ -132,8 +132,8 @@ export class PostgresMetadataStore implements MetadataStore {
 
   async createShareLink(row: ShareLinkRow): Promise<void> {
     await this.pool.query(
-      "insert into share_links (id, project_id, token, mode, created_by, expires_at) values ($1,$2,$3,$4,$5,$6)",
-      [row.id, row.projectId, row.token, row.mode, row.createdBy, row.expiresAt ?? null]
+      "insert into share_links (id, project_id, token, mode, created_by, expires_at, created_at) values ($1,$2,$3,$4,$5,$6,$7)",
+      [row.id, row.projectId, row.token, row.mode, row.createdBy, row.expiresAt ?? null, row.createdAt ?? new Date().toISOString()]
     );
   }
 

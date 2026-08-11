@@ -49,8 +49,12 @@ create table if not exists share_links (
   token text not null unique,
   mode text not null,
   created_by uuid references users(id),
-  expires_at timestamptz
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
 );
+
+-- 兼容旧库：早期版本没有 created_at 列
+alter table share_links add column if not exists created_at timestamptz not null default now();
 
 create table if not exists audit_index (
   id bigserial primary key,
