@@ -396,6 +396,9 @@ export function App() {
   const [publishLinks, setPublishLinks] = useState<Array<{ token: string; url: string; expiresAt?: string; createdAt: string }>>([]);
   const [publishExpiry, setPublishExpiry] = useState("30");
   const [publishBusy, setPublishBusy] = useState(false);
+  const [aiPromptOpen, setAiPromptOpen] = useState(false);
+  const [aiPromptText, setAiPromptText] = useState("");
+  const [boardAiText, setBoardAiText] = useState("");
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
   const [appModal, setAppModal] = useState<AppModal>();
   const [modalValue, setModalValue] = useState("");
@@ -633,6 +636,55 @@ export function App() {
     }
     toast("success", "已复制", "粘贴到 Codex 设置或对话即可");
   }, [toast]);
+
+  const buildAiInstruction = useCallback((kind: "component" | "page" | "board", targets: string[] = []): string => {
+    const head = ["【Prototype Studio 修改指令】", `项目：${projectName}`];
+    if (kind === "component" && selected) {
+      const details: string[] = [];
+      if (selected.label ?? selected.title ?? selected.text) details.push(`标题/文本：${selected.label ?? selected.title ?? selected.text}`);
+      if (selected.placeholder) details.push(`占位：${selected.placeholder}`);
+      if (selected.options?.length) details.push(`选项：${selected.options.map((option) => option.label ?? option.value).join(" / ")}`);
+      return [
+        ...head,
+        `页面：${dsl.page.id}`,
+        `对象：组件 ${selected.id}`,
+        `路径：${selectedLocation?.path ?? "未知"}`,
+        `类型：${selected.type}`,
+        ...(details.length ? ["当前内容：", ...details] : []),
+        "",
+        "需求：",
+        "（在这里说明你想怎么修改，例如：把标题改成“还款流水”，选项增加“已结清”）",
+        "",
+        "请调用 prototype_get_page 读取页面后，用 prototype_apply_commands 精确修改该组件。"
+      ].join("\n");
+    }
+    if (kind === "page") {
+      return [
+        ...head,
+        `页面：${dsl.page.id}（${dsl.page.title}）`,
+        "",
+        "需求：",
+        "（在这里说明你想怎么修改这个页面）",
+        "",
+        "请调用 prototype_get_page 读取页面后，用 prototype_apply_commands 精确修改。"
+      ].join("\n");
+    }
+    return [
+      ...head,
+      `画布：${board.id}（${board.name}）`,
+      targets.length ? `对象：${targets.join("、")}` : "对象：整个画布",
+      "",
+      "需求：",
+      "（在这里说明你想怎么修改，例如：把选中的页面右移并加连线）",
+      "",
+      "请调用 prototype_get_board 读取画布后，用 prototype_apply_board_commands 精确修改这些对象。"
+    ].join("\n");
+  }, [board, dsl.page.id, dsl.page.title, projectName, selected, selectedLocation]);
+
+  const openAiPrompt = useCallback((kind: "component" | "page" | "board", targets: string[] = []) => {
+    setAiPromptText(buildAiInstruction(kind, targets));
+    setAiPromptOpen(true);
+  }, [buildAiInstruction]);
 
   const askText = useCallback((modal: { title: string; label: string; defaultValue: string; confirmText: string; onConfirm: (value: string) => void }) => {
     setModalValue(modal.defaultValue);
@@ -2193,6 +2245,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
+                <button className={boardSelectedIds.length > 1 ? "is-active" : ""} onClick={() => openAiPrompt("board", boardSelectedIds.length ? boardSelectedIds : (boardSelectedId ? [boardSelectedId] : []))} title="把当前选中的画布对象生成为修改指令"><Zap size={13} />复制指令{boardSelectedIds.length > 1 ? `（${boardSelectedIds.length}）` : ""}</button>
                 <div className="board-more">
                   <button className={boardMoreOpen ? "is-active" : ""} onClick={() => setBoardMoreOpen((value) => !value)} title="更多操作"><MoreHorizontal size={13} />更多</button>
                   {boardMoreOpen ? <div className="board-more-menu">
@@ -2243,6 +2296,17 @@ ${boardExportRuntimeScript}
           onZOrder={(ids, position) => void zOrderBoardObjects(ids, position)}
           snapToGrid={boardSnap}
         />
+        {boardSelectedIds.length > 1 ? <div className="board-ai-bar">
+          <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardSelectedIds.length} 个对象</span>
+          <input
+            value={boardAiText}
+            onChange={(event) => setBoardAiText(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") { void copyText(buildAiInstruction("board", boardSelectedIds) + `\n\n需求：${boardAiText}`); setBoardAiText(""); } }}
+            placeholder="输入想怎么改这些对象，例如：整体右移并加连线"
+            aria-label="框选修改指令"
+          />
+          <button onClick={() => { void copyText(buildAiInstruction("board", boardSelectedIds) + `\n\n需求：${boardAiText}`); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
+        </div> : null}
         {boardTool === "page" ? <div className="board-tool-panel">
           <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
           {pages.filter((page) => !board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)).map((page) => (
@@ -2409,8 +2473,8 @@ ${boardExportRuntimeScript}
           <SectionTitle>画布</SectionTitle>
           <button className="inspector-action" onClick={() => void addMarkerToCurrentComponent()}><MapPin size={13} />添加标注（挂靠此组件）</button>
         </div>
-        <div className="inspector-footer"><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
-      </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" />}
+        <div className="inspector-footer"><button className="is-primary" onClick={() => openAiPrompt("component")}><Zap size={13} />复制指令</button><button onClick={() => setShowDsl(true)}><Braces size={13} />查看 DSL 节点</button><span>{selectedLocation?.path}</span></div>
+      </> : <EmptyState icon={<CircleHelp size={18} />} title="选择一个组件" description="点击 Preview 或左侧组件大纲，在这里查看并修改属性。" action={<button className="inspector-action" onClick={() => openAiPrompt("page")}><Zap size={13} />复制页面指令</button>} />}
       </div>
     </aside>
 
@@ -2568,6 +2632,23 @@ bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
             <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "发布中…" : "发布"}</button>
           </>}
         </div>
+      </section>
+    </div> : null}
+
+    {aiPromptOpen ? <div className="settings-overlay" onClick={() => setAiPromptOpen(false)}>
+      <section className="app-modal ai-prompt-modal" onClick={(event) => event.stopPropagation()}>
+        <header>
+          <div><span>AI COMMAND</span><h2>修改指令</h2></div>
+          <button onClick={() => setAiPromptOpen(false)} aria-label="关闭指令"><X size={14} /></button>
+        </header>
+        <div className="app-modal-body">
+          <p>指令已按当前选区生成，可直接编辑，也可以先复制到 Codex 对话。</p>
+          <label><span>提示词（可编辑）</span><textarea className="ai-prompt-textarea" value={aiPromptText} onChange={(event) => setAiPromptText(event.target.value)} rows={12} /></label>
+        </div>
+        <footer>
+          <button onClick={() => setAiPromptOpen(false)}>取消</button>
+          <button className="is-primary" onClick={() => { void copyText(aiPromptText); setAiPromptOpen(false); }}><Copy size={13} />复制指令</button>
+        </footer>
       </section>
     </div> : null}
 

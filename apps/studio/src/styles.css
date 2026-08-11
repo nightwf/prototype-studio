@@ -249,6 +249,9 @@ button { color: inherit; }
 .app-modal-body label span { display: block; margin-bottom: 7px; color: #8b98a0; font-size: 9px; }
 .app-modal-body input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #3a4650; border-radius: 6px; background: #0e1419; color: #e4eaed; font-size: 11px; outline: none; }
 .app-modal-body input:focus { border-color: #4f7fb5; }
+.ai-prompt-modal { width: min(560px, 92vw); }
+.ai-prompt-textarea { width: 100%; min-height: 240px; padding: 10px 11px; border: 1px solid #3a4650; border-radius: 6px; background: #0e1419; color: #e4eaed; font: 11px/1.7 var(--ps-font-mono); outline: none; resize: vertical; }
+.ai-prompt-textarea:focus { border-color: #4f7fb5; }
 .app-modal > footer { padding: 12px 18px 16px; display: flex; justify-content: flex-end; gap: 9px; border-top: 1px solid #2b353d; }
 .app-modal > footer button { height: 30px; padding: 0 16px; border: 1px solid #3a4650; border-radius: 6px; background: #1f2a31; color: #cfd6da; font-size: 10px; cursor: pointer; }
 .app-modal > footer button:hover { background: #27353e; }
@@ -329,6 +332,12 @@ button { color: inherit; }
 @media (max-width: 1220px) { .board-hint-text { display: none; } }
 @media (max-width: 980px) { .canvas-meta { display: none; } .board-tools button { padding: 0 8px; } }
 .board-stage { overflow: hidden; position: relative; padding: 0; }
+.board-ai-bar { position: absolute; top: 14px; left: 50%; z-index: 20; width: min(560px, 90%); transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid #cfd7dc; border-radius: 10px; background: rgba(255, 255, 255, 0.96); box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14); }
+.board-ai-bar-label { display: flex; align-items: center; gap: 6px; color: #1d4a72; font-size: 10px; font-weight: 600; white-space: nowrap; }
+.board-ai-bar input { flex: 1; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid #d5dde8; border-radius: 6px; background: #fff; color: #263241; font-size: 11px; outline: none; }
+.board-ai-bar input:focus { border-color: #3f7fd1; }
+.board-ai-bar button { height: 30px; padding: 0 12px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid #2563eb; border-radius: 6px; background: #2563eb; color: #fff; font-size: 10px; cursor: pointer; }
+.board-ai-bar button:hover { background: #1d4ed8; }
 .board-viewport { position: relative; width: 100%; height: 100%; overflow: hidden; background: #e6eaed; cursor: grab; touch-action: none; }
 .board-viewport:active { cursor: grabbing; }
 .board-viewport-inner { position: absolute; inset: 0; }
