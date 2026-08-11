@@ -37,6 +37,7 @@ import {
   Table2,
   Trash2,
   Undo2,
+  Upload,
   ArrowDown,
   ArrowUp,
   X,
@@ -100,8 +101,8 @@ import {
   type DesktopMcpConnectionInfo,
   type DesktopProjectSnapshot
 } from "./desktopBridge";
-import { getApiToken, webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebUser } from "./webBridge";
-import { AuthScreen, ProjectsScreen } from "./WebScreens";
+import { getApiToken, webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
+import { AuthScreen } from "./WebScreens";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
 
@@ -540,16 +541,74 @@ export function App() {
     setShowSettings(false);
   };
 
+  const [projectMenuProjects, setProjectMenuProjects] = useState<WebProject[]>([]);
+  const [webOpenFailed, setWebOpenFailed] = useState(false);
+  const projectImportRef = useRef<HTMLInputElement>(null);
+
+  const openLatestOrCreate = useCallback(async (): Promise<void> => {
+    const listed = await webProjects.list();
+    const latest = [...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    if (latest) {
+      await loadWebProject(latest.id);
+      return;
+    }
+    const created = await webProjects.create("我的项目");
+    await loadWebProject(created.project.id);
+  }, [loadWebProject]);
+
+  const refreshProjectMenu = useCallback(async () => {
+    try {
+      const listed = await webProjects.list();
+      setProjectMenuProjects([...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)));
+    } catch { /* 忽略项目列表加载失败 */ }
+  }, []);
+
+  const createProjectFromMenu = () => {
+    askText({
+      title: "新建项目",
+      label: "项目名称",
+      defaultValue: "",
+      confirmText: "创建",
+      onConfirm: async (name) => {
+        const trimmed = name.trim();
+        if (!trimmed) return;
+        setShowProjectMenu(false);
+        try {
+          const result = await webProjects.create(trimmed);
+          await loadWebProject(result.project.id);
+        } catch (error) {
+          toast("danger", "创建项目失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
+  const importProjectFromMenu = async (file: File) => {
+    setShowProjectMenu(false);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.onerror = () => reject(new Error("读取文件失败"));
+        reader.readAsDataURL(file);
+      });
+      const result = await webProjects.import(file.name.replace(/\.zip$/i, ""), base64);
+      await loadWebProject(result.project.id);
+    } catch (error) {
+      toast("danger", "导入失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
   const handleAuthenticated = useCallback(async (user: WebUser) => {
     setWebSession(user);
     try {
-      const listed = await webProjects.list();
-      const latest = [...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-      if (latest) void loadWebProject(latest.id);
+      setWebOpenFailed(false);
+      await openLatestOrCreate();
     } catch {
-      // 拉取项目失败时停留在项目列表，用户可手动选择或刷新
+      setWebOpenFailed(true);
+      toast("danger", "打开项目失败", "请重试");
     }
-  }, [loadWebProject]);
+  }, [openLatestOrCreate, toast]);
 
   const copyText = useCallback(async (text: string) => {
     try {
@@ -1694,14 +1753,12 @@ ${boardExportRuntimeScript}
           setWebSession(result.user);
           const project = new URLSearchParams(window.location.search).get("project");
           if (project) { void loadWebProject(project); return; }
-          const listed = await webProjects.list();
-          const latest = [...listed.projects].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-          if (latest) void loadWebProject(latest.id);
+          await openLatestOrCreate().catch(() => setWebOpenFailed(true));
         }
       })
       .catch(() => undefined)
       .finally(() => setWebBoot(true));
-  }, [loadWebProject]);
+  }, [loadWebProject, openLatestOrCreate]);
 
   const updateSelected = (changes: Partial<UIComponent>) => {
     if (!selected) return;
@@ -1889,11 +1946,7 @@ ${boardExportRuntimeScript}
   if (webMode && !webBoot) return <div className="web-screen"><div className="web-card"><div className="web-empty">正在打开…</div></div></div>;
   if (webMode && !webSession) return <AuthScreen onAuthenticated={(user) => void handleAuthenticated(user)} />;
   if (webMode && webSession && !webProjectId) {
-    return <ProjectsScreen
-      user={webSession}
-      onOpenProject={(id) => void loadWebProject(id)}
-      onLogout={() => { void webAuth.logout(); setWebSession(undefined); }}
-    />;
+    return <div className="web-screen"><div className="web-card"><div className="web-empty">{webOpenFailed ? "项目打开失败" : "正在打开项目…"}</div>{webOpenFailed ? <button className="web-ghost web-retry" onClick={() => { setWebOpenFailed(false); void openLatestOrCreate().catch(() => setWebOpenFailed(true)); }}>重新尝试</button> : null}</div></div>;
   }
 
   const webApiToken = getApiToken();
@@ -1902,7 +1955,7 @@ ${boardExportRuntimeScript}
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
       <div className="project-switcher-wrap">
-        <button className="studio-project-switcher" onClick={() => setShowProjectMenu(!showProjectMenu)}><FolderOpen size={14} /><span>{projectName}{projectRoot ? (webMode ? " · 云端项目" : " · 本地项目") : isDesktopRuntime() ? "" : " · 示例项目"}</span><ChevronDown size={13} /></button>
+        <button className="studio-project-switcher" onClick={() => { const next = !showProjectMenu; setShowProjectMenu(next); if (next) void refreshProjectMenu(); }}><FolderOpen size={14} /><span>{projectName}{projectRoot ? (webMode ? " · 云端项目" : " · 本地项目") : isDesktopRuntime() ? "" : " · 示例项目"}</span><ChevronDown size={13} /></button>
         {showProjectMenu ? <div className="project-menu">
           <div className="project-menu-head"><span>PROJECT ROOT</span><code>{projectRoot ?? "examples/case-management"}</code></div>
           {!webMode ? <>
@@ -1910,7 +1963,17 @@ ${boardExportRuntimeScript}
             <button onClick={createLocalProject}><Plus size={14} /><span><strong>创建新项目</strong><small>生成标准目录与 project.yaml</small></span></button>
             <i />
             <button onClick={launchMcp}><Zap size={14} /><span><strong>启动 Local MCP</strong><small>当前状态：{mcpState}</small></span><StatusDot tone={mcpState === "running" ? "success" : mcpState === "unavailable" ? "danger" : "neutral"}>{mcpState}</StatusDot></button>
-          </> : <button onClick={() => { setShowProjectMenu(false); setWebProjectId(undefined); setPages([]); setBoard(defaultBoardFromPages([])); }}><FolderOpen size={14} /><span><strong>返回项目列表</strong><small>切换到其他云端项目</small></span></button>}
+          </> : <>
+            <button onClick={createProjectFromMenu}><Plus size={14} /><span><strong>新建项目</strong><small>创建空白项目并打开</small></span></button>
+            <input ref={projectImportRef} type="file" accept=".zip" style={{ display: "none" }} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProjectFromMenu(file); event.currentTarget.value = ""; }} />
+            <button onClick={() => projectImportRef.current?.click()}><Upload size={14} /><span><strong>导入整包</strong><small>从 prototype-project.zip 恢复项目</small></span></button>
+            <i />
+            {projectMenuProjects.map((project) => (
+              <button key={project.id} className={project.id === webProjectId ? "is-active" : ""} onClick={() => { setShowProjectMenu(false); void loadWebProject(project.id); }}>
+                <FolderOpen size={14} /><span><strong>{project.name}</strong><small>{new Date(project.updatedAt).toLocaleString("zh-CN", { hour12: false })}</small></span>
+              </button>
+            ))}
+          </>}
         </div> : null}
       </div>
       <div className="studio-title-actions">
@@ -1922,7 +1985,6 @@ ${boardExportRuntimeScript}
         <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
-        {webMode ? <ToolButton compact title="返回项目列表" onClick={() => { setWebProjectId(undefined); setPages([]); setBoard(defaultBoardFromPages([])); }}><FolderOpen size={15} /></ToolButton> : null}
         <ToolButton><Share2 size={14} />分享</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
       </div>
@@ -2292,31 +2354,28 @@ ${boardExportRuntimeScript}
         </header>
         <div className="settings-body">
           <div className="settings-block">
-            <div className="settings-block-head"><div><span>ACCOUNT</span><strong>账号信息</strong></div></div>
-            <div className="settings-row"><span>账号</span><code>{webSession ? `${webSession.name} · ${webSession.email}` : isDesktopRuntime() ? "桌面端 · 本地项目" : "未登录"}</code></div>
+            <div className="settings-profile">
+              <div className="settings-avatar">{(webSession?.name ?? isDesktopRuntime() ? "本" : "未").slice(0, 1).toUpperCase()}</div>
+              <div><strong>{webSession?.name ?? (isDesktopRuntime() ? "桌面端" : "未登录")}</strong><small>{webSession?.email ?? (isDesktopRuntime() ? "本地项目 · Local" : "请登录后使用云端功能")}</small></div>
+            </div>
           </div>
           {webMode ? <>
             <div className="settings-block">
-              <div className="settings-block-head">
-                <div><span>API TOKEN</span><strong>Codex / WorkBuddy 连接令牌</strong><small>复制后用于 MCP 认证</small></div>
+              <div className="settings-block-head"><div><span>API TOKEN</span><strong>Codex / WorkBuddy 连接令牌</strong><small>复制后用于 MCP 认证</small></div></div>
+              <div className="settings-token-row">
+                <code className="settings-token">{webApiToken ? `${webApiToken.slice(0, 12)}…${webApiToken.slice(-4)}` : "获取中…"}</code>
                 <button onClick={() => void copyText(webApiToken)} disabled={!webApiToken}><Copy size={13} />复制</button>
               </div>
-              <code className="settings-token">{webApiToken ? `${webApiToken.slice(0, 12)}…${webApiToken.slice(-4)}` : "获取中…"}</code>
             </div>
             <div className="settings-block">
               <div className="settings-block-head"><div><span>MCP TUTORIAL</span><strong>连接 Codex / WorkBuddy 教程</strong></div></div>
-              <ol className="settings-tutorial">
-                <li>复制上方 <b>API Token</b>；</li>
-                <li>在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</li>
-              </ol>
-              <pre>{`[mcp_servers.prototype-studio]
+              <div className="settings-step"><span className="settings-step-no">1</span><p>复制上方 <b>API Token</b>，然后在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</p></div>
+              <pre className="settings-code">{`[mcp_servers.prototype-studio]
 type = "http"
 url = "${window.location.origin}/mcp"
 bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
-              <ol className="settings-tutorial" start={3}>
-                <li>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>；</li>
-                <li>重启 Codex 即可连接本项目。WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</li>
-              </ol>
+              <div className="settings-step"><span className="settings-step-no">2</span><p>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>，重启 Codex 即可连接。</p></div>
+              <div className="settings-step"><span className="settings-step-no">3</span><p>WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</p></div>
             </div>
           </> : isDesktopRuntime() ? (mcpConnection ? <>
               <div className="settings-block">
