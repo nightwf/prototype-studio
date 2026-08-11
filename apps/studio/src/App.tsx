@@ -424,6 +424,7 @@ export function App() {
   const [boardSnap, setBoardSnap] = useState(false);
   const [boardExportOpen, setBoardExportOpen] = useState(false);
   const [boardMoreOpen, setBoardMoreOpen] = useState(false);
+  const [uiScale, setUiScale] = useState(() => (typeof window !== "undefined" ? Math.min(1.5, Math.max(1, window.innerWidth / 1600)) : 1));
   const [leftCollapsed, setLeftCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_left") === "1");
   const [rightCollapsed, setRightCollapsed] = useState(() => typeof localStorage !== "undefined" && localStorage.getItem("ps_panel_right") === "1");
   const boardViewRef = useRef<BoardRendererHandle>(null);
@@ -1321,6 +1322,12 @@ export function App() {
     localStorage.setItem("ps_panel_right", rightCollapsed ? "1" : "0");
   }, [rightCollapsed]);
 
+  useEffect(() => {
+    const onResize = () => setUiScale(Math.min(1.5, Math.max(1, window.innerWidth / 1600)));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const runBoardCommands = useCallback(async (commands: BoardCommand[], recordHistory = true): Promise<boolean> => {
     const targetBoardId = currentBoardIdRef.current;
     const currentBoard = boardCacheRef.current.get(targetBoardId);
@@ -2176,7 +2183,7 @@ ${boardExportRuntimeScript}
 
   const webApiToken = getApiToken();
 
-  return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
+  return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`} style={{ width: `${100 / uiScale}%`, height: `${100 / uiScale}%`, zoom: uiScale }}>
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
       <div className="project-switcher-wrap">
