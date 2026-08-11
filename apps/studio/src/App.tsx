@@ -638,7 +638,7 @@ export function App() {
     toast("success", "已复制", "粘贴到 Codex 设置或对话即可");
   }, [toast]);
 
-  const buildAiInstruction = useCallback((kind: "component" | "page" | "board", targets: string[] = []): string => {
+  const buildAiInstruction = useCallback((kind: "component" | "page" | "board", targets: string[] = [], request = ""): string => {
     const head = ["【Prototype Studio 修改指令】", `项目：${projectName}`];
     if (kind === "component" && selected) {
       const details: string[] = [];
@@ -653,8 +653,7 @@ export function App() {
         `类型：${selected.type}`,
         ...(details.length ? ["当前内容：", ...details] : []),
         "",
-        "需求：",
-        "（在这里说明你想怎么修改，例如：把标题改成“还款流水”，选项增加“已结清”）",
+        `需求：${request || "（在这里说明你想怎么修改）"}`,
         "",
         "请调用 prototype_get_page 读取页面后，用 prototype_apply_commands 精确修改该组件。"
       ].join("\n");
@@ -665,8 +664,7 @@ export function App() {
         `页面：${dsl.page.id}（${dsl.page.title}）`,
         ...(targets.length ? [`对象：${targets.map((id) => `组件 ${id}`).join("、")}`] : []),
         "",
-        "需求：",
-        "（在这里说明你想怎么修改这个页面）",
+        `需求：${request || "（在这里说明你想怎么修改这个页面）"}`,
         "",
         "请调用 prototype_get_page 读取页面后，用 prototype_apply_commands 精确修改。"
       ].join("\n");
@@ -676,8 +674,7 @@ export function App() {
       `画布：${board.id}（${board.name}）`,
       targets.length ? `对象：${targets.join("、")}` : "对象：整个画布",
       "",
-      "需求：",
-      "（在这里说明你想怎么修改，例如：把选中的页面右移并加连线）",
+      `需求：${request || "（在这里说明你想怎么修改，例如：把选中的页面右移并加连线）"}`,
       "",
       "请调用 prototype_get_board 读取画布后，用 prototype_apply_board_commands 精确修改这些对象。"
     ].join("\n");
@@ -2280,7 +2277,7 @@ ${boardExportRuntimeScript}
             </div>
         </>}
       </div>
-      {viewMode === "canvas" ? <div className="canvas-stage board-stage">
+      {viewMode === "canvas" ? <div className={`canvas-stage board-stage ${aiSelectMode ? "is-ai-select" : ""}`}>
         <BoardRenderer
           ref={boardViewRef}
           board={board}
@@ -2315,14 +2312,16 @@ ${boardExportRuntimeScript}
         />
         {aiSelectMode && boardSelectedIds.length > 0 ? <div className="board-ai-bar">
           <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardSelectedIds.length} 个对象</span>
-          <input
+          <pre className="board-ai-preview">{buildAiInstruction("board", boardSelectedIds, boardAiText)}</pre>
+          <textarea
+            className="board-ai-textarea"
             value={boardAiText}
             onChange={(event) => setBoardAiText(event.target.value)}
-            onKeyDown={(event) => { if (event.key === "Enter") { void copyText(buildAiInstruction("board", boardSelectedIds) + `\n\n需求：${boardAiText}`); setBoardAiText(""); } }}
-            placeholder="输入想怎么改这些对象，例如：整体右移并加连线"
+            placeholder="在这里输入想怎么改这些对象，例如：整体右移并加连线"
             aria-label="框选修改指令"
+            rows={3}
           />
-          <button onClick={() => { void copyText(buildAiInstruction("board", boardSelectedIds) + `\n\n需求：${boardAiText}`); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
+          <button onClick={() => { void copyText(buildAiInstruction("board", boardSelectedIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
         </div> : null}
         {boardTool === "page" ? <div className="board-tool-panel">
           <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
@@ -2354,14 +2353,16 @@ ${boardExportRuntimeScript}
           </div>
           {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar">
             <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
-            <input
+            <pre className="board-ai-preview">{buildAiInstruction("page", pageAiSelectedIds, pageAiText)}</pre>
+            <textarea
+              className="board-ai-textarea"
               value={pageAiText}
               onChange={(event) => setPageAiText(event.target.value)}
-              onKeyDown={(event) => { if (event.key === "Enter") { void copyText(buildAiInstruction("page", pageAiSelectedIds) + `\n\n需求：${pageAiText}`); setPageAiText(""); } }}
-              placeholder="输入想怎么改这些组件，例如：把标题改成“还款流水”"
+              placeholder="在这里输入想怎么改这些组件，例如：把标题改成“还款流水”"
               aria-label="页面框选修改指令"
+              rows={3}
             />
-            <button onClick={() => { void copyText(buildAiInstruction("page", pageAiSelectedIds) + `\n\n需求：${pageAiText}`); setPageAiText(""); }}><Copy size={13} />复制指令</button>
+            <button onClick={() => { void copyText(buildAiInstruction("page", pageAiSelectedIds, pageAiText)); setPageAiText(""); }}><Copy size={13} />复制指令</button>
           </div> : null}
         </div>
       </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div>}
