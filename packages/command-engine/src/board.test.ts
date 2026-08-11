@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DSL_VERSION, type BoardDSL, type BoardNoteObject } from "@prototype-studio/dsl-schema";
-import { applyBoardCommands, BoardEngineError } from "./index";
+import { applyBoardCommands, createBoardRestoreCommands, BoardEngineError } from "./index";
 
 function board(): BoardDSL {
   return {
@@ -109,5 +109,61 @@ describe("board command engine", () => {
     expect(() =>
       applyBoardCommands({ board: board(), baseRevision: 3, source: "manual", operator: "jojo", commands: [] })
     ).toThrowError(/commands 不能为空/);
+  });
+
+  it("generates restore commands that return the board to a previous state", () => {
+    const base = board();
+    base.objects.push({ id: "obj-target", type: "page", pageId: "target", x: 1200, y: 80, width: 960, height: 640 });
+    base.links = [{ id: "link-1", from: "obj-home", to: "obj-target" }];
+
+    const changed = applyBoardCommands({
+      board: base,
+      baseRevision: 3,
+      source: "manual",
+      operator: "jojo",
+      commands: [
+        { type: "MOVE_BOARD_OBJECT", target: "obj-home", x: 300, y: 400 },
+        { type: "UPDATE_BOARD_LINK", target: "link-1", changes: { lineType: "orthogonal", color: "#dc2626" } },
+        { type: "ADD_BOARD_OBJECT", object: { id: "note-1", type: "note", x: 10, y: 10, width: 120, height: 60, text: "说明", source: "explicit" } }
+      ]
+    });
+
+    const restore = createBoardRestoreCommands(base, changed.board);
+    expect(restore.length).toBeGreaterThan(0);
+    const restored = applyBoardCommands({
+      board: changed.board,
+      baseRevision: changed.board.revision,
+      source: "undo",
+      operator: "jojo",
+      commands: restore
+    });
+    expect(restored.board.objects).toEqual(base.objects);
+    expect(restored.board.links).toEqual(base.links);
+    expect(restored.board.revision).toBe(5);
+  });
+
+  it("restore commands also cover deleted objects and links", () => {
+    const base = board();
+    base.objects.push({ id: "note-1", type: "note", x: 10, y: 10, width: 120, height: 60, text: "说明", source: "explicit" });
+    base.links = [{ id: "link-1", from: "obj-home", to: "note-1", label: "约束" }];
+
+    const changed = applyBoardCommands({
+      board: base,
+      baseRevision: 3,
+      source: "manual",
+      operator: "jojo",
+      commands: [{ type: "DELETE_BOARD_OBJECT", target: "note-1" }]
+    });
+
+    const restore = createBoardRestoreCommands(base, changed.board);
+    const restored = applyBoardCommands({
+      board: changed.board,
+      baseRevision: changed.board.revision,
+      source: "undo",
+      operator: "jojo",
+      commands: restore
+    });
+    expect(restored.board.objects).toEqual(base.objects);
+    expect(restored.board.links).toEqual(base.links);
   });
 });

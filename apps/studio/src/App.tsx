@@ -65,7 +65,7 @@ import {
   type TableColumn,
   type UIComponent
 } from "@prototype-studio/dsl-schema";
-import { applyBoardCommands, createRevertRevision, executeCommands, type ApplyBoardCommandsResult } from "@prototype-studio/command-engine";
+import { applyBoardCommands, createBoardRestoreCommands, createRevertRevision, executeCommands, type ApplyBoardCommandsResult } from "@prototype-studio/command-engine";
 import { collectComponentLocations, getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ANNOTATION_PANEL_GAP,
@@ -371,6 +371,8 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string>(initialPages[0] ? "search.status" : "");
   const [history, setHistory] = useState<RevisionRecord[]>([]);
   const [redoStack, setRedoStack] = useState<RevisionRecord[]>([]);
+  const [boardUndoStack, setBoardUndoStack] = useState<BoardDSL[]>([]);
+  const [boardRedoStack, setBoardRedoStack] = useState<BoardDSL[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [projectVersions, setProjectVersions] = useState<Array<{ id: string; label: string; createdAt: string }>>([]);
   const [newVersionLabel, setNewVersionLabel] = useState("");
@@ -819,6 +821,8 @@ export function App() {
     setBoardSelectedId(undefined);
     setBoardSelectedIds([]);
     setBoardSelectedLinkId(undefined);
+    setBoardUndoStack([]);
+    setBoardRedoStack([]);
     try {
       const cached = boardCacheRef.current.get(boardId);
       const next = cached ?? (webProjectId ? (await webSpace.board(webProjectId, boardId)).board : board);
@@ -1157,7 +1161,7 @@ export function App() {
         pagesRef.current = replacePage(pagesRef.current);
         setPages(replacePage);
         if (currentPageIdRef.current === pageId) {
-          setHistory((items) => [...items, result.revision]);
+          setHistory((items) => [...items, result.revision].slice(-20));
           setRedoStack([]);
         }
         // 常规保存属于高频后台反馈，仅失败时提示，避免连续编辑产生通知堆叠。
@@ -1212,13 +1216,14 @@ export function App() {
     localStorage.setItem("ps_panel_right", rightCollapsed ? "1" : "0");
   }, [rightCollapsed]);
 
-  const runBoardCommands = useCallback(async (commands: BoardCommand[]): Promise<boolean> => {
+  const runBoardCommands = useCallback(async (commands: BoardCommand[], recordHistory = true): Promise<boolean> => {
     const targetBoardId = currentBoardIdRef.current;
     const currentBoard = boardCacheRef.current.get(targetBoardId);
     if (!currentBoard) {
       toast("danger", "画布修改未执行", "当前画布尚未加载完成。");
       return false;
     }
+    const beforeSnapshot = structuredClone(currentBoard);
     let applied: ApplyBoardCommandsResult;
     try {
       const result = applyBoardCommands({
@@ -1254,6 +1259,10 @@ export function App() {
           await persistDesktopBoardRevision(stringifyYaml(applied.board, { lineWidth: 0 }), applied.revision);
         }
         boardQueueBaseRefs.current.set(targetBoardId, base + 1);
+        if (recordHistory) {
+          setBoardUndoStack((items) => [...items, beforeSnapshot].slice(-20));
+          setBoardRedoStack([]);
+        }
         return true;
       } catch (error) {
         // 画布可能已被其他会话（另一个标签页 / Codex）修改：重新读取最新画布，
@@ -1941,9 +1950,8 @@ ${boardExportRuntimeScript}
         await persistDesktopPage(result.dsl, result.revision);
       }
       setDsl(result.dsl);
-      setHistory((items) => [...items.slice(0, -1), result.revision]);
-      setRedoStack((items) => [...items, target]);
-      toast("info", "已撤销修改", `保留为 Revision ${result.dsl.revision}`);
+      setHistory((items) => [...items.slice(0, -1), result.revision].slice(-20));
+      setRedoStack((items) => [...items, target].slice(-20));
     } catch (error) {
       toast("danger", "无法撤销", error instanceof Error ? error.message : "未知错误");
     }
@@ -1958,6 +1966,72 @@ ${boardExportRuntimeScript}
       setRedoStack((items) => items.slice(0, -1));
     }
   };
+
+  const undoBoard = useCallback(async () => {
+    const targetBoardId = currentBoardIdRef.current;
+    const target = boardUndoStack.at(-1);
+    if (!target) return;
+    const current = boardCacheRef.current.get(targetBoardId);
+    if (!current) return;
+    const commands = createBoardRestoreCommands(target, current);
+    if (!commands.length) return;
+    const ok = await runBoardCommands(commands, false);
+    if (ok) {
+      setBoardUndoStack((items) => items.slice(0, -1));
+      setBoardRedoStack((items) => [...items, structuredClone(current)].slice(-20));
+    }
+  }, [boardUndoStack, runBoardCommands]);
+
+  const redoBoard = useCallback(async () => {
+    const targetBoardId = currentBoardIdRef.current;
+    const target = boardRedoStack.at(-1);
+    if (!target) return;
+    const current = boardCacheRef.current.get(targetBoardId);
+    if (!current) return;
+    const commands = createBoardRestoreCommands(target, current);
+    if (!commands.length) return;
+    const ok = await runBoardCommands(commands, false);
+    if (ok) {
+      setBoardRedoStack((items) => items.slice(0, -1));
+      setBoardUndoStack((items) => [...items, structuredClone(current)].slice(-20));
+    }
+  }, [boardRedoStack, runBoardCommands]);
+
+  const undoActive = useCallback(() => {
+    if (viewMode === "canvas") void undoBoard();
+    else void undo();
+  }, [undo, undoBoard, viewMode]);
+
+  const redoActive = useCallback(() => {
+    if (viewMode === "canvas") void redoBoard();
+    else void redo();
+  }, [redo, redoBoard, viewMode]);
+
+  const undoRedoRef = useRef({ undo: undoActive, redo: redoActive });
+  undoRedoRef.current = { undo: undoActive, redo: redoActive };
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (diagramEditor) return;
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        void undoRedoRef.current.undo();
+      } else if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        void undoRedoRef.current.redo();
+      } else if (key === "y") {
+        event.preventDefault();
+        void undoRedoRef.current.redo();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [diagramEditor]);
 
   const moveOutline = (dragged: string, target: string) => {
     const fields = dsl.search?.fields ?? [];
@@ -2016,8 +2090,8 @@ ${boardExportRuntimeScript}
         <ToolButton active={!leftCollapsed} onClick={() => setLeftCollapsed((value) => !value)} title="显示 / 隐藏左侧面板"><PanelLeft size={14} /><span className="title-action-label">左栏</span></ToolButton>
         <ToolButton active={!rightCollapsed} onClick={() => setRightCollapsed((value) => !value)} title="显示 / 隐藏右侧面板"><PanelRight size={14} /><span className="title-action-label">右栏</span></ToolButton>
         <span className="title-divider" />
-        <ToolButton compact title="撤销" disabled={!currentPage || !history.length} onClick={undo}><Undo2 size={15} /></ToolButton>
-        <ToolButton compact title="重做" disabled={!currentPage || !redoStack.length} onClick={redo}><Redo2 size={15} /></ToolButton>
+        <ToolButton compact title="撤销" disabled={viewMode === "canvas" ? !boardUndoStack.length : !currentPage || !history.length} onClick={() => void undoActive()}><Undo2 size={15} /></ToolButton>
+        <ToolButton compact title="重做" disabled={viewMode === "canvas" ? !boardRedoStack.length : !currentPage || !redoStack.length} onClick={() => void redoActive()}><Redo2 size={15} /></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={openPublishDrawer}><Share2 size={14} />发布</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setSettingsSection("account"); setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>

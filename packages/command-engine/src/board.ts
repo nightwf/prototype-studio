@@ -164,3 +164,69 @@ export function applyBoardCommands(input: ApplyBoardCommandsInput): ApplyBoardCo
   };
   return { board: after, revision };
 }
+
+/**
+ * 生成把 current 恢复成 target 状态所需的画布命令（撤销 / 重做使用）。
+ * 通过对象 / 连线的增删改还原完整状态，不含 id 变更。
+ */
+export function createBoardRestoreCommands(target: BoardDSL, current: BoardDSL): BoardCommand[] {
+  const commands: BoardCommand[] = [];
+
+  // 删除当前多余、目标中不存在的连线
+  for (const link of current.links) {
+    if (!target.links.some((item) => item.id === link.id)) {
+      commands.push({ type: "DELETE_BOARD_LINK", target: link.id });
+    }
+  }
+  // 删除当前多余、目标中不存在的对象（其关联连线由引擎一并移除）
+  for (const object of current.objects) {
+    if (!target.objects.some((item) => item.id === object.id)) {
+      commands.push({ type: "DELETE_BOARD_OBJECT", target: object.id });
+    }
+  }
+  // 补回目标中存在、当前缺失的对象
+  for (const object of target.objects) {
+    if (!current.objects.some((item) => item.id === object.id)) {
+      commands.push({ type: "ADD_BOARD_OBJECT", object: clone(object) });
+    }
+  }
+  // 恢复内容发生变化的对象
+  for (const object of target.objects) {
+    const live = current.objects.find((item) => item.id === object.id);
+    if (live) {
+      const changes = boardFieldChanges(live, object);
+      if (changes) commands.push({ type: "UPDATE_BOARD_OBJECT", target: object.id, changes: changes as Partial<BoardObject> });
+    }
+  }
+  // 补回目标中存在、当前缺失的连线
+  for (const link of target.links) {
+    if (!current.links.some((item) => item.id === link.id)) {
+      commands.push({ type: "ADD_BOARD_LINK", link: clone(link) });
+    }
+  }
+  // 恢复内容发生变化的连线
+  for (const link of target.links) {
+    const live = current.links.find((item) => item.id === link.id);
+    if (live) {
+      const changes = boardFieldChanges(live, link);
+      if (changes) commands.push({ type: "UPDATE_BOARD_LINK", target: link.id, changes: changes as Partial<BoardLink> });
+    }
+  }
+  return commands;
+}
+
+/** 计算 current → target 的字段差异；字段在目标中缺失时置 undefined 以便引擎删除。 */
+function boardFieldChanges<T extends object>(current: T, target: T): Record<string, unknown> | null {
+  const changes: Record<string, unknown> = {};
+  let dirty = false;
+  for (const key of new Set([...Object.keys(current), ...Object.keys(target)])) {
+    if (key === "id") continue;
+    const before = (current as Record<string, unknown>)[key];
+    const after = (target as Record<string, unknown>)[key];
+    if (JSON.stringify(before) !== JSON.stringify(after)) {
+      changes[key] = after;
+      dirty = true;
+    }
+  }
+  return dirty ? changes : null;
+}

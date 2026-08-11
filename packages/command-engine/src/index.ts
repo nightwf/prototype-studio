@@ -371,5 +371,5 @@ export function createReapplyRevision(
   return { dsl: after, revision };
 }
 
-export { applyBoardCommands, BoardEngineError } from "./board";
+export { applyBoardCommands, createBoardRestoreCommands, BoardEngineError } from "./board";
 export type { ApplyBoardCommandsInput, ApplyBoardCommandsResult } from "./board";
