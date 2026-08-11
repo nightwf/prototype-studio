@@ -215,7 +215,15 @@ window.addEventListener('DOMContentLoaded', function () {
   window.addEventListener('wheel', function (event) {
     if (!event.target.closest || event.target.closest('.board-viewer-toolbar')) return;
     event.preventDefault();
-    viewerZoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
+    if (event.ctrlKey || event.metaKey) {
+      // 双指捏合（或 Ctrl+滚轮）→ 以光标为中心缩放
+      viewerZoom(event.deltaY < 0 ? 1.12 : 1 / 1.12, event.clientX, event.clientY);
+    } else {
+      // 双指滑动 / 普通滚轮 → 平移画布
+      viewerTx -= event.deltaX;
+      viewerTy -= event.deltaY;
+      viewerApply();
+    }
   }, { passive: false });
   document.addEventListener('pointerdown', function (event) {
     if (event.button !== 0) return;
