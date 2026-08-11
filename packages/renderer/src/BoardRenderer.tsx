@@ -20,6 +20,7 @@ import {
   CONTENT_PADDING,
   GRID_STEP,
   ZOOM_STEP,
+  clampZoom,
   type BoardBounds,
   type BoardView,
   type Point,
@@ -395,7 +396,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   useImperativeHandle(ref, () => ({
     zoomIn: () => setView((v) => zoomAtCursor(v, ZOOM_STEP, containerSize.width / 2, containerSize.height / 2)),
     zoomOut: () => setView((v) => zoomAtCursor(v, 1 / ZOOM_STEP, containerSize.width / 2, containerSize.height / 2)),
-    setZoom: (zoom) => setView((v) => zoomAtCursor(v, Math.min(4, Math.max(0.2, zoom)) / v.zoom, containerSize.width / 2, containerSize.height / 2)),
+    setZoom: (zoom) => setView((v) => zoomAtCursor(v, clampZoom(zoom) / v.zoom, containerSize.width / 2, containerSize.height / 2)),
     resetView: () => setView({ x: 0, y: 0, zoom: 1 }),
     fitToContent
   }), [containerSize, fitToContent]);
@@ -1113,7 +1114,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
       <input
         type="range"
         className="board-zoom-slider"
-        min={20}
+        min={5}
         max={400}
         step={5}
         value={Math.round(view.zoom * 100)}

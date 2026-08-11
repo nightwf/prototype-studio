@@ -25,7 +25,7 @@ export interface Rect {
   height: number;
 }
 
-export const MIN_ZOOM = 0.2;
+export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 4;
 export const ZOOM_STEP = 1.25;
 export const GRID_STEP = 20;

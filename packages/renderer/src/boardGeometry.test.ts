@@ -45,7 +45,7 @@ describe("boardGeometry", () => {
 
   it("clamps zoom to the allowed range", () => {
     expect(zoomAtCursor({ x: 0, y: 0, zoom: 1 }, 100, 0, 0).zoom).toBe(4);
-    expect(zoomAtCursor({ x: 0, y: 0, zoom: 1 }, 0.001, 0, 0).zoom).toBe(0.2);
+    expect(zoomAtCursor({ x: 0, y: 0, zoom: 1 }, 0.001, 0, 0).zoom).toBe(0.05);
   });
 
   it("snaps values to the grid step", () => {
