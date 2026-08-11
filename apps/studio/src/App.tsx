@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import {
   Box,
   Braces,
@@ -399,7 +399,9 @@ export function App() {
   const [boardAiText, setBoardAiText] = useState("");
   const [aiSelectMode, setAiSelectMode] = useState(false);
   const [boardAiBarIds, setBoardAiBarIds] = useState<string[]>([]);
+  const [boardAiBarPos, setBoardAiBarPos] = useState<{ x: number; y: number } | null>(null);
   const [pageAiSelectedIds, setPageAiSelectedIds] = useState<string[]>([]);
+  const [pageAiBarPos, setPageAiBarPos] = useState<{ x: number; y: number } | null>(null);
   const [pageAiText, setPageAiText] = useState("");
   const [mcpConnection, setMcpConnection] = useState<DesktopMcpConnectionInfo>();
   const [appModal, setAppModal] = useState<AppModal>();
@@ -718,6 +720,8 @@ export function App() {
       setPageAiText("");
       setBoardAiText("");
       setBoardAiBarIds([]);
+      setBoardAiBarPos(null);
+      setPageAiBarPos(null);
       setBoardSelectedId(undefined);
       setBoardSelectedIds([]);
       sendPreview({ type: "prototype:ai-select", enabled: true });
@@ -726,9 +730,21 @@ export function App() {
       setPageAiText("");
       setBoardAiText("");
       setBoardAiBarIds([]);
+      setBoardAiBarPos(null);
+      setPageAiBarPos(null);
       sendPreview({ type: "prototype:ai-select", enabled: false });
     }
   }, [sendPreview]);
+
+  /** 弹窗靠近鼠标位置显示，超出视口时自动收拢。 */
+  const aiBarStyle = (pos: { x: number; y: number } | null): CSSProperties | undefined => {
+    if (!pos) return undefined;
+    const width = 640;
+    const height = 320;
+    const left = Math.max(8, Math.min(pos.x + 14, window.innerWidth - width - 8));
+    const top = Math.max(8, Math.min(pos.y + 14, window.innerHeight - height - 8));
+    return { position: "fixed", left, top, zIndex: 320, margin: 0, transform: "none" };
+  };
 
   const persistDesktopPage = useCallback(async (page: PageDSL, revision?: RevisionRecord) => {
     if (!projectRoot || !isDesktopRuntime()) return;
@@ -1131,7 +1147,10 @@ export function App() {
       if (!fromPreview) return;
       if (event.data?.type === "preview:ready") setPreviewReady(true);
       if (event.data?.type === "component:selected") setSelectedId(event.data.componentId);
-      if (event.data?.type === "components:selected") setPageAiSelectedIds(event.data.componentIds ?? []);
+      if (event.data?.type === "components:selected") {
+        setPageAiSelectedIds(event.data.componentIds ?? []);
+        setPageAiBarPos(event.data.point ?? null);
+      }
       if (event.data?.type === "runtime:event" && event.data.payload?.type !== "select") {
         if (event.data.payload?.type === "validation-error") toast("warning", "原型校验已触发", "请在 Preview 中补齐必填字段");
       }
@@ -1585,8 +1604,18 @@ export function App() {
     setBoardSelectedLinkId(undefined);
     setBoardSelectedIds(ids);
     setBoardSelectedId(ids.length ? ids[ids.length - 1] : undefined);
-    if (aiSelectMode && ids.length) setBoardAiBarIds(ids);
   };
+
+  const handleBoardSelectComplete = useCallback((ids: string[], point: { x: number; y: number }) => {
+    if (!aiSelectMode) return;
+    if (ids.length) {
+      setBoardAiBarIds(ids);
+      setBoardAiBarPos(point);
+    } else {
+      setBoardAiBarIds([]);
+      setBoardAiBarPos(null);
+    }
+  }, [aiSelectMode]);
 
   const selectBoardLink = (id: string) => {
     setBoardSelectedLinkId(id);
@@ -2304,6 +2333,8 @@ ${boardExportRuntimeScript}
           onMoveMarker={moveBoardMarker}
           onMoveMarkerNote={moveBoardMarkerNote}
           picking={markerPicking}
+          aiSelectMode={aiSelectMode}
+          onSelectComplete={handleBoardSelectComplete}
           onPickComponent={(pageObjectId, componentId, offsetX, offsetY) => {
             setMarkerDraft((previous) => ({ ...previous, pageObjectId, componentId, offsetX, offsetY }));
             setMarkerPicking(false);
@@ -2315,7 +2346,7 @@ ${boardExportRuntimeScript}
           onZOrder={(ids, position) => void zOrderBoardObjects(ids, position)}
           snapToGrid={boardSnap}
         />
-        {aiSelectMode && boardAiBarIds.length > 0 ? <div className="board-ai-bar">
+        {aiSelectMode && boardAiBarIds.length > 0 ? <div className="board-ai-bar" style={aiBarStyle(boardAiBarPos)}>
           <div className="board-ai-bar-head">
             <span className="board-ai-bar-label"><Zap size={13} />已框选 {boardAiBarIds.length} 个对象</span>
             <button className="board-ai-close" onClick={() => toggleAiSelect(false)} aria-label="关闭指令输入框并退出框选"><X size={13} /></button>
@@ -2359,7 +2390,7 @@ ${boardExportRuntimeScript}
             <div className="preview-browser-bar"><div><i /><i /><i /></div><span>prototype://local/{dsl.page.id}</span><button><RotateCcw size={12} /></button></div>
             <iframe key={currentPageId} ref={iframeRef} title={`${currentPage.page.title} Preview`} src={`/preview-runtime/${currentPageId}`} onLoad={() => { sendPreview({ type: "prototype:dsl", dsl }); if (aiSelectMode) sendPreview({ type: "prototype:ai-select", enabled: true }); }} sandbox="allow-scripts allow-same-origin allow-forms" />
           </div>
-          {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar">
+          {aiSelectMode && pageAiSelectedIds.length > 0 ? <div className="page-ai-bar" style={aiBarStyle(pageAiBarPos)}>
             <div className="board-ai-bar-head">
               <span className="board-ai-bar-label"><Zap size={13} />已框选 {pageAiSelectedIds.length} 个组件</span>
               <button className="board-ai-close" onClick={() => toggleAiSelect(false)} aria-label="关闭指令输入框并退出框选"><X size={13} /></button>

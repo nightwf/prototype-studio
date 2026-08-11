@@ -31,7 +31,6 @@ import {
   snapValue,
   viewWorldRect,
   visibleWorldRect,
-  worldToScreen,
   zoomAtCursor
 } from "./boardGeometry";
 import { diagramPath, materializeEr, materializeFlowchart } from "./diagramLayout";
@@ -45,8 +44,10 @@ export interface BoardRendererProps {
   selectedLinkId?: string;
   interactive?: boolean;
   picking?: boolean;
+  aiSelectMode?: boolean;
   onSelectObject?: (id: string) => void;
   onSelectMany?: (ids: string[]) => void;
+  onSelectComplete?: (ids: string[], point: { x: number; y: number }) => void;
   onSelectLink?: (id: string) => void;
   onRelink?: (linkId: string, endpoint: "from" | "to", objectId: string, componentId?: string) => void;
   onMoveLinkWaypoint?: (linkId: string, x: number, y: number) => void;
@@ -255,8 +256,10 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   selectedLinkId,
   interactive = true,
   picking = false,
+  aiSelectMode = false,
   onSelectObject,
   onSelectMany,
+  onSelectComplete,
   onSelectLink,
   onRelink,
   onMoveLinkWaypoint,
@@ -511,7 +514,8 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
 
   const startPanOrMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
     const target = event.target as HTMLElement;
-    if (target.closest(".board-object, .board-link, .board-tool-panel, .board-minimap, .board-context-menu")) return;
+    if (target.closest(".board-tool-panel, .board-minimap, .board-context-menu")) return;
+    if (!aiSelectMode && target.closest(".board-object, .board-link")) return;
     if (picking) return;
     const isPan = spacePressed || event.button === 1;
     if (isPan) {
@@ -554,6 +558,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
         .map((object) => object.id);
       const moved = Math.hypot(event.clientX - marquee.start.x, event.clientY - marquee.start.y);
       onSelectMany?.(moved > 4 ? ids : []);
+      if (moved > 4) onSelectComplete?.(ids, { x: event.clientX, y: event.clientY });
       setMarquee(null);
     }
   };
@@ -657,7 +662,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
     const visualX = object.x - canvasX;
     const visualY = object.y - canvasY;
     const startDrag = (event: ReactPointerEvent<HTMLDivElement>): void => {
-      if (!interactive || picking) return;
+      if (!interactive || picking || aiSelectMode) return;
       event.stopPropagation();
       event.currentTarget.setPointerCapture(event.pointerId);
       const multi = selectedIds.includes(object.id) && selectedIds.length > 1;
@@ -750,11 +755,11 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             <div
               className="board-page-body"
               ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}
-              onPointerDown={(event) => { if (!picking) event.stopPropagation(); }}
-              onClick={(event) => { if (!picking) event.stopPropagation(); }}
-              onDoubleClick={(event) => { if (!picking) event.stopPropagation(); }}
-              onContextMenu={(event) => { if (!picking) event.stopPropagation(); }}
-              onWheel={(event) => { if (!picking) event.stopPropagation(); }}
+              onPointerDown={(event) => { if (!picking && !aiSelectMode) event.stopPropagation(); }}
+              onClick={(event) => { if (!picking && !aiSelectMode) event.stopPropagation(); }}
+              onDoubleClick={(event) => { if (!picking && !aiSelectMode) event.stopPropagation(); }}
+              onContextMenu={(event) => { if (!picking && !aiSelectMode) event.stopPropagation(); }}
+              onWheel={(event) => { if (!picking && !aiSelectMode) event.stopPropagation(); }}
               onPointerMoveCapture={(event) => {
                 if (createLinkRef.current) return;
                 if (!interactive || picking) { setHoverAnchor(undefined); return; }
@@ -784,7 +789,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
                 onPickComponent?.(object.id, target.getAttribute("data-component-id") ?? "", offsetX, offsetY);
               }}
             >
-              {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={interactive && !picking} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
+              {pages[object.pageId] ? <PrototypeRenderer dsl={pages[object.pageId]!} interactive={interactive && !picking && !aiSelectMode} /> : <div className="board-page-missing">页面不存在：{object.pageId}</div>}
               {interactive && !picking && hoverAnchor && hoverAnchor.objectId === object.id ? (
                 <span
                   className="board-port board-port--component"
@@ -1040,13 +1045,12 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
   const minimapViewport = viewWorldRect(view, containerSize.width, containerSize.height);
   const marqueeStyle = marquee ? (() => {
     const rect = viewportRect();
-    const a = screenToWorld(view, marquee.start.x, marquee.start.y, rect.left, rect.top);
-    const b = screenToWorld(view, marquee.current.x, marquee.current.y, rect.left, rect.top);
-    const left = worldToScreen(view, Math.min(a.x, b.x), 0, rect.left, rect.top).x;
-    const top = worldToScreen(view, 0, Math.min(a.y, b.y), rect.left, rect.top).y;
-    const width = Math.abs(b.x - a.x) * view.zoom;
-    const height = Math.abs(b.y - a.y) * view.zoom;
-    return { left, top, width, height };
+    return {
+      left: Math.min(marquee.start.x, marquee.current.x) - rect.left,
+      top: Math.min(marquee.start.y, marquee.current.y) - rect.top,
+      width: Math.abs(marquee.current.x - marquee.start.x),
+      height: Math.abs(marquee.current.y - marquee.start.y)
+    };
   })() : undefined;
 
   return (

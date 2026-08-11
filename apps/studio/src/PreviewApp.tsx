@@ -69,7 +69,8 @@ export function PreviewApp() {
         type: "components:selected",
         projectId: "case-center-demo",
         pageId: dsl.page.id,
-        componentIds: unique
+        componentIds: unique,
+        point: { x: x2, y: y2 }
       }, window.location.origin);
     }
   };
