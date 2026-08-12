@@ -5,6 +5,7 @@ import { ANNOTATION_PANEL_GAP, ANNOTATION_PANEL_WIDTH, CONTENT_PADDING, BoardRen
 import type { BoardDSL, PageDSL } from "@prototype-studio/dsl-schema";
 
 const rendererSourceDir = join(process.cwd(), "packages", "renderer", "src");
+const designSystemSourceDir = join(process.cwd(), "packages", "design-system", "src");
 
 export interface BoardExportOptions {
   mode?: "content" | "with-annotations";
@@ -15,11 +16,12 @@ function escapeHtml(value: string): string {
 }
 
 async function rendererStyles(): Promise<string> {
-  const [boardCss, rendererCss] = await Promise.all([
+  const [designCss, boardCss, rendererCss] = await Promise.all([
+    readFile(`${designSystemSourceDir}/styles.css`, "utf8"),
     readFile(`${rendererSourceDir}/board.css`, "utf8"),
     readFile(`${rendererSourceDir}/styles.css`, "utf8")
   ]);
-  return `${rendererCss}\n${boardCss}`;
+  return `${designCss}\n${rendererCss}\n${boardCss}`;
 }
 
 function boardMarkup(board: BoardDSL, pages: Record<string, PageDSL>, mode: "content" | "with-annotations"): { body: string; width: number; height: number } {

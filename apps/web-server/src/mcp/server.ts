@@ -152,7 +152,7 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
 
   server.registerTool("prototype_create_page", {
     title: "Create Prototype Studio Page",
-    description: "Create a validated page DSL inside a project.",
+    description: "Create a validated page DSL inside a project. For back-office systems, include layout.navigation (title + items with key/label/icon/path/active/children) so the renderer draws a left sidebar shell.",
     inputSchema: z.object({ project_id: projectId, dsl: z.record(z.any()) }).strict()
   }, async (input) => respond(async (userId) => service.createPage(userId, input.project_id, input.dsl as unknown as import("@prototype-studio/dsl-schema").PageDSL)));
 

@@ -2176,6 +2176,15 @@ ${boardExportRuntimeScript}
   }
 
   const webApiToken = getApiToken();
+  const codexConnectPrompt = webApiToken
+    ? "请帮我配置 Prototype Studio 的 MCP 连接。把下面这段配置写入 ~/.codex/config.toml 的 MCP 服务部分（若已存在 prototype-studio 配置则整体替换，没有则追加）。注意：Codex 的 streamable_http 服务不支持明文 bearer_token 字段，必须用 http_headers 传 Authorization 头。配置完成后提示我重启 Codex 即可，不要修改其他内容：\n\n" +
+      ["[mcp_servers.prototype-studio]", `type = "http"`, `url = "${window.location.origin}/mcp"`, `http_headers = { "Authorization" = "Bearer ${webApiToken}" }`].join("\n")
+    : "";
+  const workbuddyConnectPrompt = webApiToken
+    ? "请帮我注册 Prototype Studio 的 HTTP / Streamable HTTP MCP Server，按下面这段 JSON 写入你的 MCP 配置（若已存在 prototype-studio 则整体替换）：\n\n" +
+      JSON.stringify({ mcpServers: { "prototype-studio": { type: "http", url: `${window.location.origin}/mcp`, headers: { Authorization: `Bearer ${webApiToken}` } } } }, null, 2) +
+      "\n\n注册并连接成功后告诉我状态即可。"
+    : "";
 
   return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
     <header className="studio-titlebar">
@@ -2642,14 +2651,13 @@ ${boardExportRuntimeScript}
                 </div>
               </div>
               <div className="settings-block">
-                <div className="settings-block-head"><div><span>MCP TUTORIAL</span><strong>连接 Codex / WorkBuddy 教程</strong></div></div>
-                <div className="settings-step"><span className="settings-step-no">1</span><p>复制上方 <b>API Token</b>，然后在本机 <code>~/.codex/config.toml</code> 添加 MCP 服务：</p></div>
-                <pre className="settings-code">{`[mcp_servers.prototype-studio]
-type = "http"
-url = "${window.location.origin}/mcp"
-bearer_token_env_var = "PROTOTYPE_STUDIO_TOKEN"`}</pre>
-                <div className="settings-step"><span className="settings-step-no">2</span><p>把 Token 设为环境变量 <code>PROTOTYPE_STUDIO_TOKEN</code>，重启 Codex 即可连接。</p></div>
-                <div className="settings-step"><span className="settings-step-no">3</span><p>WorkBuddy 同理：新增 MCP Server，填入同样的 <code>url</code> 与 Token。</p></div>
+                <div className="settings-block-head"><div><span>CODEX</span><strong>连接 Codex</strong><small>复制提示词后粘贴到 Codex 对话，它会自动写入配置并连接，无需其他操作</small></div></div>
+                <button className="settings-prompt-btn" onClick={() => void copyText(codexConnectPrompt)} disabled={!codexConnectPrompt}><Copy size={13} />复制 Codex 连接提示词</button>
+                <pre className="settings-code">{"[mcp_servers.prototype-studio]\ntype = \"http\"\nurl = \"" + window.location.origin + "/mcp\"\nhttp_headers = { \"Authorization\" = \"Bearer ••••••••\" }"}</pre>
+              </div>
+              <div className="settings-block">
+                <div className="settings-block-head"><div><span>WORKBUDDY</span><strong>连接 WorkBuddy</strong><small>复制提示词后粘贴到 WorkBuddy 对话，它会按自身方式注册 MCP 服务并连接</small></div></div>
+                <button className="settings-prompt-btn" onClick={() => void copyText(workbuddyConnectPrompt)} disabled={!workbuddyConnectPrompt}><Copy size={13} />复制 WorkBuddy 连接提示词</button>
               </div>
             </> : null}
             {settingsSection === "local" && isDesktopRuntime() ? (mcpConnection ? <>

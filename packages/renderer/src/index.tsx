@@ -5,11 +5,36 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent,
+  type ComponentType,
   type ReactNode
 } from "react";
-import { Check, ChevronDown, ChevronsUpDown, Info, Search, X } from "lucide-react";
+import {
+  Activity,
+  BarChart3,
+  Building2,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronsUpDown,
+  CircleHelp,
+  CreditCard,
+  Database,
+  FileText,
+  FolderOpen,
+  Home,
+  Info,
+  KeyRound,
+  LayoutDashboard,
+  Search,
+  Settings,
+  Shield,
+  Table2,
+  Users,
+  X
+} from "lucide-react";
 import type {
   Condition,
+  NavigationItem,
   PageDSL,
   PrototypeEvent,
   TableColumn,
@@ -44,6 +69,43 @@ function isEmpty(value: unknown): boolean {
   if (Array.isArray(value)) return value.length === 0;
   if (typeof value === "object") return Object.keys(value).length === 0;
   return false;
+}
+
+const NAV_ICONS: Record<string, ComponentType<{ size?: number | string }>> = {
+  dashboard: LayoutDashboard,
+  home: Home,
+  list: Table2,
+  table: Table2,
+  form: FileText,
+  detail: FileText,
+  document: FileText,
+  file: FileText,
+  settings: Settings,
+  users: Users,
+  team: Users,
+  database: Database,
+  chart: BarChart3,
+  activity: Activity,
+  shield: Shield,
+  security: Shield,
+  credit: CreditCard,
+  payment: CreditCard,
+  folder: FolderOpen,
+  org: Building2,
+  company: Building2,
+  key: KeyRound,
+  help: CircleHelp
+};
+
+function navIcon(name: string | undefined): ReactNode {
+  const Icon = name ? NAV_ICONS[name.toLowerCase()] : undefined;
+  return Icon ? <Icon size={15} /> : <span className="proto-nav-icon-dot" />;
+}
+
+function navItemActive(item: NavigationItem, currentPageId: string): boolean {
+  if (item.active === true) return true;
+  if (item.path && item.path === currentPageId) return true;
+  return Boolean(item.children?.some((child) => navItemActive(child, currentPageId)));
 }
 
 /** Evaluate DSL conditions without reading ambient state or mutating their inputs. */
@@ -726,8 +788,30 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
   };
   const visibleOverlay = dsl.overlays.find((item) => item.id === openOverlay && componentIsVisible(item, values, runtimeState));
   const rows = dsl.table?.rows ?? [];
+  const navigation = dsl.layout.navigation;
+  const navItems = navigation?.items?.length ? navigation.items : undefined;
+  const navigateTo = (item: NavigationItem) => {
+    if (!item.path) return;
+    trigger({ type: "navigate", target: item.path, path: item.path });
+  };
+  const renderNavItems = (items: NavigationItem[], depth: number): ReactNode => (
+    items.map((item) => {
+      const active = navItemActive(item, dsl.page.id);
+      return (
+        <div key={item.key} className={`proto-nav-item${active ? " is-active" : ""}`}>
+          <button className="proto-nav-link" style={{ paddingLeft: 14 + depth * 16 }} onClick={() => navigateTo(item)} title={item.label}>
+            {navIcon(item.icon)}
+            <span>{item.label}</span>
+            {item.badge ? <em className="proto-nav-badge">{item.badge}</em> : null}
+            {item.children?.length ? <ChevronRight size={13} className="proto-nav-chevron" /> : null}
+          </button>
+          {item.children?.length ? <div className="proto-nav-children">{renderNavItems(item.children, depth + 1)}</div> : null}
+        </div>
+      );
+    })
+  );
 
-  return (
+  const pageMarkup = (
     <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}`} onClick={() => onSelect?.("")}>
       <div className="proto-page-heading">
         <div>
@@ -788,6 +872,18 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
           </Selectable>
         </div>
       ) : null}
+    </div>
+  );
+
+  if (!navItems) return pageMarkup;
+  return (
+    <div className="proto-app">
+      <aside className="proto-sidebar">
+        <div className="proto-sidebar-brand">{navigation?.title ?? "业务工作台"}</div>
+        <nav className="proto-sidebar-nav">{renderNavItems(navItems, 0)}</nav>
+        <div className="proto-sidebar-foot"><span>PROTOTYPE</span><em>STUDIO</em></div>
+      </aside>
+      <div className="proto-app-body">{pageMarkup}</div>
     </div>
   );
 }

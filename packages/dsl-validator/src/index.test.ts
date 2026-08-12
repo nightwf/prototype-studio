@@ -21,6 +21,38 @@ describe("validateDSL", () => {
     const result = validateDSL(invalid);
     expect(result.errors).toContainEqual(expect.objectContaining({ code: "INVALID_EVENT_TARGET" }));
   });
+
+  it("accepts a valid navigation shell with nested items", () => {
+    const dsl = structuredClone(caseListExample);
+    dsl.layout.navigation = {
+      title: "业务工作台",
+      items: [
+        { key: "case-center", label: "案件管理", icon: "table", path: "case-list", active: true },
+        { key: "config", label: "系统配置", icon: "settings", children: [
+          { key: "config.users", label: "用户管理", path: "user-list" },
+          { key: "config.logs", label: "操作日志", path: "log-list" }
+        ] }
+      ]
+    };
+    expect(validateDSL(dsl)).toMatchObject({ valid: true, errors: [] });
+  });
+
+  it("rejects navigation with duplicate keys and empty items", () => {
+    const duplicate = structuredClone(caseListExample);
+    duplicate.layout.navigation = { items: [
+      { key: "a", label: "A" },
+      { key: "a", label: "B" }
+    ] };
+    const duplicateResult = validateDSL(duplicate);
+    expect(duplicateResult.valid).toBe(false);
+    expect(duplicateResult.errors.some((error) => error.code === "DUPLICATE_COMPONENT_ID")).toBe(true);
+
+    const empty = structuredClone(caseListExample);
+    empty.layout.navigation = { items: [] };
+    const emptyResult = validateDSL(empty);
+    expect(emptyResult.valid).toBe(false);
+    expect(emptyResult.errors.some((error) => error.code === "SCHEMA_INVALID")).toBe(true);
+  });
 });
 
 describe("validateBoard with open object types", () => {

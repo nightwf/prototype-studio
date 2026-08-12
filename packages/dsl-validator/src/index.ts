@@ -7,6 +7,7 @@ import {
   pageDslJsonSchema,
   type BoardDSL,
   type BoardLink,
+  type NavigationItem,
   type PageDSL,
   type PrototypeEvent,
   type UIComponent
@@ -366,6 +367,46 @@ export function validateDSL(input: unknown): DSLValidationResult {
       validateEvent(action, `$.events[${eventIndex}].actions[${actionIndex}]`, undefined, knownIds, errors);
     });
   });
+
+  const navigation = dsl.layout.navigation;
+  if (navigation) {
+    if (!Array.isArray(navigation.items) || navigation.items.length === 0) {
+      errors.push({
+        code: "SCHEMA_INVALID",
+        path: "$.layout.navigation",
+        message: "导航必须包含至少一个菜单项（items）。"
+      });
+    } else {
+      const navKeys = new Map<string, string>();
+      const checkItems = (items: NavigationItem[], basePath: string): void => {
+        items.forEach((item, index) => {
+          const itemPath = `${basePath}[${index}]`;
+          if (!item.key || !/^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(item.key)) {
+            errors.push({
+              code: "INVALID_COMPONENT_ID",
+              path: `${itemPath}.key`,
+              componentId: item.key,
+              message: `菜单 key“${item.key || "(空)"}”不符合规则。`,
+              suggestion: "key 应以字母开头，并只包含字母、数字、点、短横线或下划线。"
+            });
+          }
+          const firstPath = navKeys.get(item.key);
+          if (firstPath) {
+            errors.push({
+              code: "DUPLICATE_COMPONENT_ID",
+              path: `${itemPath}.key`,
+              componentId: item.key,
+              message: `菜单 key“${item.key}”重复，首次出现于 ${firstPath}。`
+            });
+          } else if (item.key) {
+            navKeys.set(item.key, itemPath);
+          }
+          if (item.children) checkItems(item.children, `${itemPath}.children`);
+        });
+      };
+      checkItems(navigation.items, "$.layout.navigation.items");
+    }
+  }
 
   return { valid: errors.length === 0, errors, warnings };
 }

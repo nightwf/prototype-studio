@@ -97,6 +97,13 @@
 .board-annotation-item.is-selected { background: #1a2f42; }
 .board-annotation-item i { position: static; display: inline-grid; place-items: center; width: 22px; height: 22px; flex: none; }
 .board-annotation-item span { font-size: 9px; line-height: 1.5; }
+.export-canvas { cursor: grab; }
+.export-canvas.is-dragging { cursor: grabbing; }
+.board-viewer-toolbar { position: fixed; z-index: 10001; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #3a4650; border-radius: 9px; background: rgba(20, 27, 33, 0.94); box-shadow: 0 12px 34px rgba(5, 11, 15, 0.45); user-select: none; }
+.board-viewer-toolbar button { height: 28px; min-width: 28px; padding: 0 9px; display: grid; place-items: center; border: 1px solid #3a4650; border-radius: 6px; background: #1f2a31; color: #cfd6da; font-size: 11px; cursor: pointer; }
+.board-viewer-toolbar button:hover { border-color: #4a86cf; color: #fff; }
+.board-viewer-toolbar input[type="range"] { width: 96px; height: 4px; accent-color: #3b82f6; cursor: pointer; }
+.board-viewer-zoom-label { min-width: 40px; text-align: center; color: #aeb8be; font: 10px/1 var(--ps-font-mono); }
 .board-marquee { position: absolute; z-index: 70; border: 1px solid #3b82f6; background: rgba(59, 130, 246, 0.12); pointer-events: none; }
 .board-minimap { position: absolute; z-index: 65; right: 16px; bottom: 16px; width: 176px; height: 116px; border: 1px solid #3a4650; border-radius: 8px; background: rgba(20, 27, 33, 0.92); box-shadow: 0 12px 30px rgba(5, 11, 15, 0.35); cursor: pointer; overflow: hidden; }
 .board-minimap-object { position: absolute; display: block; border-radius: 2px; background: rgba(148, 163, 184, 0.55); }
