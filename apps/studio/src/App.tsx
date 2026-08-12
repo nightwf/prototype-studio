@@ -2717,7 +2717,7 @@ ${boardExportRuntimeScript}
           }) : <>
             <div className="publish-intro">
               <strong>发布为公共链接</strong>
-              <p>发布后，任何人可以通过链接查看当前项目画布，无需登录。发布内容随项目修改实时更新。</p>
+              <p>发布后，任何人可以通过链接浏览项目页面与画布，无需登录。发布内容随项目修改实时更新。</p>
             </div>
             <label className="publish-expiry-field"><span>有效期</span>
               <select value={publishExpiry} onChange={(event) => setPublishExpiry(event.target.value)}>

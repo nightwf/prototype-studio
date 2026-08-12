@@ -18,7 +18,7 @@ async function testServer() {
   temporaryRoots.push(root);
   const metadata = new MemoryMetadataStore();
   const spaces = new ProjectSpaceManager(metadata, join(root, "spaces"));
-  const app = await buildApp({ metadata, spaces, inviteCodes: ["SHARE-INVITE"], baseUrl: "http://127.0.0.1:8787" });
+  const app = await buildApp({ metadata, spaces, inviteCodes: ["SHARE-INVITE"], baseUrl: "http://127.0.0.1:8787", staticRoot: join(root, "no-static") });
   return { app, root };
 }
 
@@ -70,6 +70,19 @@ describe("read-only sharing", () => {
     expect(html.body).toContain("案件管理");
     expect(html.body).toContain("data-board-tab");
     expect(html.body).toContain("第二画布");
+
+    const boardHtml = await app.inject({ method: "GET", url: `/share/${token}/boards` });
+    expect(boardHtml.statusCode).toBe(200);
+    expect(boardHtml.headers["content-type"]).toContain("text/html");
+    expect(boardHtml.body).toContain("data-board-object");
+
+    const pageDsl = await app.inject({ method: "GET", url: `/api/share/${token}/pages/case-list` });
+    expect(pageDsl.statusCode).toBe(200);
+    expect(pageDsl.json()).toMatchObject({ ok: true });
+    expect(pageDsl.json().dsl.page.id).toBe("case-list");
+
+    const missingPage = await app.inject({ method: "GET", url: `/api/share/${token}/pages/not-exist` });
+    expect(missingPage.statusCode).toBe(404);
 
     const revoked = await app.inject({ method: "DELETE", url: `/api/projects/${projectId}/share/${token}`, headers: auth });
     expect(revoked.statusCode).toBe(200);

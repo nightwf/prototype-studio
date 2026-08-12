@@ -1,0 +1,200 @@
+.share-viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f2f4f7;
+  color: #1f2937;
+  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.share-viewer--state {
+  align-items: center;
+  justify-content: center;
+}
+
+.share-viewer-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 34px 42px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+  color: #475569;
+  text-align: center;
+}
+
+.share-viewer-state-card strong {
+  font-size: 15px;
+  color: #1f2937;
+}
+
+.share-viewer-state-card p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 320px;
+}
+
+.share-viewer-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+  flex: none;
+}
+
+.share-viewer-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.share-viewer-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font: 600 13px/1 system-ui, -apple-system, "PingFang SC", sans-serif;
+  cursor: pointer;
+}
+
+.share-viewer-tabs button.is-active {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.share-viewer-project {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.share-viewer-project strong {
+  font-size: 15px;
+  color: #111827;
+  white-space: nowrap;
+}
+
+.share-viewer-project span {
+  overflow: hidden;
+  color: #94a3b8;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.share-viewer-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.share-viewer-pages {
+  width: 236px;
+  flex: none;
+  overflow-y: auto;
+  padding: 12px 10px 24px;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.share-viewer-group {
+  margin-bottom: 14px;
+}
+
+.share-viewer-group h3 {
+  margin: 0 8px 6px;
+  color: #64748b;
+  font: 700 11px/1.4 system-ui, -apple-system, "PingFang SC", sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.share-viewer-group button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #334155;
+  font: 500 13px/1.4 system-ui, -apple-system, "PingFang SC", sans-serif;
+  text-align: left;
+  cursor: pointer;
+}
+
+.share-viewer-group button:hover {
+  background: #f1f5f9;
+}
+
+.share-viewer-group button.is-active {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.share-viewer-page-icon {
+  display: inline-flex;
+  color: #94a3b8;
+  flex: none;
+}
+
+.share-viewer-group button.is-active .share-viewer-page-icon {
+  color: #2563eb;
+}
+
+.share-viewer-page {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 22px 26px 48px;
+  background: #f2f4f7;
+}
+
+.share-viewer-page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.share-viewer-canvas {
+  flex: 1;
+  min-height: 0;
+  background: #eef1f4;
+}
+
+.share-viewer-canvas iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+@media (max-width: 760px) {
+  .share-viewer-project span {
+    display: none;
+  }
+
+  .share-viewer-pages {
+    width: 180px;
+  }
+
+  .share-viewer-page {
+    padding: 14px 12px 32px;
+  }
+}

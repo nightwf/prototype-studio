@@ -19,6 +19,8 @@ export interface AppOptions {
   spaces: ProjectSpaceManager;
   inviteCodes?: string[];
   baseUrl?: string;
+  /** 前端静态目录，测试可注入不存在的目录以走服务端渲染回退。 */
+  staticRoot?: string;
 }
 
 const projectIdPattern = /^[a-zA-Z0-9-]{8,64}$/;
@@ -51,7 +53,9 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   await app.register(cookie);
   await app.register(cors, { origin: true, credentials: true, allowedHeaders: ["content-type", "authorization"] });
 
-  const staticRoot = process.env.WEB_STATIC_DIR
+  const staticRoot = options.staticRoot
+    ? resolve(options.staticRoot)
+    : process.env.WEB_STATIC_DIR
     ? resolve(process.env.WEB_STATIC_DIR)
     : resolve(process.cwd(), "apps", "studio", "dist");
   if (existsSync(resolve(staticRoot, "index.html"))) {
@@ -223,8 +227,25 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return { ok: true, ...(await options.spaces.shareData(params.token ?? "")) };
   });
 
+  app.get("/api/share/:token/pages/:pageId", async (request) => {
+    const params = request.params as { token?: string; pageId?: string };
+    return { ok: true, dsl: await options.spaces.sharePage(params.token ?? "", params.pageId ?? "") };
+  });
+
+  // 画布页签使用服务端渲染的画布 HTML（含缩放/平移查看器）
+  app.get("/share/:token/boards", async (request, reply) => {
+    const params = request.params as { token?: string };
+    const html = await options.spaces.shareHtml(params.token ?? "");
+    reply.type("text/html; charset=utf-8").send(html);
+  });
+
   app.get("/share/:token", async (request, reply) => {
     const params = request.params as { token?: string };
+    // 线上优先加载 Studio 前端，由客户端 ShareViewer 提供“页面 + 画布”完整项目查看器；
+    // 无前端构建（如测试环境）时回退为服务端渲染的画布 HTML。
+    if (existsSync(resolve(staticRoot, "index.html"))) {
+      return reply.type("text/html").sendFile("index.html");
+    }
     const html = await options.spaces.shareHtml(params.token ?? "");
     reply.type("text/html; charset=utf-8").send(html);
   });

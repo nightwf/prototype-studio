@@ -324,13 +324,7 @@ export class ProjectSpaceManager {
   }
 
   async shareData(token: string) {
-    const link = await this.metadata.getShareLinkByToken(token);
-    if (!link) throw new SpaceError("NOT_FOUND", "分享链接不存在。");
-    if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) {
-      throw new SpaceError("NOT_FOUND", "分享链接已过期。");
-    }
-    const row = await this.metadata.getProjectById(link.projectId);
-    if (!row || row.status !== "active") throw new SpaceError("NOT_FOUND", "项目不可访问。");
+    const row = await this.requireShareProject(token);
     const opened = await openProject(row.spacePath);
     const pages: Array<{ id: string; title: string }> = [];
     for (const summary of opened.pages) {
@@ -342,6 +336,22 @@ export class ProjectSpaceManager {
       pages,
       boards
     };
+  }
+
+  async sharePage(token: string, pageId: string): Promise<PageDSL> {
+    const row = await this.requireShareProject(token);
+    return getPage(row.spacePath, pageId);
+  }
+
+  private async requireShareProject(token: string): Promise<ProjectRow> {
+    const link = await this.metadata.getShareLinkByToken(token);
+    if (!link) throw new SpaceError("NOT_FOUND", "分享链接不存在。");
+    if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) {
+      throw new SpaceError("NOT_FOUND", "分享链接已过期。");
+    }
+    const row = await this.metadata.getProjectById(link.projectId);
+    if (!row || row.status !== "active") throw new SpaceError("NOT_FOUND", "项目不可访问。");
+    return row;
   }
 
   async shareHtml(token: string): Promise<string> {

@@ -49,6 +49,8 @@ export interface RuntimeEventPayload {
   componentId?: string;
   target?: string;
   value?: unknown;
+  /** 跳转类事件的目标路径，用于查看器切换页面。 */
+  path?: string;
 }
 
 export interface PrototypeRendererProps {
@@ -736,7 +738,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
 
   const trigger = (event?: PrototypeEvent, componentId?: string) => {
     if (!event) return;
-    onRuntimeEvent?.({ type: event.type, componentId, target: event.target, value: event.value });
+    onRuntimeEvent?.({ type: event.type, componentId, target: event.target, value: event.value, path: event.path });
     if (event.type === "open" && event.target) setOpenOverlay(event.target);
     if (event.type === "close") setOpenOverlay(undefined);
     if (event.type === "clear") {
