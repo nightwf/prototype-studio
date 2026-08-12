@@ -58,7 +58,7 @@
 .proto-count i { display: inline-block; height: 10px; margin: 0 9px; border-left: 1px solid var(--ps-ink-200); }
 .proto-table-selectable { border-radius: 0; }
 .proto-table-scroller { overflow-x: auto; }
-.proto-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 11px; }
+.proto-table { width: 100%; border-collapse: collapse; table-layout: auto; min-width: max-content; font-size: 11px; }
 .proto-table th { height: 42px; background: #f7f8f8; color: var(--ps-ink-500); text-align: left; padding: 0 14px; border-bottom: 1px solid var(--ps-ink-100); font-weight: 650; }
 .proto-table th.is-component-selected { position: relative; background: var(--ps-cobalt-wash); color: var(--ps-cobalt-dark); outline: 2px solid var(--ps-cobalt); outline-offset: -2px; }
 .proto-column-tag { position: absolute; left: 4px; top: -18px; z-index: 8; padding: 3px 5px; border-radius: 3px 3px 3px 0; background: var(--ps-cobalt); color: white; white-space: nowrap; font: 600 8px/1 var(--ps-font-mono); }
