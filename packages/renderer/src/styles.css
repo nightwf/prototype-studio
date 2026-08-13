@@ -1,6 +1,33 @@
 * { box-sizing: border-box; }
 .proto-root { min-height: 100%; padding: 30px 32px 60px; color: var(--ps-ink-900); background-color: #f2f3f1; background-image: linear-gradient(rgba(24,35,43,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(24,35,43,.025) 1px, transparent 1px); background-size: 24px 24px; font-family: var(--ps-font-sans); }
 .proto-app { display: flex; align-items: stretch; height: 100%; min-height: 100%; background: #f2f3f1; font-family: var(--ps-font-sans); }
+.anmi-theme {
+  --ps-cobalt: #ff4f1f;
+  --ps-cobalt-dark: #e74a20;
+  --ps-cobalt-wash: #fff7f5;
+}
+.proto-app.anmi-theme { background: #f2f4f7; }
+.proto-app.anmi-theme .proto-sidebar { background: #282323; border-right-color: #1f1919; color: #fff; }
+.proto-app.anmi-theme .proto-sidebar-brand { border-bottom-color: #3a3333; color: #fff; }
+.proto-app.anmi-theme .proto-nav-link { color: #c9c4c4; border-radius: 0; }
+.proto-app.anmi-theme .proto-nav-link:hover { background: #342e2e; color: #fff; }
+.proto-app.anmi-theme .proto-nav-item.is-active > .proto-nav-link,
+.proto-app.anmi-theme .proto-nav-children .proto-nav-item.is-active > .proto-nav-link { background: #1f1919; color: #ff4f1f; }
+.proto-app.anmi-theme .proto-nav-children .proto-nav-link { color: #a9a3a3; }
+.proto-app.anmi-theme .proto-sidebar-foot { border-top-color: #3a3333; color: #817878; }
+.proto-app.anmi-theme .proto-root { background-color: #f2f4f7; background-image: none; }
+.proto-root.anmi-theme:not(.proto-app .proto-root) { background-color: #f2f4f7; background-image: none; }
+.anmi-theme .proto-panel { border-color: #dcdee2; border-radius: 2px; box-shadow: none; }
+.anmi-theme .proto-search-panel { background: #f2f4f7; }
+.anmi-theme .proto-table th { background: #ebeef3; color: #515a6e; }
+.anmi-theme .proto-table tbody tr:nth-child(even) td { background: #f3f5f8; }
+.anmi-theme .proto-table tr:hover td { background: #fff7f5; }
+.anmi-theme .proto-table tr.is-selected td { background: #ebf7ff; }
+.anmi-theme .proto-button { border-radius: 2px; }
+.anmi-theme .proto-button--primary { box-shadow: none; }
+.anmi-theme .proto-field input:focus,
+.anmi-theme .proto-field select:focus,
+.anmi-theme .proto-field textarea:focus { box-shadow: 0 0 0 2px rgba(255,79,31,.12); }
 .proto-app .proto-root { flex: 1; min-width: 0; }
 .proto-sidebar { flex: 0 0 216px; display: flex; flex-direction: column; background: #ffffff; border-right: 1px solid #e3e7ea; overflow-y: auto; color: var(--ps-ink-900); }
 .proto-sidebar-brand { padding: 18px 16px 14px; border-bottom: 1px solid #eef0f1; font: 720 15px/1.2 var(--ps-font-display); letter-spacing: -.01em; }

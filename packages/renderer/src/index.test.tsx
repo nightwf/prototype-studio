@@ -26,6 +26,11 @@ function page(overrides: Partial<PageDSL>): PageDSL {
 }
 
 describe("PrototypeRenderer determinism", () => {
+  it("applies the Anmi visual theme from page metadata", () => {
+    const markup = renderToStaticMarkup(<PrototypeRenderer dsl={page({ meta: { visualTheme: "anmi" } })} interactive={false} />);
+    expect(markup).toContain("anmi-theme");
+  });
+
   it("renders identical markup for the same DSL and versions", () => {
     const first = renderToStaticMarkup(<PrototypeRenderer dsl={caseListExample} interactive={false} />);
     const second = renderToStaticMarkup(<PrototypeRenderer dsl={structuredClone(caseListExample)} interactive={false} />);

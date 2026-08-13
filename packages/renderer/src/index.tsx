@@ -813,8 +813,9 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
     })
   );
 
+  const visualTheme = dsl.meta?.visualTheme === "anmi" ? " anmi-theme" : "";
   const pageMarkup = (
-    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}`} onClick={() => onSelect?.("")}>
+    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}${visualTheme}`} onClick={() => onSelect?.("")}>
       <div className="proto-page-heading">
         <div>
           <div className="proto-breadcrumb"><span>业务工作台</span><b>/</b><span>{dsl.page.title}</span></div>
@@ -879,7 +880,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
 
   if (!navItems) return pageMarkup;
   return (
-    <div className="proto-app">
+    <div className={`proto-app${visualTheme}`}>
       <aside className="proto-sidebar">
         <div className="proto-sidebar-brand">{navigation?.title ?? "业务工作台"}</div>
         <nav className="proto-sidebar-nav">{renderNavItems(navItems, 0)}</nav>
