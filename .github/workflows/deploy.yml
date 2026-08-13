@@ -1,4 +1,4 @@
-name: Deploy Prototype Studio Web
+name: Prototype Studio Checks
 
 on:
   push:
@@ -22,19 +22,3 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
       - run: pnpm build
-
-  deploy:
-    needs: quality
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          port: ${{ secrets.SSH_PORT || '22' }}
-          username: ${{ secrets.SSH_USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          fingerprint: ${{ secrets.SSH_FINGERPRINT }}
-          script: |
-            deploy
