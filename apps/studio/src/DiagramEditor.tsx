@@ -1,8 +1,10 @@
 import { useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import dagre from "@dagrejs/dagre";
 import {
+  BaseEdge,
   Background,
   Controls,
+  EdgeLabelRenderer,
   Handle,
   MiniMap,
   NodeResizer,
@@ -16,16 +18,18 @@ import {
   type Connection,
   type Edge,
   type EdgeChange,
+  type EdgeProps,
   type Node,
   type NodeChange,
   type NodeProps,
   type OnNodeDrag,
-  type ReactFlowInstance
+  type ReactFlowInstance,
+  useReactFlow
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ArrowDown, ArrowRight, ArrowUp, Check, Database, Diamond, GitBranch, Minus, Plus, Redo2, RotateCcw, Save, Trash2, Undo2, X } from "lucide-react";
 import type { BoardErEntity, BoardErField, BoardFlowNode, BoardFlowchartObject, BoardObject } from "@prototype-studio/dsl-schema";
-import { materializeEr, materializeFlowchart } from "@prototype-studio/renderer";
+import { diagramPath, materializeEr, materializeFlowchart } from "@prototype-studio/renderer";
 import "./diagramEditor.css";
 
 type DiagramObject = Extract<BoardObject, { type: "flowchart" | "er" }>;
@@ -38,7 +42,15 @@ type DiagramNodeData = Record<string, unknown> & {
   laneId?: string;
   entity?: BoardErEntity;
 };
-type DiagramEdgeData = Record<string, unknown> & { label?: string; condition?: string; cardinality?: string; color?: string; strokeWidth?: number };
+type DiagramEdgeData = Record<string, unknown> & {
+  label?: string;
+  condition?: string;
+  cardinality?: string;
+  color?: string;
+  strokeWidth?: number;
+  lineType?: "straight" | "curve" | "orthogonal";
+  waypoints?: Array<{ x: number; y: number }>;
+};
 type DiagramNode = Node<DiagramNodeData>;
 type DiagramEdge = Edge<DiagramEdgeData>;
 interface DiagramSnapshot { nodes: DiagramNode[]; edges: DiagramEdge[] }
@@ -63,14 +75,6 @@ const dimension = (...values: Array<number | string | undefined>): number => {
   return 1;
 };
 
-function edgeType(type?: string): "straight" | "smoothstep" | "default" {
-  return type === "straight" ? "straight" : type === "curve" ? "default" : "smoothstep";
-}
-
-function dslEdgeType(type?: string): "straight" | "curve" | "orthogonal" {
-  return type === "straight" ? "straight" : type === "default" ? "curve" : "orthogonal";
-}
-
 function initialSnapshot(object: DiagramObject): DiagramSnapshot {
   if (object.type === "flowchart") {
     const flowchart = materializeFlowchart(object.flowchart);
@@ -91,8 +95,8 @@ function initialSnapshot(object: DiagramObject): DiagramSnapshot {
         sourceHandle: edge.fromHandle,
         targetHandle: edge.toHandle,
         label: edge.label,
-        type: edgeType(edge.lineType),
-        data: { label: edge.label, condition: edge.condition, color: edge.color, strokeWidth: edge.strokeWidth },
+        type: "diagram",
+        data: { label: edge.label, condition: edge.condition, color: edge.color, strokeWidth: edge.strokeWidth, lineType: edge.lineType ?? "orthogonal", waypoints: edge.waypoints ?? [] },
         style: { stroke: edge.color, strokeWidth: edge.strokeWidth },
         markerEnd: { type: "arrowclosed" as never, color: edge.color }
       }))
@@ -116,8 +120,8 @@ function initialSnapshot(object: DiagramObject): DiagramSnapshot {
       sourceHandle: handleFor(relation.from, relation.fromField, relation.fromHandle),
       targetHandle: handleFor(relation.to, relation.toField, relation.toHandle),
       label: relation.label || relation.cardinality,
-      type: edgeType(relation.lineType),
-      data: { label: relation.label, cardinality: relation.cardinality, color: relation.color, strokeWidth: relation.strokeWidth },
+      type: "diagram",
+      data: { label: relation.label, cardinality: relation.cardinality, color: relation.color, strokeWidth: relation.strokeWidth, lineType: relation.lineType ?? "orthogonal", waypoints: relation.waypoints ?? [] },
       style: { stroke: relation.color, strokeWidth: relation.strokeWidth }
     }))
   };
@@ -153,6 +157,58 @@ function EntityNodeView({ data, selected }: NodeProps<DiagramNode>) {
 }
 
 const nodeTypes = { flow: FlowNodeView, entity: EntityNodeView };
+
+function DiagramEdgeView({ id, sourceX, sourceY, targetX, targetY, style, markerEnd, selected, data, label }: EdgeProps<DiagramEdge>) {
+  const { screenToFlowPosition, setEdges } = useReactFlow<DiagramNode, DiagramEdge>();
+  const dragRef = useRef<number | undefined>(undefined);
+  const lineType = (data?.lineType ?? "orthogonal") as "straight" | "curve" | "orthogonal";
+  const waypoints = data?.waypoints ?? [];
+  const path = diagramPath({ x: sourceX, y: sourceY }, { x: targetX, y: targetY }, lineType, waypoints);
+
+  const updateWaypoints = (updater: (items: Array<{ x: number; y: number }>) => Array<{ x: number; y: number }>) => {
+    setEdges((items) => items.map((edge) => edge.id === id ? { ...edge, data: { ...edge.data, waypoints: updater(edge.data?.waypoints ?? []) } } : edge));
+  };
+
+  const startWaypointDrag = (index: number) => (event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = index;
+    const onMove = (moveEvent: PointerEvent) => {
+      const current = dragRef.current;
+      if (current === undefined) return;
+      const point = screenToFlowPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
+      updateWaypoints((items) => items.map((item, itemIndex) => itemIndex === current ? { x: Math.round(point.x), y: Math.round(point.y) } : item));
+    };
+    const onUp = () => {
+      dragRef.current = undefined;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  return (
+    <>
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {selected ? waypoints.map((point, index) => (
+        <g key={`${id}-wp-${index}`} className="diagram-waypoint" transform={`translate(${point.x} ${point.y})`}>
+          <circle r={9} className="diagram-waypoint-hit" onPointerDown={startWaypointDrag(index)} onDoubleClick={(event) => { event.stopPropagation(); updateWaypoints((items) => items.filter((_, itemIndex) => itemIndex !== index)); }} />
+          <circle r={4} className="diagram-waypoint-dot" />
+        </g>
+      )) : null}
+      {label || data?.label ? (
+        <EdgeLabelRenderer>
+          <div className="diagram-edge-label" style={{ transform: `translate(-50%, -50%) translate(${(sourceX + targetX) / 2}px, ${(sourceY + targetY) / 2}px)` }}>
+            {String(label ?? data?.label ?? "")}
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  );
+}
+
+const edgeTypes = { diagram: DiagramEdgeView };
 
 function nodeLabel(kind: BoardFlowNode["kind"]): string {
   return ({ start: "开始", end: "结束", process: "处理", decision: "判断", subprocess: "子流程", data: "数据", lane: "泳道" } as const)[kind ?? "process"];
@@ -205,7 +261,7 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
   const onEdgesChange = useCallback((changes: EdgeChange<DiagramEdge>[]) => setEdges((items) => applyEdgeChanges(changes, items)), []);
   const onConnect = useCallback((connection: Connection) => {
     remember();
-    setEdges((items) => addEdge({ ...connection, id: `edge-${Date.now()}`, type: "smoothstep", markerEnd: object.type === "flowchart" ? { type: "arrowclosed" as never, color: "#64748b" } : undefined, data: { cardinality: object.type === "er" ? "one-to-many" : undefined, color: object.type === "er" ? "#7c3aed" : "#64748b", strokeWidth: 2 } }, items));
+    setEdges((items) => addEdge({ ...connection, id: `edge-${Date.now()}`, type: "diagram", markerEnd: object.type === "flowchart" ? { type: "arrowclosed" as never, color: "#64748b" } : undefined, data: { cardinality: object.type === "er" ? "one-to-many" : undefined, color: object.type === "er" ? "#7c3aed" : "#64748b", strokeWidth: 2, lineType: "orthogonal", waypoints: [] } }, items));
   }, [object.type, remember]);
 
   const assignLaneAfterDrag = useCallback<OnNodeDrag<DiagramNode>>((_event, dragged) => {
@@ -262,6 +318,20 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
       style: { ...edge.style, stroke: changes.color ?? edge.data?.color, strokeWidth: changes.strokeWidth ?? edge.data?.strokeWidth },
       ...(object.type === "flowchart" && changes.color ? { markerEnd: { type: "arrowclosed" as never, color: changes.color } } : {})
     } : edge));
+  };
+
+  const addWaypointToSelectedEdge = () => {
+    if (!selectedEdge) return;
+    const source = nodes.find((node) => node.id === selectedEdge.source);
+    const target = nodes.find((node) => node.id === selectedEdge.target);
+    if (!source || !target) return;
+    const sx = source.position.x + dimension(source.measured?.width, source.width, source.style?.width as number | string | undefined, 168) / 2;
+    const sy = source.position.y + dimension(source.measured?.height, source.height, source.style?.height as number | string | undefined, 64) / 2;
+    const tx = target.position.x + dimension(target.measured?.width, target.width, target.style?.width as number | string | undefined, 168) / 2;
+    const ty = target.position.y + dimension(target.measured?.height, target.height, target.style?.height as number | string | undefined, 64) / 2;
+    const point = { x: Math.round((sx + tx) / 2), y: Math.round((sy + ty) / 2) };
+    remember();
+    setEdges((items) => items.map((edge) => edge.id === selectedEdge.id ? { ...edge, data: { ...edge.data, waypoints: [...(edge.data?.waypoints ?? []), point] } } : edge));
   };
 
   const deleteSelection = () => {
@@ -338,7 +408,7 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
     if (object.type === "flowchart") {
       const flowchart: BoardFlowchartObject["flowchart"] = {
         nodes: nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, description: node.data.description, laneId: node.data.laneId, position: node.position, size: { width: dimension(node.measured?.width, node.width, node.style?.width as number | string | undefined, 168), height: dimension(node.measured?.height, node.height, node.style?.height as number | string | undefined, 64) }, color: node.data.color, fill: node.data.fill })),
-        edges: edges.map((edge) => ({ id: edge.id, from: edge.source, to: edge.target, fromHandle: edge.sourceHandle ?? undefined, toHandle: edge.targetHandle ?? undefined, label: String(edge.data?.label ?? edge.label ?? "") || undefined, condition: edge.data?.condition, lineType: dslEdgeType(edge.type), color: edge.data?.color, strokeWidth: edge.data?.strokeWidth }))
+        edges: edges.map((edge) => ({ id: edge.id, from: edge.source, to: edge.target, fromHandle: edge.sourceHandle ?? undefined, toHandle: edge.targetHandle ?? undefined, label: String(edge.data?.label ?? edge.label ?? "") || undefined, condition: edge.data?.condition, lineType: edge.data?.lineType ?? "orthogonal", color: edge.data?.color, strokeWidth: edge.data?.strokeWidth, waypoints: edge.data?.waypoints?.length ? edge.data.waypoints : undefined }))
       };
       const contentWidth = Math.max(320, ...flowchart.nodes.map((node) => (node.position?.x ?? 0) + (node.size?.width ?? 168) + 40));
       const contentHeight = Math.max(220, ...flowchart.nodes.map((node) => (node.position?.y ?? 0) + (node.size?.height ?? 64) + 40));
@@ -346,7 +416,7 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
     } else {
       const entities: BoardErEntity[] = nodes.map((node) => ({ ...node.data.entity!, position: node.position, width: dimension(node.measured?.width, node.width, node.style?.width as number | string | undefined, 220) }));
       const fieldName = (entityId: string, handle?: string | null) => entities.find((entity) => entity.id === entityId)?.fields.find((field) => field.id === handle || field.name === handle)?.name ?? "";
-      const relations = edges.map((edge) => ({ id: edge.id, from: edge.source, to: edge.target, fromField: fieldName(edge.source, edge.sourceHandle), toField: fieldName(edge.target, edge.targetHandle), fromHandle: edge.sourceHandle ?? undefined, toHandle: edge.targetHandle ?? undefined, cardinality: edge.data?.cardinality, label: edge.data?.label, lineType: dslEdgeType(edge.type), color: edge.data?.color, strokeWidth: edge.data?.strokeWidth }));
+      const relations = edges.map((edge) => ({ id: edge.id, from: edge.source, to: edge.target, fromField: fieldName(edge.source, edge.sourceHandle), toField: fieldName(edge.target, edge.targetHandle), fromHandle: edge.sourceHandle ?? undefined, toHandle: edge.targetHandle ?? undefined, cardinality: edge.data?.cardinality, label: edge.data?.label, lineType: edge.data?.lineType ?? "orthogonal", color: edge.data?.color, strokeWidth: edge.data?.strokeWidth, waypoints: edge.data?.waypoints?.length ? edge.data.waypoints : undefined }));
       const contentWidth = Math.max(320, ...entities.map((entity) => (entity.position?.x ?? 0) + (entity.width ?? 220) + 40));
       const contentHeight = Math.max(220, ...entities.map((entity) => (entity.position?.y ?? 0) + 62 + entity.fields.length * 27 + 40));
       next = { ...object, width: Math.max(object.width, contentWidth), height: Math.max(object.height, contentHeight), er: { entities, relations } };
@@ -385,9 +455,15 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
     </aside>
     <main className="diagram-editor-canvas">
       <ReactFlow<DiagramNode, DiagramEdge>
-        nodes={nodes} edges={edges} nodeTypes={nodeTypes} onInit={(instance) => { instanceRef.current = instance; }}
+        nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes} onInit={(instance) => { instanceRef.current = instance; }}
         onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect}
         onReconnect={(oldEdge, connection) => { remember(); setEdges((items) => reconnectEdge(oldEdge, connection, items)); }}
+        onEdgeDoubleClick={(event, edge) => {
+          const point = instanceRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          if (!point) return;
+          remember();
+          setEdges((items) => items.map((item) => item.id === edge.id ? { ...item, data: { ...item.data, waypoints: [...(item.data?.waypoints ?? []), { x: Math.round(point.x), y: Math.round(point.y) }] } } : item));
+        }}
         onNodeDragStart={remember} onNodeDragStop={assignLaneAfterDrag} onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => { setSelectedNodeId(selectedNodes.at(-1)?.id); setSelectedEdgeId(selectedEdges.at(-1)?.id); }}
         onPaneClick={() => { setSelectedNodeId(undefined); setSelectedEdgeId(undefined); }}
         fitView fitViewOptions={{ padding: .18 }} snapToGrid snapGrid={[10, 10]} deleteKeyCode={null} selectionOnDrag multiSelectionKeyCode={["Meta", "Control"]} proOptions={{ hideAttribution: true }}
@@ -407,8 +483,10 @@ function DiagramEditorInner({ object, boardRevision, onSave, onClose }: DiagramE
       {selectedEdge ? <div className="diagram-form">
         <label><span>说明</span><input value={String(selectedEdge.data?.label ?? "")} onChange={(event) => updateEdge({ label: event.target.value })} /></label>
         {object.type === "flowchart" ? <label><span>条件</span><input value={String(selectedEdge.data?.condition ?? "")} onChange={(event) => updateEdge({ condition: event.target.value })} placeholder="例如：审批通过" /></label> : <label><span>关系基数</span><select value={String(selectedEdge.data?.cardinality ?? "one-to-many")} onChange={(event) => updateEdge({ cardinality: event.target.value })}><option value="one-to-one">一对一</option><option value="one-to-many">一对多</option><option value="many-to-many">多对多</option></select></label>}
-        <label><span>路径</span><select value={selectedEdge.type ?? "smoothstep"} onChange={(event) => updateEdge({ type: event.target.value })}><option value="smoothstep">折线</option><option value="default">曲线</option><option value="straight">直线</option></select></label>
+        <label><span>路径</span><select value={String(selectedEdge.data?.lineType ?? "orthogonal")} onChange={(event) => updateEdge({ lineType: event.target.value as "straight" | "curve" | "orthogonal" })}><option value="orthogonal">折线</option><option value="curve">曲线</option><option value="straight">直线</option></select></label>
         <div className="diagram-form-grid"><label><span>颜色</span><input type="color" value={selectedEdge.data?.color ?? (object.type === "er" ? "#7c3aed" : "#64748b")} onChange={(event) => updateEdge({ color: event.target.value })} /></label><label><span>粗细</span><select value={selectedEdge.data?.strokeWidth ?? 2} onChange={(event) => updateEdge({ strokeWidth: Number(event.target.value) })}><option value="1">1px</option><option value="2">2px</option><option value="4">4px</option><option value="6">6px</option></select></label></div>
+        <button onClick={addWaypointToSelectedEdge}><Plus size={13} />添加拐点</button>
+        <p className="diagram-form-hint">选中连线后：拖动圆点调整形状，双击圆点删除拐点，拖动两端圆点重新连接。</p>
         <button className="is-danger" onClick={deleteSelection}><Trash2 size={13} />删除连线</button>
       </div> : null}
       {!selectedNode && !selectedEdge ? <div className="diagram-inspector-empty"><GitBranch size={24} /><p>点击节点或连线后在这里编辑。</p><span>从左侧添加新对象，拖动节点边缘的圆点创建连线。</span></div> : null}

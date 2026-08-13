@@ -356,6 +356,8 @@ export interface BoardFlowEdge {
   lineType?: "straight" | "curve" | "orthogonal";
   color?: string;
   strokeWidth?: number;
+  /** 可拖动的中间拐点（世界坐标），用于手工调整连线形状。 */
+  waypoints?: Array<{ x: number; y: number }>;
 }
 
 export interface BoardFlowchartObject extends BoardObjectBase {
@@ -396,6 +398,8 @@ export interface BoardErRelation {
   lineType?: "straight" | "curve" | "orthogonal";
   color?: string;
   strokeWidth?: number;
+  /** 可拖动的中间拐点（世界坐标），用于手工调整连线形状。 */
+  waypoints?: Array<{ x: number; y: number }>;
 }
 
 export interface BoardErObject extends BoardObjectBase {

@@ -43,7 +43,50 @@ export function materializeEr(er: BoardErObject["er"]): BoardErObject["er"] {
   };
 }
 
-export function diagramPath(from: { x: number; y: number }, to: { x: number; y: number }, type: "straight" | "curve" | "orthogonal" = "orthogonal"): string {
+export function diagramPath(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  type: "straight" | "curve" | "orthogonal" = "orthogonal",
+  waypoints: Array<{ x: number; y: number }> = []
+): string {
+  if (waypoints.length) {
+    const points = [from, ...waypoints, to];
+    if (type === "straight") {
+      return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    }
+    if (type === "orthogonal") {
+      let path = `M ${from.x} ${from.y}`;
+      for (let index = 0; index < waypoints.length; index += 1) {
+        const point = waypoints[index]!;
+        const previous = points[index]!;
+        if (index % 2 === 0) {
+          path += ` L ${point.x} ${previous.y} L ${point.x} ${point.y}`;
+        } else {
+          path += ` L ${previous.x} ${point.y} L ${point.x} ${point.y}`;
+        }
+      }
+      const last = waypoints[waypoints.length - 1]!;
+      const tailStart = points[points.length - 2]!;
+      if (waypoints.length % 2 === 1) {
+        path += ` L ${to.x} ${last.y} L ${to.x} ${to.y}`;
+      } else {
+        path += ` L ${tailStart.x} ${to.y} L ${to.x} ${to.y}`;
+      }
+      return path;
+    }
+    // curve：逐段三次贝塞尔，控制点沿 x 方向偏移，保证路径平滑经过每个拐点
+    let path = `M ${from.x} ${from.y}`;
+    for (let index = 0; index < waypoints.length; index += 1) {
+      const start = points[index]!;
+      const end = waypoints[index]!;
+      const bend = Math.max(48, Math.abs(end.x - start.x) * 0.45);
+      path += ` C ${start.x + bend} ${start.y}, ${end.x - bend} ${end.y}, ${end.x} ${end.y}`;
+    }
+    const last = waypoints[waypoints.length - 1]!;
+    const bend = Math.max(48, Math.abs(to.x - last.x) * 0.45);
+    path += ` C ${last.x + bend} ${last.y}, ${to.x - bend} ${to.y}, ${to.x} ${to.y}`;
+    return path;
+  }
   if (type === "straight") return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
   if (type === "curve") {
     const bend = Math.max(60, Math.abs(to.x - from.x) * 0.45);

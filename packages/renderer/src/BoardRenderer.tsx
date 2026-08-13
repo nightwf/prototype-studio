@@ -181,7 +181,7 @@ function FlowchartView({ object, boardId }: { object: Extract<BoardObject, { typ
           return (
             <g key={edge.id}>
               <path
-                d={diagramPath(start, end, edge.lineType)}
+                d={diagramPath(start, end, edge.lineType, edge.waypoints)}
                 fill="none"
                 stroke={edge.color ?? "#94a3b8"}
                 strokeWidth={edge.strokeWidth ?? 2}
@@ -222,7 +222,7 @@ function ErView({ object }: { object: Extract<BoardObject, { type: "er" }> }) {
           const end = { x: to.position.x, y: to.position.y + toHeight / 2 };
           return (
             <g key={relation.id}>
-              <path d={diagramPath(start, end, relation.lineType)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} />
+              <path d={diagramPath(start, end, relation.lineType, relation.waypoints)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} />
               <text x={(start.x + end.x) / 2} y={(start.y + end.y) / 2 - 6} fill={relation.color ?? "#a78bfa"} fontSize={9} textAnchor="middle">
                 {relation.label || relation.cardinality || "relation"}
               </text>

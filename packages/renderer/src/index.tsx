@@ -547,7 +547,7 @@ export function DocumentFlowchart({ flowchart }: { flowchart: NonNullable<UIComp
         if (!from?.position || !from.size || !to?.position || !to.size) return null;
         const start = { x: from.position.x + from.size.width / 2, y: from.position.y + from.size.height };
         const end = { x: to.position.x + to.size.width / 2, y: to.position.y };
-        return <path key={edge.id} d={diagramPath(start, end, edge.lineType)} fill="none" stroke={edge.color ?? "#94a3b8"} strokeWidth={edge.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
+        return <path key={edge.id} d={diagramPath(start, end, edge.lineType, edge.waypoints)} fill="none" stroke={edge.color ?? "#94a3b8"} strokeWidth={edge.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
       })}
       {materialized.nodes.map((node) => {
         const x = node.position?.x ?? 0;
@@ -581,7 +581,7 @@ export function DocumentEr({ er }: { er: NonNullable<UIComponent["er"]> }) {
         if (!from?.position || !to?.position) return null;
         const start = { x: from.position.x + (from.width ?? 220), y: from.position.y + 24 };
         const end = { x: to.position.x, y: to.position.y + 24 };
-        return <path key={relation.id} d={diagramPath(start, end, relation.lineType)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
+        return <path key={relation.id} d={diagramPath(start, end, relation.lineType, relation.waypoints)} fill="none" stroke={relation.color ?? "#a78bfa"} strokeWidth={relation.strokeWidth ?? 2} markerEnd={`url(#${arrowId})`} />;
       })}
       {materialized.entities.map((entity) => {
         const x = entity.position?.x ?? 0;

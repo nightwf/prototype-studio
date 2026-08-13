@@ -461,6 +461,10 @@ defineBoardObjectType("flowchart", (object, path, issues) => {
   flowchart.edges.forEach((candidate, index) => {
     const edge = candidate as Record<string, unknown>;
     if (!nodeIds.has(String(edge.from)) || !nodeIds.has(String(edge.to))) issues.errors.push(boardIssue("SCHEMA_INVALID", "流程连线引用了不存在的节点。", `${path}.flowchart.edges[${index}]`));
+    const waypoints = edge.waypoints;
+    if (waypoints !== undefined && (!Array.isArray(waypoints) || waypoints.some((point) => !Number.isFinite((point as { x?: unknown }).x) || !Number.isFinite((point as { y?: unknown }).y)))) {
+      issues.errors.push(boardIssue("SCHEMA_INVALID", "连线拐点必须是 { x, y } 数字坐标数组。", `${path}.flowchart.edges[${index}].waypoints`));
+    }
   });
 });
 
@@ -484,5 +488,9 @@ defineBoardObjectType("er", (object, path, issues) => {
   er.relations.forEach((candidate, index) => {
     const relation = candidate as Record<string, unknown>;
     if (!entityIds.has(String(relation.from)) || !entityIds.has(String(relation.to))) issues.errors.push(boardIssue("SCHEMA_INVALID", "ER 关系引用了不存在的实体。", `${path}.er.relations[${index}]`));
+    const waypoints = relation.waypoints;
+    if (waypoints !== undefined && (!Array.isArray(waypoints) || waypoints.some((point) => !Number.isFinite((point as { x?: unknown }).x) || !Number.isFinite((point as { y?: unknown }).y)))) {
+      issues.errors.push(boardIssue("SCHEMA_INVALID", "关系拐点必须是 { x, y } 数字坐标数组。", `${path}.er.relations[${index}].waypoints`));
+    }
   });
 });

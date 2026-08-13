@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { materializeEr, materializeFlowchart } from "./diagramLayout";
+import { diagramPath, materializeEr, materializeFlowchart } from "./diagramLayout";
 
 describe("diagram compatibility layout", () => {
   it("lays out legacy flow nodes deterministically without mutating input", () => {
@@ -16,5 +16,27 @@ describe("diagram compatibility layout", () => {
     const er = materializeEr({ entities: [{ id: "case", name: "案件", fields: [{ name: "id", type: "string", key: true }] }], relations: [] });
     expect(er.entities[0]).toMatchObject({ position: { x: 40, y: 40 }, width: 220 });
     expect(er.entities[0]?.fields[0]).toMatchObject({ id: "case-field-1", nullable: true });
+  });
+
+  it("routes straight paths through every waypoint", () => {
+    const path = diagramPath({ x: 0, y: 0 }, { x: 100, y: 100 }, "straight", [{ x: 50, y: 20 }, { x: 80, y: 60 }]);
+    expect(path).toBe("M 0 0 L 50 20 L 80 60 L 100 100");
+  });
+
+  it("builds orthogonal step paths through waypoints", () => {
+    const path = diagramPath({ x: 0, y: 0 }, { x: 100, y: 100 }, "orthogonal", [{ x: 50, y: 50 }]);
+    expect(path).toContain("L 50 0");
+    expect(path).toContain("L 50 50");
+    expect(path).toContain("L 100 50");
+    expect(path).toContain("L 100 100");
+  });
+
+  it("keeps curve paths smooth through multiple waypoints", () => {
+    const path = diagramPath({ x: 0, y: 0 }, { x: 120, y: 0 }, "curve", [{ x: 40, y: 40 }, { x: 80, y: -20 }]);
+    expect(path).toContain("M 0 0");
+    expect(path).toContain("C");
+    expect(path).toContain("40 40");
+    expect(path).toContain("80 -20");
+    expect(path).toContain("120 0");
   });
 });
