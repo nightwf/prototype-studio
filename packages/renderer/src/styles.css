@@ -28,6 +28,14 @@
 .anmi-theme .proto-field input:focus,
 .anmi-theme .proto-field select:focus,
 .anmi-theme .proto-field textarea:focus { box-shadow: 0 0 0 2px rgba(255,79,31,.12); }
+.proto-explanation { min-height: 100%; padding: 40px 48px 56px; background: #fff; }
+.proto-explanation .proto-page-heading { display: block; max-width: 1120px; margin-bottom: 30px; text-align: center; }
+.proto-explanation .proto-breadcrumb,
+.proto-explanation .proto-page-meta { display: none; }
+.proto-explanation .proto-page-heading h1 { font-size: 24px; font-weight: 600; color: #282828; }
+.proto-explanation .proto-page-heading p { margin-top: 10px; color: #636c78; font-size: 13px; }
+.proto-explanation .proto-doc-block { max-width: 1120px; margin: 0 auto; padding: 24px 30px; border: 1px solid #dcdee2; border-radius: 6px; background: #fff; }
+.proto-explanation .proto-doc-diagram { max-height: none; }
 .proto-app .proto-root { flex: 1; min-width: 0; }
 .proto-sidebar { flex: 0 0 216px; display: flex; flex-direction: column; background: #ffffff; border-right: 1px solid #e3e7ea; overflow-y: auto; color: var(--ps-ink-900); }
 .proto-sidebar-brand { padding: 18px 16px 14px; border-bottom: 1px solid #eef0f1; font: 720 15px/1.2 var(--ps-font-display); letter-spacing: -.01em; }

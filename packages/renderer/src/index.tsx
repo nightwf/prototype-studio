@@ -556,9 +556,9 @@ export function DocumentFlowchart({ flowchart }: { flowchart: NonNullable<UIComp
         const h = node.size?.height ?? 64;
         return (
           <g key={node.id}>
-            <rect x={x} y={y} width={w} height={h} rx={node.kind === "start" || node.kind === "end" ? 28 : 8} fill="#f1f5f9" stroke="#94a3b8" strokeWidth={1.5} />
-            <text x={x + w / 2} y={y + h / 2 + (node.description ? 0 : 5)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#334155">{node.label}</text>
-            {node.description ? <text x={x + w / 2} y={y + h / 2 + 18} textAnchor="middle" fontSize={10} fill="#64748b">{node.description}</text> : null}
+            <rect x={x} y={y} width={w} height={h} rx={node.kind === "start" || node.kind === "end" ? 28 : 6} fill={node.fill ?? "#f1f5f9"} stroke={node.color ?? "#94a3b8"} strokeWidth={1.5} />
+            <text x={x + w / 2} y={y + h / 2 + (node.description ? 0 : 5)} textAnchor="middle" fontSize={13} fontWeight={600} fill="#282828">{node.label}</text>
+            {node.description ? <text x={x + w / 2} y={y + h / 2 + 18} textAnchor="middle" fontSize={10} fill="#636c78">{node.description}</text> : null}
           </g>
         );
       })}
@@ -814,8 +814,9 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
   );
 
   const visualTheme = dsl.meta?.visualTheme === "anmi" ? " anmi-theme" : "";
+  const explanationView = dsl.meta?.viewMode === "explanation" ? " proto-explanation" : "";
   const pageMarkup = (
-    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}${visualTheme}`} onClick={() => onSelect?.("")}>
+    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}${visualTheme}${explanationView}`} onClick={() => onSelect?.("")}>
       <div className="proto-page-heading">
         <div>
           <div className="proto-breadcrumb"><span>业务工作台</span><b>/</b><span>{dsl.page.title}</span></div>

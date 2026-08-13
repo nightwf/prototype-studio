@@ -31,6 +31,11 @@ describe("PrototypeRenderer determinism", () => {
     expect(markup).toContain("anmi-theme");
   });
 
+  it("renders explanation pages without the system page chrome", () => {
+    const markup = renderToStaticMarkup(<PrototypeRenderer dsl={page({ meta: { viewMode: "explanation" } })} interactive={false} />);
+    expect(markup).toContain("proto-explanation");
+  });
+
   it("renders identical markup for the same DSL and versions", () => {
     const first = renderToStaticMarkup(<PrototypeRenderer dsl={caseListExample} interactive={false} />);
     const second = renderToStaticMarkup(<PrototypeRenderer dsl={structuredClone(caseListExample)} interactive={false} />);
