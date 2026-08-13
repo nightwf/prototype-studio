@@ -709,6 +709,7 @@ function validationErrors(component: UIComponent | undefined, values: Readonly<R
 
 export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelect, onRuntimeEvent }: PrototypeRendererProps) {
   const roots = useMemo(() => componentRoots(dsl), [dsl]);
+  const initialOverlayId = dsl.meta?.viewMode === "overlay-spec" ? dsl.overlays[0]?.id : undefined;
   const initialValues = useMemo(() => {
     const entries: [string, unknown][] = [];
     walkComponents(roots, (component) => { entries.push([component.id, component.defaultValue ?? component.value ?? ""]); });
@@ -716,7 +717,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
   }, [roots]);
   const [values, setValues] = useState<Record<string, unknown>>(initialValues);
   const [runtimeState, setRuntimeState] = useState<Record<string, RuntimeComponentState>>({});
-  const [openOverlay, setOpenOverlay] = useState<string>();
+  const [openOverlay, setOpenOverlay] = useState<string | undefined>(initialOverlayId);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string>();
@@ -724,11 +725,11 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
   useEffect(() => {
     setValues(initialValues);
     setRuntimeState({});
-    setOpenOverlay(undefined);
+    setOpenOverlay(initialOverlayId);
     setSelectedRows(new Set());
     setErrors({});
     setNotice(undefined);
-  }, [initialValues]);
+  }, [initialValues, initialOverlayId]);
 
   const select = (id: string) => {
     if (!interactive) return;
@@ -815,8 +816,9 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
 
   const visualTheme = dsl.meta?.visualTheme === "anmi" ? " anmi-theme" : "";
   const explanationView = dsl.meta?.viewMode === "explanation" ? " proto-explanation" : "";
+  const overlaySpecView = dsl.meta?.viewMode === "overlay-spec" ? " proto-overlay-spec" : "";
   const pageMarkup = (
-    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}${visualTheme}${explanationView}`} onClick={() => onSelect?.("")}>
+    <div className={`proto-root proto-density--${dsl.layout.density ?? "normal"}${visualTheme}${explanationView}${overlaySpecView}`} onClick={() => onSelect?.("")}>
       <div className="proto-page-heading">
         <div>
           <div className="proto-breadcrumb"><span>业务工作台</span><b>/</b><span>{dsl.page.title}</span></div>
@@ -826,7 +828,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
         <div className="proto-page-meta"><span>PAGE</span><strong>{dsl.page.id}</strong></div>
       </div>
 
-      {dsl.search ? (
+      {dsl.meta?.viewMode !== "overlay-spec" && dsl.search ? (
         <section className="proto-panel proto-search-panel" data-container-id={dsl.search.id}>
           <div className="proto-search-grid">
             {dsl.search.fields.map((component, index) => <SafeComponent {...renderProps} component={component} key={component?.id ?? `invalid-${index}`} />)}
@@ -837,7 +839,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
         </section>
       ) : null}
 
-      {(dsl.toolbar || dsl.table) ? (
+      {dsl.meta?.viewMode !== "overlay-spec" && (dsl.toolbar || dsl.table) ? (
         <section className="proto-panel proto-data-panel">
           {dsl.toolbar ? (
             <div className="proto-toolbar">
@@ -850,9 +852,9 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
         </section>
       ) : null}
 
-      {dsl.form ? <SafeComponent {...renderProps} component={dsl.form} /> : null}
-      {dsl.detail ? <SafeComponent {...renderProps} component={dsl.detail} /> : null}
-      {dsl.sections?.map((component, index) => <SafeComponent {...renderProps} component={component} key={component?.id ?? `invalid-${index}`} />)}
+      {dsl.meta?.viewMode !== "overlay-spec" && dsl.form ? <SafeComponent {...renderProps} component={dsl.form} /> : null}
+      {dsl.meta?.viewMode !== "overlay-spec" && dsl.detail ? <SafeComponent {...renderProps} component={dsl.detail} /> : null}
+      {dsl.meta?.viewMode !== "overlay-spec" ? dsl.sections?.map((component, index) => <SafeComponent {...renderProps} component={component} key={component?.id ?? `invalid-${index}`} />) : null}
 
       {notice ? <div className="proto-notice"><Check size={14} />{notice}<button onClick={() => setNotice(undefined)}><X size={13} /></button></div> : null}
 
