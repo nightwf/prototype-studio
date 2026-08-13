@@ -38,8 +38,8 @@
 .proto-explanation .proto-doc-diagram { max-height: none; }
 .proto-overlay-spec { position: relative; min-height: 100%; padding: 0; background: #f2f4f7; }
 .proto-overlay-spec > .proto-page-heading { display: none; }
-.proto-overlay-spec .proto-overlay-backdrop { position: absolute; min-height: 100%; }
-.proto-overlay-spec .proto-overlay-card { width: min(720px, calc(100vw - 48px)); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+.proto-overlay-spec .proto-overlay-backdrop { position: absolute; min-height: 100%; background: #e9ebee; backdrop-filter: none; }
+.proto-overlay-spec .proto-overlay-card { width: min(600px, calc(100vw - 48px)); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
 .proto-overlay-spec .proto-overlay-card header { min-height: 47px; padding: 12px 16px; }
 .proto-overlay-spec .proto-overlay-card header h2 { margin: 2px 0; font-size: 16px; }
 .proto-overlay-spec .proto-overlay-kicker,
