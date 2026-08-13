@@ -881,7 +881,7 @@ export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelec
     </div>
   );
 
-  if (!navItems) return pageMarkup;
+  if (!navItems || dsl.meta?.viewMode === "overlay-spec") return pageMarkup;
   return (
     <div className={`proto-app${visualTheme}`}>
       <aside className="proto-sidebar">

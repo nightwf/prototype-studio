@@ -39,6 +39,7 @@ describe("PrototypeRenderer determinism", () => {
   it("renders an overlay specification as an opened modal without page content", () => {
     const dsl = page({
       meta: { viewMode: "overlay-spec" },
+      layout: { type: "standard", navigation: { title: "不应显示", items: [{ key: "home", label: "系统菜单", path: "home" }] } },
       form: { id: "hidden-form", type: "form", title: "完整页面表单" },
       overlays: [{ id: "join-modal", type: "modal", title: "加入诉讼", fields: [{ id: "case-count", type: "number", label: "案件数" }] }]
     });
@@ -47,6 +48,7 @@ describe("PrototypeRenderer determinism", () => {
     expect(markup).toContain("proto-overlay-backdrop");
     expect(markup).toContain("加入诉讼");
     expect(markup).not.toContain("完整页面表单");
+    expect(markup).not.toContain("proto-sidebar");
   });
 
   it("renders identical markup for the same DSL and versions", () => {

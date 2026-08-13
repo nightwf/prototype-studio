@@ -36,7 +36,7 @@
 .proto-explanation .proto-page-heading p { margin-top: 10px; color: #636c78; font-size: 13px; }
 .proto-explanation .proto-doc-block { max-width: 1120px; margin: 0 auto; padding: 24px 30px; border: 1px solid #dcdee2; border-radius: 6px; background: #fff; }
 .proto-explanation .proto-doc-diagram { max-height: none; }
-.proto-overlay-spec { min-height: 100%; padding: 0; background: #f2f4f7; }
+.proto-overlay-spec { position: relative; min-height: 100%; padding: 0; background: #f2f4f7; }
 .proto-overlay-spec > .proto-page-heading { display: none; }
 .proto-overlay-spec .proto-overlay-backdrop { position: absolute; min-height: 100%; }
 .proto-overlay-spec .proto-overlay-card { width: min(720px, calc(100vw - 48px)); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
