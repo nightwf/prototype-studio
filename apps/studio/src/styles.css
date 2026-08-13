@@ -63,6 +63,7 @@ button { color: inherit; }
 .page-creator-actions button { height: 26px; padding: 0 8px; border: 1px solid var(--ps-ink-200); border-radius: 5px; background: white; font-size: 8px; }
 .page-creator-actions button.is-primary { border-color: var(--ps-cobalt); background: var(--ps-cobalt); color: white; font-weight: 700; }
 .board-creator { margin: 0 8px 9px; padding: 9px; display: grid; gap: 8px; border: 1px solid #c3cbd0; border-radius: 8px; background: white; box-shadow: 0 8px 24px rgba(27,38,46,.09); }
+.board-creator.is-fixed { position: fixed; z-index: 320; width: 264px; margin: 0; }
 .board-creator > input { width: 100%; height: 31px; padding: 0 8px; border: 1px solid var(--ps-ink-200); border-radius: 5px; outline: 0; color: var(--ps-ink-800); font-size: 10px; }
 .board-creator > input:focus { border-color: var(--ps-cobalt); box-shadow: 0 0 0 3px rgba(31,94,255,.08); }
 .board-creator-label { color: var(--ps-ink-500); font-size: 8px; }
@@ -103,6 +104,7 @@ button { color: inherit; }
 .page-more { width: 27px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--ps-ink-500); display: grid; place-items: center; }
 .page-more:hover { background: rgba(30,44,52,.08); }
 .page-row-menu { position: absolute; z-index: 45; right: 3px; top: 44px; width: 128px; padding: 5px; border: 1px solid #c8ced1; border-radius: 7px; background: white; box-shadow: 0 13px 32px rgba(19,29,36,.2); }
+.page-row-menu.is-fixed { position: fixed; z-index: 320; right: auto; top: auto; }
 .page-row-menu.is-up { top: auto; bottom: 44px; }
 .page-row-menu button { width: 100%; height: 29px; padding: 0 7px; display: flex; align-items: center; gap: 7px; border: 0; border-radius: 4px; background: transparent; color: var(--ps-ink-700); font-size: 9px; text-align: left; }
 .page-row-menu button:hover:not(:disabled) { background: #edf0ee; }

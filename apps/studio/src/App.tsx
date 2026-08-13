@@ -389,6 +389,7 @@ export function App() {
   const [newPageTitle, setNewPageTitle] = useState("");
   const [newPageType, setNewPageType] = useState<CreatablePageType>("list");
   const [openPageMenuId, setOpenPageMenuId] = useState<string>();
+  const [pageMenuAnchor, setPageMenuAnchor] = useState<{ x: number; y: number; up?: boolean }>();
   const [mcpState, setMcpState] = useState<"stopped" | "running" | "unavailable">("stopped");
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"account" | "connection" | "local">("account");
@@ -412,9 +413,11 @@ export function App() {
   const [currentBoardId, setCurrentBoardId] = useState("main");
   const currentBoardIdRef = useRef("main");
   const [showBoardCreator, setShowBoardCreator] = useState(false);
+  const [boardCreatorAnchor, setBoardCreatorAnchor] = useState<{ x: number; y: number; up?: boolean }>();
   const [newBoardName, setNewBoardName] = useState("");
   const [newBoardPageIds, setNewBoardPageIds] = useState<string[]>([]);
   const [openBoardMenuId, setOpenBoardMenuId] = useState<string>();
+  const [boardMenuAnchor, setBoardMenuAnchor] = useState<{ x: number; y: number; up?: boolean }>();
   const [viewMode, setViewMode] = useState<"canvas" | "page">("page");
   const [boardSelectedId, setBoardSelectedId] = useState<string>();
   const [boardSelectedIds, setBoardSelectedIds] = useState<string[]>([]);
@@ -1312,6 +1315,19 @@ export function App() {
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [boardMoreOpen]);
+
+  useEffect(() => {
+    if (!openPageMenuId && !openBoardMenuId && !showBoardCreator) return;
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as HTMLElement;
+      if (target.closest(".page-row-menu") || target.closest(".page-more") || target.closest(".board-creator") || target.closest(".board-creator-trigger")) return;
+      setOpenPageMenuId(undefined);
+      setOpenBoardMenuId(undefined);
+      setShowBoardCreator(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [openPageMenuId, openBoardMenuId, showBoardCreator]);
 
   useEffect(() => {
     localStorage.setItem("ps_panel_left", leftCollapsed ? "1" : "0");
@@ -2254,8 +2270,8 @@ ${boardExportRuntimeScript}
           onDrop={(event) => { event.preventDefault(); const pageId = event.dataTransfer.getData("text/page-id"); if (pageId) void movePage(pageId, index); }}
         >
           <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon"><Monitor size={14} /></div><div><strong>{page.page.title}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
-          <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={() => setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id)}><MoreHorizontal size={14} /></button>
-          {openPageMenuId === page.page.id ? <div className={`page-row-menu ${index >= 4 ? "is-up" : ""}`}>
+          <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
+          {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
             <button disabled={index === 0} onClick={() => void movePage(page.page.id, index - 1)}><ArrowUp size={12} />上移</button>
             <button disabled={index === pages.length - 1} onClick={() => void movePage(page.page.id, index + 1)}><ArrowDown size={12} />下移</button>
@@ -2266,8 +2282,8 @@ ${boardExportRuntimeScript}
         {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单或详情页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
         <div className="left-footer"><FileCheck2 size={13} /><span>{currentPage ? `pages/${currentPage.page.id}.ui.yaml` : "pages/"}</span><StatusDot tone={currentPage ? "success" : "neutral"}>{currentPage ? "有效" : "空"}</StatusDot></div>
       </> : <>
-        <div className="left-project-label"><span>画布 · {boards.length}</span><ToolButton compact title="新建画布" active={showBoardCreator} onClick={() => setShowBoardCreator((value) => !value)}><Plus size={13} /></ToolButton></div>
-        {showBoardCreator ? <div className="board-creator">
+        <div className="left-project-label"><span>画布 · {boards.length}</span><ToolButton compact className="board-creator-trigger" title="新建画布" active={showBoardCreator} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 260 > window.innerHeight; setBoardCreatorAnchor({ x: Math.min(rect.left, window.innerWidth - 290), y: up ? rect.top - 6 : rect.bottom + 6, up }); setShowBoardCreator((value) => !value); }}><Plus size={13} /></ToolButton></div>
+        {showBoardCreator ? <div className="board-creator is-fixed" style={boardCreatorAnchor ? { left: boardCreatorAnchor.x, top: boardCreatorAnchor.up ? undefined : boardCreatorAnchor.y, bottom: boardCreatorAnchor.up ? window.innerHeight - boardCreatorAnchor.y : undefined } : undefined}>
           <input autoFocus value={newBoardName} onChange={(event) => setNewBoardName(event.target.value)} placeholder="画布名称" aria-label="画布名称" />
           <span className="board-creator-label">选择需要放入画布的页面（可留空）</span>
           <div className="board-page-picker">{pages.map((page) => <label key={page.page.id}><input type="checkbox" checked={newBoardPageIds.includes(page.page.id)} onChange={(event) => setNewBoardPageIds((items) => event.target.checked ? [...items, page.page.id] : items.filter((id) => id !== page.page.id))} /><span>{page.page.title}</span></label>)}</div>
@@ -2275,8 +2291,8 @@ ${boardExportRuntimeScript}
         </div> : null}
         <div className="board-list">{boards.map((summary, index) => <div key={summary.id} className={`board-list-row ${summary.id === currentBoardId && viewMode === "canvas" ? "is-active" : ""}`}>
           <button className="board-list-main" onClick={() => void selectBoard(summary.id)}><div className="page-icon"><LayoutGrid size={14} /></div><span><strong>{summary.name}{summary.isDefault ? <em>默认</em> : null}</strong><small>{summary.pageCount} 页面 · {summary.objectCount} 对象 · R{summary.revision}</small></span></button>
-          <button className="page-more" title={`管理画布 ${summary.name}`} onClick={() => setOpenBoardMenuId(openBoardMenuId === summary.id ? undefined : summary.id)}><MoreHorizontal size={14} /></button>
-          {openBoardMenuId === summary.id ? <div className={`page-row-menu ${index >= 4 ? "is-up" : ""}`}>
+          <button className="page-more" title={`管理画布 ${summary.name}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setBoardMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenBoardMenuId(openBoardMenuId === summary.id ? undefined : summary.id); }}><MoreHorizontal size={14} /></button>
+          {openBoardMenuId === summary.id && boardMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: boardMenuAnchor.x, top: boardMenuAnchor.up ? undefined : boardMenuAnchor.y, bottom: boardMenuAnchor.up ? window.innerHeight - boardMenuAnchor.y : undefined }}>
             <button onClick={() => renameBoard(summary)}><Pencil size={12} />重命名</button>
             <button onClick={() => editBoardDescription(summary)}><FileCheck2 size={12} />修改说明</button>
             <button disabled={summary.isDefault} onClick={() => void makeDefaultBoard(summary)}><MapPin size={12} />设为默认</button>
