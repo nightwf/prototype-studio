@@ -290,7 +290,7 @@ export interface RevisionRecord {
 
 // ===== Board (canvas) model =====
 
-export type BoardObjectType = "page" | "note" | "marker" | "flowchart" | "er" | "image";
+export type BoardObjectType = "page" | "note" | "marker" | "flowchart" | "er" | "image" | "component";
 export type MarkerTone = "orange" | "blue" | "green" | "red" | "purple";
 
 export interface BoardObjectBase {
@@ -322,6 +322,13 @@ export interface BoardImageObject extends BoardObjectBase {
   alt?: string;
   /** 图片在对象框内的适配方式，默认 contain。 */
   objectFit?: "contain" | "cover" | "fill";
+}
+
+/** 画布内的组件对象：插入时快照一份组件模板，之后与模板不再关联。 */
+export interface BoardComponentObject extends BoardObjectBase {
+  type: "component";
+  /** 组件快照（modal / drawer / popover），独立于组件模板。 */
+  component: UIComponent;
 }
 
 export interface BoardMarkerObject {
@@ -420,7 +427,29 @@ export interface BoardErObject extends BoardObjectBase {
   };
 }
 
-export type BoardObject = BoardPageObject | BoardNoteObject | BoardMarkerObject | BoardFlowchartObject | BoardErObject | BoardImageObject;
+export type BoardObject = BoardPageObject | BoardNoteObject | BoardMarkerObject | BoardFlowchartObject | BoardErObject | BoardImageObject | BoardComponentObject;
+
+/** 可复用的组件模板类型（第一版：弹窗 / 抽屉 / 浮层）。 */
+export const componentTemplateTypes = ["modal", "drawer", "popover"] as const;
+export type ComponentTemplateType = (typeof componentTemplateTypes)[number];
+
+export interface ComponentTemplateDSL {
+  dslVersion: typeof DSL_VERSION;
+  rendererVersion: string;
+  designSystemVersion: string;
+  revision: number;
+  component: {
+    id: string;
+    type: ComponentTemplateType;
+    /** 模板显示名称，例如「核销确认弹窗」。 */
+    name: string;
+    description?: string;
+    /** 模板的组件树（含 title / fields / actions / children）。 */
+    ui: UIComponent;
+    createdAt: string;
+    updatedAt: string;
+  };
+}
 
 export const boardLinkTypes = ["straight", "curve", "orthogonal"] as const;
 export type BoardLinkType = (typeof boardLinkTypes)[number];

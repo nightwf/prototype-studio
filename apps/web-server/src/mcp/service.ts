@@ -1,13 +1,18 @@
 import {
+  createComponentTemplate,
+  deleteComponentTemplate,
   deletePage,
   executeProjectCommands,
+  getComponentTemplate,
   getManifest,
   getPage,
+  listComponentTemplates,
   listPages,
+  writeComponentTemplate,
   writePage
 } from "@prototype-studio/project-store";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
-import type { BoardCommand, BoardDSL, Command, PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, BoardDSL, Command, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore } from "../metadata";
 import type { ProjectSpaceManager } from "../spaces";
 
@@ -103,6 +108,30 @@ export class CloudMcpService {
   async deletePage(userId: string, projectId: string, pageId: string) {
     await deletePage(await this.projectPath(userId, projectId), pageId);
     return { page_id: pageId, deleted: true, recoverable: true };
+  }
+
+  async listComponents(userId: string, projectId: string) {
+    return listComponentTemplates(await this.projectPath(userId, projectId));
+  }
+
+  async getComponentTemplate(userId: string, projectId: string, componentId: string): Promise<ComponentTemplateDSL> {
+    return getComponentTemplate(await this.projectPath(userId, projectId), componentId);
+  }
+
+  async createComponentTemplate(userId: string, projectId: string, dsl: ComponentTemplateDSL) {
+    await createComponentTemplate(await this.projectPath(userId, projectId), dsl);
+    return { component_id: dsl.component.id, name: dsl.component.name, type: dsl.component.type, revision: dsl.revision };
+  }
+
+  async updateComponentTemplate(userId: string, projectId: string, componentId: string, dsl: ComponentTemplateDSL) {
+    if (dsl.component.id !== componentId) throw new Error(`组件 ID“${dsl.component.id}”与目标不一致。`);
+    await writeComponentTemplate(await this.projectPath(userId, projectId), dsl, { overwrite: true });
+    return { component_id: dsl.component.id, name: dsl.component.name, revision: dsl.revision };
+  }
+
+  async deleteComponentTemplate(userId: string, projectId: string, componentId: string) {
+    await deleteComponentTemplate(await this.projectPath(userId, projectId), componentId);
+    return { component_id: componentId, deleted: true, recoverable: true };
   }
 
   async applyPageCommands(userId: string, projectId: string, pageId: string, baseRevision: number, commands: Command[], source: string, operator: string) {

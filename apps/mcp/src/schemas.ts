@@ -65,6 +65,23 @@ export const componentInputSchema = z.object({
   component_id: componentId
 }).strict();
 
+const componentTemplateId = identifier.describe("组件模板的稳定 id，例如 confirm-reversal-modal。");
+
+export const listComponentTemplatesInputSchema = z.object({}).strict();
+
+export const getComponentTemplateInputSchema = z.object({ component_id: componentTemplateId }).strict();
+
+export const createComponentTemplateInputSchema = z.object({
+  dsl: jsonObject.describe("完整的 Prototype Studio ComponentTemplateDSL 1.0 JSON 对象（component.type 为 modal/drawer/popover）。")
+}).strict();
+
+export const updateComponentTemplateInputSchema = z.object({
+  component_id: componentTemplateId,
+  dsl: jsonObject.describe("覆盖写入的完整 ComponentTemplateDSL；component.id 必须与 component_id 一致。")
+}).strict();
+
+export const deleteComponentTemplateInputSchema = z.object({ component_id: componentTemplateId }).strict();
+
 export const createPageInputSchema = z.object({
   dsl: pageDsl
 }).strict();
@@ -247,6 +264,11 @@ export type CreateBoardsInput = z.infer<typeof createBoardsInputSchema>;
 export type UpdateBoardInput = z.infer<typeof updateBoardInputSchema>;
 export type DeleteBoardInput = z.infer<typeof deleteBoardInputSchema>;
 export type ComponentInput = z.infer<typeof componentInputSchema>;
+export type ListComponentTemplatesInput = z.infer<typeof listComponentTemplatesInputSchema>;
+export type GetComponentTemplateInput = z.infer<typeof getComponentTemplateInputSchema>;
+export type CreateComponentTemplateInput = z.infer<typeof createComponentTemplateInputSchema>;
+export type UpdateComponentTemplateInput = z.infer<typeof updateComponentTemplateInputSchema>;
+export type DeleteComponentTemplateInput = z.infer<typeof deleteComponentTemplateInputSchema>;
 export type CreatePageInput = z.infer<typeof createPageInputSchema>;
 export type UpdateComponentInput = z.infer<typeof updateComponentInputSchema>;
 export type MoveComponentInput = z.infer<typeof moveComponentInputSchema>;

@@ -4,13 +4,17 @@ import { mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
 import unzipper from "unzipper";
 import {
   buildProductPackage,
+  createComponentTemplate,
   createBoard,
   createBoards,
   createProject,
+  deleteComponentTemplate,
   deleteBoard,
   executeBoardCommands,
   executeProjectCommands,
   getPage,
+  getComponentTemplate,
+  listComponentTemplates,
   listBoards,
   listTrashedBoards,
   listProjectVersions,
@@ -22,6 +26,7 @@ import {
   saveProjectVersion,
   persistPageSnapshot,
   writePage,
+  writeComponentTemplate,
   updateBoard,
   type BoardSummary,
   type TrashedBoardSummary,
@@ -32,7 +37,7 @@ import {
 } from "@prototype-studio/project-store";
 import type { ExecuteCommandsInput } from "@prototype-studio/command-engine";
 import { validateDSL } from "@prototype-studio/dsl-validator";
-import type { BoardDSL, PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardDSL, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, ProjectRow, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { newToken } from "./auth";
@@ -113,7 +118,8 @@ export class ProjectSpaceManager {
   async tree(userId: string, projectId: string) {
     const row = await this.requireProject(userId, projectId);
     const opened = await openProject(row.spacePath);
-    return { manifest: opened.manifest, pages: opened.pages, boards: opened.boards, board: opened.board };
+    const components = await listComponentTemplates(row.spacePath);
+    return { manifest: opened.manifest, pages: opened.pages, boards: opened.boards, board: opened.board, components };
   }
 
   async getPageDsl(userId: string, projectId: string, pageId: string): Promise<PageDSL> {
@@ -150,6 +156,37 @@ export class ProjectSpaceManager {
   async deletePage(userId: string, projectId: string, pageId: string): Promise<void> {
     const row = await this.requireProject(userId, projectId);
     await deletePage(row.spacePath, pageId);
+    await this.touchProject(projectId);
+  }
+
+  async listComponents(userId: string, projectId: string) {
+    const row = await this.requireProject(userId, projectId);
+    return listComponentTemplates(row.spacePath);
+  }
+
+  async getComponent(userId: string, projectId: string, componentId: string): Promise<ComponentTemplateDSL> {
+    const row = await this.requireProject(userId, projectId);
+    return getComponentTemplate(row.spacePath, componentId);
+  }
+
+  async createComponent(userId: string, projectId: string, dsl: ComponentTemplateDSL) {
+    const row = await this.requireProject(userId, projectId);
+    const created = await createComponentTemplate(row.spacePath, dsl);
+    await this.touchProject(projectId);
+    return created;
+  }
+
+  async updateComponent(userId: string, projectId: string, componentId: string, dsl: ComponentTemplateDSL) {
+    const row = await this.requireProject(userId, projectId);
+    if (dsl.component.id !== componentId) throw new SpaceError("INVALID_INPUT", "组件 ID 与 URL 不一致。");
+    await writeComponentTemplate(row.spacePath, dsl, { overwrite: true });
+    await this.touchProject(projectId);
+    return { id: dsl.component.id, name: dsl.component.name, type: dsl.component.type, revision: dsl.revision };
+  }
+
+  async deleteComponent(userId: string, projectId: string, componentId: string): Promise<void> {
+    const row = await this.requireProject(userId, projectId);
+    await deleteComponentTemplate(row.spacePath, componentId);
     await this.touchProject(projectId);
   }
 

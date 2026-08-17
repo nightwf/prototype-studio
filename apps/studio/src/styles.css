@@ -490,6 +490,28 @@ button { color: inherit; }
 .diagram-launch-card strong,.diagram-launch-card span { display: block; }
 .board-image-inspector { margin: 4px 0 8px; padding: 6px; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe5eb; border-radius: 8px; background: #f6f8fa; overflow: hidden; }
 .board-image-inspector img { display: block; max-width: 100%; max-height: 150px; object-fit: contain; border-radius: 4px; }
+.component-workspace { height: 100%; min-height: 0; overflow: auto; background: #f2f4f7; }
+.component-workspace-body { max-width: 880px; margin: 0 auto; padding: 28px 30px 60px; }
+.component-workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+.component-workspace-head h2 { margin: 4px 0 4px; color: #111827; font-size: 20px; line-height: 1.3; }
+.component-workspace-head p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.6; }
+.component-workspace-kicker { color: #2563eb; font: 700 9px/1 var(--ps-font-mono); letter-spacing: .14em; }
+.component-workspace-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.component-workspace-actions button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 7px; background: #fff; color: #334155; font: 600 12px/1 system-ui, -apple-system, "PingFang SC", sans-serif; cursor: pointer; }
+.component-workspace-actions button.is-danger { color: #b91c1c; border-color: #fecaca; background: #fef2f2; }
+.component-workspace-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.component-preview-stage { display: grid; place-items: center; min-height: 380px; padding: 34px 20px; border: 1px solid #e2e8f0; border-radius: 14px; background: #eef1f4; background-image: radial-gradient(circle, rgba(100,116,139,.14) 1px, transparent 1px); background-size: 20px 20px; }
+.component-preview-card { width: min(520px, 100%); padding: 22px 24px; border-radius: 12px; background: #fff; box-shadow: 0 24px 70px rgba(15, 23, 42, 0.16); }
+.component-preview-card--drawer { border-left: 5px solid #2563eb; }
+.component-preview-card--popover { border: 1px solid #cbd5e1; border-radius: 14px; }
+.component-preview-card-head { padding-bottom: 14px; border-bottom: 1px solid #e5e9ee; }
+.component-preview-card-head strong { display: block; margin: 6px 0 4px; color: #1e293b; font-size: 18px; }
+.component-preview-card-head p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.6; }
+.component-preview-fields { display: grid; gap: 12px; padding: 18px 0; }
+.component-preview-fields span { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 7px; background: #f8fafc; color: #94a3b8; font-size: 11px; }
+.component-preview-empty { padding: 22px 0; color: #94a3b8; font-size: 12px; text-align: center; }
+.component-preview-actions { display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid #e5e9ee; }
+.component-workspace-hint { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 14px; border: 1px solid #c9d6f3; border-radius: 8px; background: #f2f6ff; color: #315cc8; font-size: 11px; line-height: 1.6; }
 .diagram-launch-card strong { color: #274580; font-size: 10px; }
 .diagram-launch-card span { margin-top: 5px; color: #697b9c; font-size: 8px; line-height: 1.5; }
 .inspector-action.is-primary { border-color: var(--ps-cobalt); background: var(--ps-cobalt); color: white; }

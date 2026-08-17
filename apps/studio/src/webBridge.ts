@@ -1,4 +1,4 @@
-import type { BoardCommand, BoardDSL, Command, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, BoardDSL, Command, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import { isDesktopRuntime } from "./desktopBridge";
 
 const apiBase = (import.meta.env.VITE_WEB_API as string | undefined)?.replace(/\/+$/, "") ?? "";
@@ -117,7 +117,7 @@ export const webProjects = {
 
 export const webSpace = {
   tree(projectId: string) {
-    return request<{ ok: true; manifest: { name: string; defaultBoardId?: string }; pages: Array<{ id: string; title: string }>; boards: BoardSummary[]; board: BoardDSL }>(`/api/projects/${projectId}/tree`);
+    return request<{ ok: true; manifest: { name: string; defaultBoardId?: string }; pages: Array<{ id: string; title: string }>; boards: BoardSummary[]; board: BoardDSL; components: Array<{ id: string; name: string; type: string; revision: number; file: string }> }>(`/api/projects/${projectId}/tree`);
   },
   getPage(projectId: string, pageId: string) {
     return request<{ ok: true; dsl: PageDSL }>(`/api/projects/${projectId}/pages/${encodeURIComponent(pageId)}`);
@@ -136,6 +136,27 @@ export const webSpace = {
   },
   deletePage(projectId: string, pageId: string) {
     return request<{ ok: true }>(`/api/projects/${projectId}/pages/${encodeURIComponent(pageId)}`, { method: "DELETE" });
+  },
+  listComponents(projectId: string) {
+    return request<{ ok: true; components: Array<{ id: string; name: string; type: string; revision: number; file: string }> }>(`/api/projects/${projectId}/components`);
+  },
+  getComponent(projectId: string, componentId: string) {
+    return request<{ ok: true; dsl: ComponentTemplateDSL }>(`/api/projects/${projectId}/components/${encodeURIComponent(componentId)}`);
+  },
+  createComponent(projectId: string, dsl: ComponentTemplateDSL) {
+    return request<{ ok: true; component: { id: string; name: string; type: string; revision: number } }>(`/api/projects/${projectId}/components`, {
+      method: "POST",
+      body: JSON.stringify(dsl)
+    });
+  },
+  updateComponent(projectId: string, componentId: string, dsl: ComponentTemplateDSL) {
+    return request<{ ok: true; component: { id: string; name: string; type: string; revision: number } }>(`/api/projects/${projectId}/components/${encodeURIComponent(componentId)}`, {
+      method: "PUT",
+      body: JSON.stringify(dsl)
+    });
+  },
+  deleteComponent(projectId: string, componentId: string) {
+    return request<{ ok: true }>(`/api/projects/${projectId}/components/${encodeURIComponent(componentId)}`, { method: "DELETE" });
   },
   commands(projectId: string, pageId: string, baseRevision: number, commands: Command[], source: RevisionSource, operator: string) {
     return request<{ ok: true; revision: number }>(`/api/projects/${projectId}/commands`, {

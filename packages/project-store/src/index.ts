@@ -13,12 +13,13 @@ import {
   type BoardDSL,
   type BoardRevisionRecord,
   type Command,
+  type ComponentTemplateDSL,
   type PageDSL,
   type ProjectManifest,
   type RevisionRecord,
   type RevisionSource
 } from "@prototype-studio/dsl-schema";
-import { validateBoard, validateDSL, type DSLValidationResult } from "@prototype-studio/dsl-validator";
+import { validateBoard, validateComponentTemplate, validateDSL, type DSLValidationResult } from "@prototype-studio/dsl-validator";
 
 export class ProjectStoreError extends Error {
   constructor(
@@ -27,6 +28,8 @@ export class ProjectStoreError extends Error {
       | "INVALID_PROJECT"
       | "PAGE_NOT_FOUND"
       | "PAGE_EXISTS"
+      | "COMPONENT_NOT_FOUND"
+      | "COMPONENT_EXISTS"
       | "PATH_OUTSIDE_PROJECT"
       | "INVALID_DSL_FILE"
       | "REVISION_NOT_FOUND"
@@ -107,7 +110,7 @@ export interface ExternalFileEvent {
   pageId?: string;
 }
 
-const requiredDirectories = ["pages", "boards", "data", "flows", "assets", ".prototype", ".prototype/revisions", ".prototype/revisions/boards", ".prototype/trash/boards", ".prototype/cache"];
+const requiredDirectories = ["pages", "components", "boards", "data", "flows", "assets", ".prototype", ".prototype/revisions", ".prototype/revisions/boards", ".prototype/trash/boards", ".prototype/cache"];
 
 function projectPath(root: string, relative: string): string {
   const absoluteRoot = path.resolve(root);
@@ -123,6 +126,13 @@ function pageRelativePath(pageId: string): string {
     throw new ProjectStoreError("INVALID_PROJECT", `页面 ID“${pageId}”不符合文件命名规则。`);
   }
   return `pages/${pageId}.ui.yaml`;
+}
+
+function componentTemplateRelativePath(componentId: string): string {
+  if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(componentId)) {
+    throw new ProjectStoreError("INVALID_PROJECT", `组件 ID“${componentId}”不符合文件命名规则。`);
+  }
+  return `components/${componentId}.ui-component.yaml`;
 }
 
 function assertBoardId(boardId: string): string {
@@ -352,6 +362,69 @@ export async function listPages(root: string): Promise<ProjectPageSummary[]> {
     }
   }
   return pages;
+}
+
+export async function listComponentTemplates(root: string): Promise<Array<{ id: string; name: string; type: string; revision: number; file: string }>> {
+  const directory = projectPath(root, "components");
+  await mkdir(directory, { recursive: true });
+  const files = (await readdir(directory)).filter((file) => file.endsWith(".ui-component.yaml")).sort();
+  const templates: Array<{ id: string; name: string; type: string; revision: number; file: string }> = [];
+  for (const file of files) {
+    const componentId = file.slice(0, -".ui-component.yaml".length);
+    try {
+      const dsl = await getComponentTemplate(root, componentId);
+      templates.push({
+        id: dsl.component.id,
+        name: dsl.component.name,
+        type: dsl.component.type,
+        revision: dsl.revision,
+        file: `components/${file}`
+      });
+    } catch {
+      // 无效组件文件跳过，保持索引稳定。
+    }
+  }
+  return templates;
+}
+
+export async function getComponentTemplate(root: string, componentId: string): Promise<ComponentTemplateDSL> {
+  const filePath = projectPath(root, componentTemplateRelativePath(componentId));
+  if (!(await pathExists(filePath))) throw new ProjectStoreError("COMPONENT_NOT_FOUND", `组件模板“${componentId}”不存在。`);
+  try {
+    const dsl = parse(await readFile(filePath, "utf8")) as ComponentTemplateDSL;
+    const validation = validateComponentTemplate(dsl);
+    if (!validation.valid) {
+      throw new ProjectStoreError("INVALID_DSL_FILE", `组件模板“${componentId}”未通过校验。`, validation.errors);
+    }
+    return dsl;
+  } catch (error) {
+    if (error instanceof ProjectStoreError) throw error;
+    throw new ProjectStoreError("INVALID_DSL_FILE", `组件模板文件“${componentId}.ui-component.yaml”无法解析。`, error);
+  }
+}
+
+export async function writeComponentTemplate(root: string, dsl: ComponentTemplateDSL, options: { overwrite?: boolean } = {}): Promise<void> {
+  const validation = validateComponentTemplate(dsl);
+  if (!validation.valid) throw new ProjectStoreError("INVALID_DSL_FILE", "组件模板未通过校验，未写入文件。", validation.errors);
+  const filePath = projectPath(root, componentTemplateRelativePath(dsl.component.id));
+  if (!options.overwrite && await pathExists(filePath)) {
+    throw new ProjectStoreError("COMPONENT_EXISTS", `组件模板“${dsl.component.id}”已经存在。`);
+  }
+  await atomicWrite(filePath, stringify(dsl, { lineWidth: 0, defaultStringType: "QUOTE_DOUBLE" }));
+}
+
+export async function createComponentTemplate(root: string, dsl: ComponentTemplateDSL): Promise<{ id: string; name: string; type: string; revision: number }> {
+  await getManifest(root);
+  await writeComponentTemplate(root, dsl);
+  return { id: dsl.component.id, name: dsl.component.name, type: dsl.component.type, revision: dsl.revision };
+}
+
+export async function deleteComponentTemplate(root: string, componentId: string): Promise<void> {
+  const filePath = projectPath(root, componentTemplateRelativePath(componentId));
+  if (!(await pathExists(filePath))) throw new ProjectStoreError("COMPONENT_NOT_FOUND", `组件模板“${componentId}”不存在。`);
+  const trashDirectory = projectPath(root, ".prototype/trash/components");
+  await mkdir(trashDirectory, { recursive: true });
+  await rename(filePath, path.join(trashDirectory, `${componentId}.${Date.now()}.ui-component.yaml`));
 }
 
 export async function openProject(root: string): Promise<OpenedProject> {

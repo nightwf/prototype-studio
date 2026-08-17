@@ -261,9 +261,39 @@ function ImageView({ object }: { object: Extract<BoardObject, { type: "image" }>
   );
 }
 
+function ComponentView({ object }: { object: Extract<BoardObject, { type: "component" }> }) {
+  const component = object.component;
+  return (
+    <div className={`board-component-preview board-component-preview--${component.type ?? "modal"}`}>
+      <div className="board-component-kicker">{String(component.type ?? "modal").toUpperCase()}</div>
+      <strong className="board-component-title">{component.title ?? component.label ?? "组件"}</strong>
+      {component.description ? <p className="board-component-desc">{component.description}</p> : null}
+      {component.fields?.length ? (
+        <div className="board-component-fields">
+          {component.fields.map((field) => (
+            <span className="board-component-field" key={field.id}>
+              {field.label ?? field.placeholder ?? field.id}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {component.actions?.length ? (
+        <div className="board-component-actions">
+          {component.actions.map((action) => (
+            <span className={`board-component-action board-component-action--${action.variant ?? "default"}`} key={action.id}>
+              {action.text ?? action.label ?? "按钮"}
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 registerBoardObjectRenderer("flowchart", ({ object, boardId }) => <FlowchartView object={object as Extract<BoardObject, { type: "flowchart" }>} boardId={boardId} />);
 registerBoardObjectRenderer("er", ({ object }) => <ErView object={object as Extract<BoardObject, { type: "er" }>} />);
 registerBoardObjectRenderer("image", ({ object }) => <ImageView object={object as Extract<BoardObject, { type: "image" }>} />);
+registerBoardObjectRenderer("component", ({ object }) => <ComponentView object={object as Extract<BoardObject, { type: "component" }>} />);
 
 export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>(function BoardRenderer({
   board,

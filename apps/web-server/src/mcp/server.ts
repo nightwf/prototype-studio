@@ -162,6 +162,36 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     inputSchema: z.object({ project_id: projectId, page_id: pageId }).strict()
   }, async (input) => respond(async (userId) => service.deletePage(userId, input.project_id, input.page_id)));
 
+  server.registerTool("prototype_list_components", {
+    title: "List Prototype Studio Component Templates",
+    description: "List reusable component templates (modal/drawer/popover) of a project.",
+    inputSchema: z.object({ project_id: projectId }).strict()
+  }, async (input) => respond(async (userId) => ({ components: await service.listComponents(userId, input.project_id) })));
+
+  server.registerTool("prototype_get_component_template", {
+    title: "Get Prototype Studio Component Template",
+    description: "Read one reusable component template by component_id.",
+    inputSchema: z.object({ project_id: projectId, component_id: z.string().min(1) }).strict()
+  }, async (input) => respond(async (userId) => ({ dsl: await service.getComponentTemplate(userId, input.project_id, input.component_id) })));
+
+  server.registerTool("prototype_create_component_template", {
+    title: "Create Prototype Studio Component Template",
+    description: "Create a reusable component template (type modal/drawer/popover) from a ComponentTemplateDSL. After creation the template can be inserted into pages or boards as a copy.",
+    inputSchema: z.object({ project_id: projectId, dsl: z.record(z.any()) }).strict()
+  }, async (input) => respond(async (userId) => service.createComponentTemplate(userId, input.project_id, input.dsl as unknown as import("@prototype-studio/dsl-schema").ComponentTemplateDSL)));
+
+  server.registerTool("prototype_update_component_template", {
+    title: "Update Prototype Studio Component Template",
+    description: "Overwrite a component template with the given ComponentTemplateDSL (component_id must match the URL).",
+    inputSchema: z.object({ project_id: projectId, component_id: z.string().min(1), dsl: z.record(z.any()) }).strict()
+  }, async (input) => respond(async (userId) => service.updateComponentTemplate(userId, input.project_id, input.component_id, input.dsl as unknown as import("@prototype-studio/dsl-schema").ComponentTemplateDSL)));
+
+  server.registerTool("prototype_delete_component_template", {
+    title: "Delete Prototype Studio Component Template",
+    description: "Move a component template to the project trash.",
+    inputSchema: z.object({ project_id: projectId, component_id: z.string().min(1) }).strict()
+  }, async (input) => respond(async (userId) => service.deleteComponentTemplate(userId, input.project_id, input.component_id)));
+
   server.registerTool("prototype_apply_commands", {
     title: "Apply Prototype Studio Page Commands",
     description: "Atomically apply page commands through the shared Command Engine.",

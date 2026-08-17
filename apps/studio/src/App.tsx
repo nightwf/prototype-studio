@@ -59,6 +59,8 @@ import {
   type BoardImageObject,
   type BoardNoteObject,
   type BoardObject,
+  type ComponentTemplateDSL,
+  type ComponentTemplateType,
   type Command,
   type ComponentOption,
   type MarkerTone,
@@ -383,7 +385,7 @@ export function App() {
   const [previewScale, setPreviewScale] = useState(82);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
-  const [activeWorkspace, setActiveWorkspace] = useState<"pages" | "boards">("pages");
+  const [activeWorkspace, setActiveWorkspace] = useState<"pages" | "boards" | "components">("pages");
   const [projectName, setProjectName] = useState(() => (isDesktopRuntime() ? "未打开项目" : "案件中台"));
   const [projectRoot, setProjectRoot] = useState<string>();
   const [showProjectMenu, setShowProjectMenu] = useState(false);
@@ -411,6 +413,11 @@ export function App() {
   const [modalValue, setModalValue] = useState("");
   const [board, setBoard] = useState<BoardDSL>(() => defaultBoardFromPages([]));
   const [boards, setBoards] = useState<BoardSummary[]>([]);
+  const [components, setComponents] = useState<Array<{ id: string; name: string; type: string; revision: number; file: string }>>([]);
+  const [componentDsls, setComponentDsls] = useState<Record<string, ComponentTemplateDSL>>({});
+  const [showComponentCreator, setShowComponentCreator] = useState(false);
+  const [newComponentType, setNewComponentType] = useState<ComponentTemplateType>("modal");
+  const [selectedComponentId, setSelectedComponentId] = useState<string>();
   const [trashedBoards, setTrashedBoards] = useState<TrashedBoardSummary[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState("main");
   const currentBoardIdRef = useRef("main");
@@ -486,6 +493,8 @@ export function App() {
       const selectedBoard = selectedBoardId === tree.board.id ? tree.board : (await webSpace.board(projectId, selectedBoardId)).board;
       setPages(loadedPages);
       setBoards(tree.boards);
+      setComponents(tree.components ?? []);
+      setComponentDsls({});
       setTrashedBoards((await webSpace.trashedBoards(projectId)).boards);
       setCurrentBoardId(selectedBoardId);
       setBoard(selectedBoard);
@@ -1613,6 +1622,147 @@ export function App() {
     }
   };
 
+  const refreshComponents = useCallback(async () => {
+    if (!webMode || !webProjectId) return;
+    try {
+      const result = await webSpace.listComponents(webProjectId);
+      setComponents(result.components);
+    } catch { /* 组件列表加载失败不阻断主流程 */ }
+  }, [webProjectId]);
+
+  const loadComponentDsl = useCallback(async (componentId: string): Promise<ComponentTemplateDSL | undefined> => {
+    if (!webMode || !webProjectId) return undefined;
+    if (componentDsls[componentId]) return componentDsls[componentId];
+    try {
+      const result = await webSpace.getComponent(webProjectId, componentId);
+      setComponentDsls((current) => ({ ...current, [componentId]: result.dsl }));
+      return result.dsl;
+    } catch (error) {
+      toast("danger", "无法加载组件", error instanceof Error ? error.message : "未知错误");
+      return undefined;
+    }
+  }, [componentDsls, toast, webProjectId]);
+
+  const createComponentTemplate = async () => {
+    if (!webMode || !webProjectId) return;
+    const id = `component-${Date.now()}`;
+    const now = new Date().toISOString();
+    const type = newComponentType;
+    const dsl: ComponentTemplateDSL = {
+      dslVersion: DSL_VERSION,
+      rendererVersion: "0.1.0",
+      designSystemVersion: "0.1.0",
+      revision: 1,
+      component: {
+        id,
+        type,
+        name: type === "modal" ? "新弹窗组件" : type === "drawer" ? "新抽屉组件" : "新浮层组件",
+        ui: {
+          id,
+          type,
+          title: type === "modal" ? "操作确认" : type === "drawer" ? "详情面板" : "快捷操作",
+          description: "请确认信息无误后再执行操作。",
+          fields: [],
+          actions: [
+            { id: `${id}-cancel`, type: "button", text: "取消", variant: "default", source: "default" },
+            { id: `${id}-confirm`, type: "button", text: "确定", variant: "primary", source: "default" }
+          ],
+          source: "default"
+        },
+        createdAt: now,
+        updatedAt: now
+      }
+    };
+    try {
+      await webSpace.createComponent(webProjectId, dsl);
+      setShowComponentCreator(false);
+      await refreshComponents();
+      setComponentDsls((current) => ({ ...current, [id]: dsl }));
+      toast("success", "组件已创建", dsl.component.name);
+    } catch (error) {
+      toast("danger", "创建组件失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
+  const renameComponent = async (componentId: string) => {
+    const summary = components.find((item) => item.id === componentId);
+    const dsl = await loadComponentDsl(componentId);
+    if (!dsl) return;
+    askText({
+      title: "重命名组件",
+      label: "组件名称",
+      defaultValue: summary?.name ?? dsl.component.name,
+      confirmText: "保存",
+      onConfirm: async (name) => {
+        if (!name.trim() || !webProjectId) return;
+        try {
+          const next: ComponentTemplateDSL = {
+            ...dsl,
+            component: { ...dsl.component, name: name.trim(), updatedAt: new Date().toISOString() }
+          };
+          await webSpace.updateComponent(webProjectId, componentId, next);
+          setComponentDsls((current) => ({ ...current, [componentId]: next }));
+          await refreshComponents();
+          toast("success", "组件已重命名", name.trim());
+        } catch (error) {
+          toast("danger", "重命名失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
+  const deleteComponent = async (componentId: string) => {
+    if (!webMode || !webProjectId) return;
+    askConfirm({
+      title: "删除组件模板",
+      message: "删除后模板进入项目回收站，已插入页面/画布的组件副本不受影响。",
+      confirmText: "删除",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await webSpace.deleteComponent(webProjectId, componentId);
+          setComponentDsls((current) => { const next = { ...current }; delete next[componentId]; return next; });
+          await refreshComponents();
+          toast("success", "组件已删除", "已移入项目回收站");
+        } catch (error) {
+          toast("danger", "删除组件失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
+  const insertComponentToPage = async (componentId: string) => {
+    if (!currentPageId || !currentPage) return;
+    const dsl = await loadComponentDsl(componentId);
+    if (!dsl) return;
+    const overlay = structuredClone(dsl.component.ui);
+    overlay.id = `${overlay.id}-${Date.now().toString(36)}`;
+    if (await runCommands([{ type: "CREATE_OVERLAY", overlay }], "manual")) {
+      toast("success", "已插入页面", `组件已复制到「${currentPage.page.title}」的弹窗层`);
+    }
+  };
+
+  const insertComponentToBoard = async (componentId: string) => {
+    const dsl = await loadComponentDsl(componentId);
+    if (!dsl) return;
+    const object: Extract<BoardObject, { type: "component" }> = {
+      id: `component-${Date.now()}`,
+      type: "component",
+      x: 1180,
+      y: 100 + board.objects.length * 20,
+      width: 420,
+      height: 320,
+      component: structuredClone(dsl.component.ui),
+      source: "explicit"
+    };
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
+      setBoardSelectedId(object.id);
+      setViewMode("canvas");
+      setActiveWorkspace("boards");
+      toast("success", "已插入画布", "组件副本已摆放为画布对象");
+    }
+  };
+
   const addBoardLink = async (from: string, to: string, label: string, fromComponentId?: string, toComponentId?: string) => {
     await runBoardCommands([
       {
@@ -1748,7 +1898,7 @@ export function App() {
       id: `${object.id}-copy-${Date.now().toString(36)}`,
       x: object.x + 24,
       y: object.y + 24
-    } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" | "image" }>;
+    } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" | "image" | "component" }>;
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: copy }])) {
       setBoardSelectedId(copy.id);
       setBoardSelectedIds([copy.id]);
@@ -2306,6 +2456,10 @@ ${boardExportRuntimeScript}
           setViewMode("canvas");
           if (!currentBoardId && boards[0]) void selectBoard(boards[0].id);
         }}><LayoutGrid size={14} />画布</button>
+        <button className={activeWorkspace === "components" ? "is-active" : ""} onClick={() => {
+          setActiveWorkspace("components");
+          if (webMode && webProjectId) void refreshComponents();
+        }}><Box size={14} />组件</button>
       </div>
       {activeWorkspace === "pages" ? <>
         <div className="left-project-label"><span>页面结构 · {pages.length}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
@@ -2334,6 +2488,19 @@ ${boardExportRuntimeScript}
         </div>)}</div>
         {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单或详情页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
         <div className="left-footer"><FileCheck2 size={13} /><span>{currentPage ? `pages/${currentPage.page.id}.ui.yaml` : "pages/"}</span><StatusDot tone={currentPage ? "success" : "neutral"}>{currentPage ? "有效" : "空"}</StatusDot></div>
+      </> : activeWorkspace === "components" ? <>
+        <div className="left-project-label"><span>组件模板 · {components.length}</span><ToolButton compact title="新建组件" active={showComponentCreator} onClick={() => setShowComponentCreator(!showComponentCreator)}><Plus size={13} /></ToolButton></div>
+        {showComponentCreator ? <div className="page-creator">
+          <span className="board-creator-label">选择组件类型</span>
+          <div className="page-type-picker">{(["modal", "drawer", "popover"] as ComponentTemplateType[]).map((type) => <button key={type} className={newComponentType === type ? "is-active" : ""} onClick={() => setNewComponentType(type)}>{type === "modal" ? "弹窗" : type === "drawer" ? "抽屉" : "浮层"}</button>)}</div>
+          <div className="page-creator-actions"><button onClick={() => setShowComponentCreator(false)}>取消</button><button className="is-primary" onClick={() => void createComponentTemplate()}>创建组件</button></div>
+        </div> : null}
+        <div className="board-list">{components.map((summary) => <div key={summary.id} className={`board-list-row ${summary.id === selectedComponentId ? "is-active" : ""}`}>
+          <button className="board-list-main" onClick={() => { setSelectedComponentId(summary.id); void loadComponentDsl(summary.id); }}><div className="page-icon"><Box size={14} /></div><span><strong>{summary.name}</strong><small>{summary.type} · R{summary.revision}</small></span></button>
+          <button className="page-more" title={`管理组件 ${summary.name}`} onClick={() => { setSelectedComponentId(summary.id); void loadComponentDsl(summary.id); }}><MoreHorizontal size={14} /></button>
+        </div>)}</div>
+        {!components.length ? <EmptyState icon={<Box size={17} />} title="还没有组件模板" description="创建弹窗/抽屉/浮层模板，或让 Codex 通过 MCP 生成。" /> : null}
+        <div className="left-footer"><Box size={13} /><span>components/</span><StatusDot tone={components.length ? "success" : "neutral"}>{components.length ? "可复用模板" : "空"}</StatusDot></div>
       </> : <>
         <div className="left-project-label"><span>画布 · {boards.length}</span><ToolButton compact className="board-creator-trigger" title="新建画布" active={showBoardCreator} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 260 > window.innerHeight; setBoardCreatorAnchor({ x: Math.min(rect.left, window.innerWidth - 290), y: up ? rect.top - 6 : rect.bottom + 6, up }); setShowBoardCreator((value) => !value); }}><Plus size={13} /></ToolButton></div>
         {showBoardCreator ? <div className="board-creator is-fixed" style={boardCreatorAnchor ? { left: boardCreatorAnchor.x, top: boardCreatorAnchor.up ? undefined : boardCreatorAnchor.y, bottom: boardCreatorAnchor.up ? window.innerHeight - boardCreatorAnchor.y : undefined } : undefined}>
@@ -2410,7 +2577,37 @@ ${boardExportRuntimeScript}
             </div>
         </>}
       </div>
-      {viewMode === "canvas" ? <div className={`canvas-stage board-stage ${aiSelectMode ? "is-ai-select" : ""}`}>
+      {activeWorkspace === "components" ? <div className="component-workspace">
+        {selectedComponentId && componentDsls[selectedComponentId] ? (() => {
+          const template = componentDsls[selectedComponentId]!;
+          const ui = template.component.ui;
+          return <div className="component-workspace-body">
+            <div className="component-workspace-head">
+              <div>
+                <div className="component-workspace-kicker">COMPONENT TEMPLATE</div>
+                <h2>{template.component.name}</h2>
+                <p>{template.component.description ?? `${template.component.type} 组件模板 · Revision ${template.revision}`}</p>
+              </div>
+              <div className="component-workspace-actions">
+                <button disabled={!currentPage} onClick={() => void insertComponentToPage(selectedComponentId)} title={currentPage ? "复制为页面弹窗层" : "需要先打开一个页面"}><Layers3 size={13} />插入当前页面</button>
+                <button onClick={() => void insertComponentToBoard(selectedComponentId)} title="作为画布对象摆放"><LayoutGrid size={13} />插入画布</button>
+                <button onClick={() => renameComponent(selectedComponentId)}><Pencil size={13} />重命名</button>
+                <button className="is-danger" onClick={() => void deleteComponent(selectedComponentId)}><Trash2 size={13} />删除</button>
+              </div>
+            </div>
+            <div className="component-preview-stage">
+              <div className={`component-preview-card component-preview-card--${ui.type ?? "modal"}`}>
+                <div className="component-preview-card-head">
+                  <div><div className="board-component-kicker">OPERATION</div><strong>{ui.title ?? ui.label ?? template.component.name}</strong>{ui.description ? <p>{ui.description}</p> : null}</div>
+                </div>
+                {ui.fields?.length ? <div className="component-preview-fields">{ui.fields.map((field) => <span key={field.id}>{field.label ?? field.placeholder ?? field.id}</span>)}</div> : <div className="component-preview-empty">暂无字段，可通过 Codex 指令补充。</div>}
+                {ui.actions?.length ? <div className="component-preview-actions">{ui.actions.map((action) => <span key={action.id} className={`board-component-action board-component-action--${action.variant ?? "default"}`}>{action.text ?? action.label ?? "按钮"}</span>)}</div> : null}
+              </div>
+            </div>
+            <div className="component-workspace-hint"><Box size={13} />插入后组件会复制到页面或画布中，不再与模板关联；修改模板不会影响已插入的副本。</div>
+          </div>;
+        })() : <div className="component-workspace-body"><EmptyState icon={<Box size={22} />} title="选择一个组件模板" description="在左侧选择模板预览；也可以让 Codex 通过 MCP 直接生成组件模板。" /></div>}
+      </div> : viewMode === "canvas" ? <div className={`canvas-stage board-stage ${aiSelectMode ? "is-ai-select" : ""}`}>
         <BoardRenderer
           ref={boardViewRef}
           board={board}
@@ -2596,6 +2793,11 @@ ${boardExportRuntimeScript}
               <label className="inspector-field"><span>说明文字</span><input value={String(boardDraft.alt ?? boardSelectedObject.alt ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, alt: event.target.value })} onBlur={() => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { alt: String(boardDraft.alt ?? "").trim() || undefined } }])} placeholder="可选，显示在图片底部" /></label>
               <label className="inspector-field"><span>适配方式</span><select value={String(boardSelectedObject.objectFit ?? "contain")} onChange={(event) => { const objectFit = event.target.value as NonNullable<BoardImageObject["objectFit"]>; void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { objectFit } }]); }}><option value="contain">完整显示（contain）</option><option value="cover">铺满裁剪（cover）</option><option value="fill">拉伸填满（fill）</option></select></label>
               <button className="inspector-action" onClick={() => boardImageInputRef.current?.click()}><ImageIcon size={13} />替换图片</button>
+            </> : null}
+            {boardSelectedObject.type === "component" ? <>
+              <SectionTitle>组件副本</SectionTitle>
+              <div className="diagram-launch-card"><Box size={20} /><div><strong>{boardSelectedObject.component.title ?? boardSelectedObject.component.label ?? "组件"}</strong><span>{boardSelectedObject.component.type} · 独立副本，修改模板不影响此对象</span></div></div>
+              <label className="inspector-field"><span>标题</span><input value={String(boardDraft.componentTitle ?? boardSelectedObject.component.title ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, componentTitle: event.target.value })} onBlur={() => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { component: { ...boardSelectedObject.component, title: String(boardDraft.componentTitle ?? "").trim() || undefined } } }])} placeholder="可选" /></label>
             </> : null}
           </div>
           <div className="inspector-footer"><button className="is-danger" onClick={() => void deleteBoardObject(boardSelectedObject.id)}><Trash2 size={13} />删除对象</button><span>{boardSelectedObject.type}</span></div>

@@ -60,7 +60,7 @@ export function defineBoardObjectType(type: string, validator: BoardObjectValida
   boardObjectValidators.set(type, validator);
 }
 
-export const knownBoardObjectTypes: ReadonlySet<string> = new Set(["page", "note", "marker", "flowchart", "er", "image"]);
+export const knownBoardObjectTypes: ReadonlySet<string> = new Set(["page", "note", "marker", "flowchart", "er", "image", "component"]);
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateSchema = ajv.compile(pageDslJsonSchema);
@@ -431,6 +431,20 @@ defineBoardObjectType("image", (object, path, issues) => {
   }
 });
 
+defineBoardObjectType("component", (object, path, issues) => {
+  const component = object.component as Record<string, unknown> | undefined;
+  if (!component || typeof component.id !== "string" || typeof component.type !== "string") {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "组件对象缺少 component.id/type。", `${path}.component`));
+    return;
+  }
+  if (!["modal", "drawer", "popover"].includes(String(component.type))) {
+    issues.errors.push(boardIssue("INVALID_OVERLAY_TYPE", `组件对象 type 仅支持 modal/drawer/popover。`, `${path}.component.type`));
+  }
+  if (component.title !== undefined && typeof component.title !== "string") {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "组件对象 title 必须是字符串。", `${path}.component.title`));
+  }
+});
+
 defineBoardObjectType("marker", (object, path, issues) => {
   const number = object.number;
   if (typeof number !== "number" && typeof number !== "string") {
@@ -506,3 +520,38 @@ defineBoardObjectType("er", (object, path, issues) => {
     }
   });
 });
+
+export function validateComponentTemplate(value: unknown): DSLValidationResult {
+  const errors: DSLValidationIssue[] = [];
+  const warnings: DSLValidationIssue[] = [];
+  if (!isRecord(value)) {
+    return { valid: false, errors: [boardIssue("SCHEMA_INVALID", "组件模板必须是对象。", "$")], warnings };
+  }
+  const component = (value as { component?: unknown }).component;
+  if (!isRecord(component)) {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板缺少 component。", "$.component"));
+    return { valid: false, errors, warnings };
+  }
+  if (typeof component.id !== "string" || !component.id.trim()) {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板缺少 id。", "$.component.id"));
+  }
+  if (typeof component.name !== "string" || !component.name.trim()) {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板缺少 name。", "$.component.name"));
+  }
+  if (!["modal", "drawer", "popover"].includes(String(component.type))) {
+    errors.push(boardIssue("INVALID_OVERLAY_TYPE", "组件模板 type 仅支持 modal/drawer/popover。", "$.component.type"));
+  }
+  const ui = component.ui as Record<string, unknown> | undefined;
+  if (!isRecord(ui) || typeof ui.id !== "string" || typeof ui.type !== "string") {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板缺少 component.ui。", "$.component.ui"));
+  } else if (String(ui.type) !== String(component.type)) {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板 ui.type 必须与 component.type 一致。", "$.component.ui.type"));
+  }
+  if (component.description !== undefined && typeof component.description !== "string") {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板 description 必须是字符串。", "$.component.description"));
+  }
+  if (typeof (value as { revision?: unknown }).revision !== "number" || (value as { revision?: number }).revision! < 1) {
+    errors.push(boardIssue("SCHEMA_INVALID", "组件模板 revision 必须为正整数。", "$.revision"));
+  }
+  return { valid: errors.length === 0, errors, warnings };
+}

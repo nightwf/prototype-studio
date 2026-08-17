@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
-import type { BoardCommand, Command, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, Command, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { hashPassword, newToken, verifyPassword } from "./auth";
@@ -294,6 +294,39 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const user = await requireUser(request, reply);
     const params = request.params as { pageId?: string };
     await options.spaces.deletePage(user.id, projectIdOf(request.params), params.pageId ?? "");
+    return { ok: true };
+  });
+
+  app.get("/api/projects/:projectId/components", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, components: await options.spaces.listComponents(user.id, projectIdOf(request.params)) };
+  });
+
+  app.post("/api/projects/:projectId/components", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const dsl = request.body as ComponentTemplateDSL;
+    const created = await options.spaces.createComponent(user.id, projectIdOf(request.params), dsl);
+    reply.code(201).send({ ok: true, component: created });
+  });
+
+  app.get("/api/projects/:projectId/components/:componentId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { componentId?: string };
+    return { ok: true, dsl: await options.spaces.getComponent(user.id, projectIdOf(request.params), params.componentId ?? "") };
+  });
+
+  app.put("/api/projects/:projectId/components/:componentId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { componentId?: string };
+    const dsl = request.body as ComponentTemplateDSL;
+    const updated = await options.spaces.updateComponent(user.id, projectIdOf(request.params), params.componentId ?? "", dsl);
+    return { ok: true, component: updated };
+  });
+
+  app.delete("/api/projects/:projectId/components/:componentId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { componentId?: string };
+    await options.spaces.deleteComponent(user.id, projectIdOf(request.params), params.componentId ?? "");
     return { ok: true };
   });
 

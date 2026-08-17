@@ -1,27 +1,33 @@
 import path from "node:path";
-import type { BoardCommand, Command, PageDSL, UIComponent } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, Command, ComponentTemplateDSL, PageDSL, UIComponent } from "@prototype-studio/dsl-schema";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ProjectStoreError,
+  createComponentTemplate,
   executeBoardCommands,
   createBoard,
   createBoards,
   deleteBoard,
+  deleteComponentTemplate,
   createPage,
   deletePage,
   executeProjectCommands,
+  getComponentTemplate,
   getPage,
+  listComponentTemplates,
   listPages,
   listBoards,
   openProject,
   readBoard,
-  updateBoard
+  updateBoard,
+  writeComponentTemplate
 } from "@prototype-studio/project-store";
 import type {
   ApplyBoardCommandsInput,
   BoardInput,
   ApplyCommandsInput,
   ComponentInput,
+  CreateComponentTemplateInput,
   CreateBoardInput,
   CreateBoardsInput,
   CreateOverlayInput,
@@ -32,11 +38,14 @@ import type {
   ListPagesInput,
   MoveComponentInput,
   PageInput,
+  GetComponentTemplateInput,
   ListBoardsInput,
   UpdateBoardInput,
+  UpdateComponentTemplateInput,
   UpdateComponentInput,
   UpdateOverlayInput,
-  ValidateDslInput
+  ValidateDslInput,
+  DeleteComponentTemplateInput
 } from "./schemas.js";
 
 export interface ToolSuccess<T> {
@@ -212,6 +221,46 @@ export class PrototypeService {
 
   getDsl(input: PageInput): Promise<ToolOutcome<unknown>> {
     return run(async () => ({ dsl: await getPage(this.projectRoot, input.page_id) }));
+  }
+
+  listComponentTemplates(): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      await openProject(this.projectRoot);
+      const templates = await listComponentTemplates(this.projectRoot);
+      return { total_count: templates.length, templates };
+    });
+  }
+
+  getComponentTemplate(input: GetComponentTemplateInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => ({ dsl: await getComponentTemplate(this.projectRoot, input.component_id) }));
+  }
+
+  createComponentTemplate(input: CreateComponentTemplateInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      const dsl = input.dsl as unknown as ComponentTemplateDSL;
+      const created = await createComponentTemplate(this.projectRoot, dsl);
+      return { component_id: created.id, name: created.name, type: created.type, revision: created.revision, recoverable: false };
+    });
+  }
+
+  updateComponentTemplate(input: UpdateComponentTemplateInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      const dsl = input.dsl as unknown as ComponentTemplateDSL;
+      if (dsl.component.id !== input.component_id) {
+        const error = new Error(`组件模板 id“${dsl.component.id}”与目标“${input.component_id}”不一致。`) as Error & { code: string };
+        error.code = "INVALID_INPUT";
+        throw error;
+      }
+      await writeComponentTemplate(this.projectRoot, dsl, { overwrite: true });
+      return { component_id: dsl.component.id, name: dsl.component.name, revision: dsl.revision };
+    });
+  }
+
+  deleteComponentTemplate(input: DeleteComponentTemplateInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      await deleteComponentTemplate(this.projectRoot, input.component_id);
+      return { component_id: input.component_id, deleted: true, recoverable: true, trash: ".prototype/trash/components" };
+    });
   }
 
   listBoards(input: ListBoardsInput): Promise<ToolOutcome<unknown>> {

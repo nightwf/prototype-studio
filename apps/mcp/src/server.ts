@@ -5,6 +5,11 @@ import {
   boardInputSchema,
   applyCommandsInputSchema,
   componentInputSchema,
+  listComponentTemplatesInputSchema,
+  getComponentTemplateInputSchema,
+  createComponentTemplateInputSchema,
+  updateComponentTemplateInputSchema,
+  deleteComponentTemplateInputSchema,
   createBoardInputSchema,
   createBoardsInputSchema,
   createOverlayInputSchema,
@@ -105,6 +110,41 @@ export function createPrototypeStudioServer(options: CreateServerOptions): McpSe
     inputSchema: pageInputSchema,
     annotations: readAnnotations
   }, async (input) => response(await service.getDsl(input), "已读取完整页面 DSL。"));
+
+  server.registerTool("prototype_list_component_templates", {
+    title: "List Prototype Studio Component Templates",
+    description: "List reusable component templates (modal/drawer/popover) in the project.",
+    inputSchema: listComponentTemplatesInputSchema,
+    annotations: readAnnotations
+  }, async () => response(await service.listComponentTemplates(), "已读取组件模板列表。"));
+
+  server.registerTool("prototype_get_component_template", {
+    title: "Get Prototype Studio Component Template",
+    description: "Read one complete reusable component template DSL by component_id.",
+    inputSchema: getComponentTemplateInputSchema,
+    annotations: readAnnotations
+  }, async (input) => response(await service.getComponentTemplate(input), "已读取组件模板。"));
+
+  server.registerTool("prototype_create_component_template", {
+    title: "Create Prototype Studio Component Template",
+    description: "Create a reusable component template (modal/drawer/popover) from a ComponentTemplateDSL. After creation it can be inserted into pages or boards as an independent copy.",
+    inputSchema: createComponentTemplateInputSchema,
+    annotations: createAnnotations
+  }, async (input) => response(await service.createComponentTemplate(input), "组件模板已创建。"));
+
+  server.registerTool("prototype_update_component_template", {
+    title: "Update Prototype Studio Component Template",
+    description: "Overwrite a component template with the given ComponentTemplateDSL (component.id must match component_id).",
+    inputSchema: updateComponentTemplateInputSchema,
+    annotations: updateAnnotations
+  }, async (input) => response(await service.updateComponentTemplate(input), "组件模板已更新。"));
+
+  server.registerTool("prototype_delete_component_template", {
+    title: "Delete Prototype Studio Component Template",
+    description: "Move a component template to the project trash.",
+    inputSchema: deleteComponentTemplateInputSchema,
+    annotations: destructiveAnnotations
+  }, async (input) => response(await service.deleteComponentTemplate(input), "组件模板已移入回收站。"));
 
 
   server.registerTool("prototype_list_boards", {
