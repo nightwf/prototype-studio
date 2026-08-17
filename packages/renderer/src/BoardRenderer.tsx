@@ -246,8 +246,24 @@ function ErView({ object }: { object: Extract<BoardObject, { type: "er" }> }) {
   );
 }
 
+function ImageView({ object }: { object: Extract<BoardObject, { type: "image" }> }) {
+  return (
+    <div className="board-image-wrap">
+      <img
+        className="board-image"
+        src={object.src}
+        alt={object.alt ?? ""}
+        draggable={false}
+        style={{ objectFit: object.objectFit ?? "contain" }}
+      />
+      {object.alt ? <div className="board-image-alt">{object.alt}</div> : null}
+    </div>
+  );
+}
+
 registerBoardObjectRenderer("flowchart", ({ object, boardId }) => <FlowchartView object={object as Extract<BoardObject, { type: "flowchart" }>} boardId={boardId} />);
 registerBoardObjectRenderer("er", ({ object }) => <ErView object={object as Extract<BoardObject, { type: "er" }>} />);
+registerBoardObjectRenderer("image", ({ object }) => <ImageView object={object as Extract<BoardObject, { type: "image" }>} />);
 
 export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>(function BoardRenderer({
   board,

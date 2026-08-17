@@ -290,7 +290,7 @@ export interface RevisionRecord {
 
 // ===== Board (canvas) model =====
 
-export type BoardObjectType = "page" | "note" | "marker" | "flowchart" | "er";
+export type BoardObjectType = "page" | "note" | "marker" | "flowchart" | "er" | "image";
 export type MarkerTone = "orange" | "blue" | "green" | "red" | "purple";
 
 export interface BoardObjectBase {
@@ -312,6 +312,16 @@ export interface BoardPageObject extends BoardObjectBase {
 export interface BoardNoteObject extends BoardObjectBase {
   type: "note";
   text: string;
+}
+
+export interface BoardImageObject extends BoardObjectBase {
+  type: "image";
+  /** 图片内容：data: URL（如粘贴/上传的 base64）或项目内相对路径。 */
+  src: string;
+  /** 可选说明文字。 */
+  alt?: string;
+  /** 图片在对象框内的适配方式，默认 contain。 */
+  objectFit?: "contain" | "cover" | "fill";
 }
 
 export interface BoardMarkerObject {
@@ -410,7 +420,7 @@ export interface BoardErObject extends BoardObjectBase {
   };
 }
 
-export type BoardObject = BoardPageObject | BoardNoteObject | BoardMarkerObject | BoardFlowchartObject | BoardErObject;
+export type BoardObject = BoardPageObject | BoardNoteObject | BoardMarkerObject | BoardFlowchartObject | BoardErObject | BoardImageObject;
 
 export const boardLinkTypes = ["straight", "curve", "orthogonal"] as const;
 export type BoardLinkType = (typeof boardLinkTypes)[number];

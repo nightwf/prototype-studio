@@ -60,7 +60,7 @@ export function defineBoardObjectType(type: string, validator: BoardObjectValida
   boardObjectValidators.set(type, validator);
 }
 
-export const knownBoardObjectTypes: ReadonlySet<string> = new Set(["page", "note", "marker", "flowchart", "er"]);
+export const knownBoardObjectTypes: ReadonlySet<string> = new Set(["page", "note", "marker", "flowchart", "er", "image"]);
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const validateSchema = ajv.compile(pageDslJsonSchema);
@@ -417,6 +417,18 @@ defineBoardObjectType("page", (object, path, issues) => {
 
 defineBoardObjectType("note", (object, path, issues) => {
   if (typeof object.text !== "string") issues.errors.push(boardIssue("SCHEMA_INVALID", "说明对象缺少 text。", `${path}.text`));
+});
+
+defineBoardObjectType("image", (object, path, issues) => {
+  if (typeof object.src !== "string" || !object.src) {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "图片对象缺少 src。", `${path}.src`));
+  }
+  if (object.alt !== undefined && typeof object.alt !== "string") {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "图片对象 alt 必须是字符串。", `${path}.alt`));
+  }
+  if (object.objectFit !== undefined && !["contain", "cover", "fill"].includes(String(object.objectFit))) {
+    issues.errors.push(boardIssue("SCHEMA_INVALID", "图片对象 objectFit 无效。", `${path}.objectFit`));
+  }
 });
 
 defineBoardObjectType("marker", (object, path, issues) => {

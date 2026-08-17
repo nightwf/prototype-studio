@@ -13,6 +13,7 @@ import {
   GripVertical,
   GitBranch,
   History,
+  Image as ImageIcon,
   Layers3,
   LayoutPanelLeft,
   LayoutGrid,
@@ -55,6 +56,7 @@ import {
   type BoardDSL,
   type BoardLink,
   type BoardMarkerObject,
+  type BoardImageObject,
   type BoardNoteObject,
   type BoardObject,
   type Command,
@@ -562,6 +564,7 @@ export function App() {
   const [projectMenuProjects, setProjectMenuProjects] = useState<WebProject[]>([]);
   const [webOpenFailed, setWebOpenFailed] = useState(false);
   const projectImportRef = useRef<HTMLInputElement>(null);
+  const boardImageInputRef = useRef<HTMLInputElement>(null);
 
   const openLatestOrCreate = useCallback(async (): Promise<void> => {
     const listed = await webProjects.list();
@@ -1501,6 +1504,55 @@ export function App() {
     }
   };
 
+  const addBoardImage = async (src: string, alt?: string) => {
+    const object: BoardImageObject = {
+      id: `image-${Date.now()}`,
+      type: "image",
+      x: 1180,
+      y: 100 + board.objects.length * 20,
+      width: 420,
+      height: 280,
+      src,
+      ...(alt ? { alt } : {}),
+      source: "explicit"
+    };
+    if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
+      setBoardSelectedId(object.id);
+      setBoardTool("none");
+    }
+  };
+
+  const handleBoardImageFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = typeof reader.result === "string" ? reader.result : "";
+      if (src) void addBoardImage(src, file.name.replace(/\.[^.]+$/, ""));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // 画布模式支持粘贴图片：外部复制图片后直接 Ctrl/Cmd+V 放入画布
+  useEffect(() => {
+    if (viewMode !== "canvas") return;
+    const onPaste = (event: ClipboardEvent) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            handleBoardImageFile(file);
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [viewMode]);
+
   const addBoardMarker = async (pageObjectId: string, componentId: string, number: number | string, text: string, tone: MarkerTone, offsetX?: number, offsetY?: number) => {
     const object: BoardMarkerObject = {
       id: `marker-${Date.now()}`,
@@ -1696,7 +1748,7 @@ export function App() {
       id: `${object.id}-copy-${Date.now().toString(36)}`,
       x: object.x + 24,
       y: object.y + 24
-    } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" }>;
+    } as Extract<BoardObject, { type: "page" | "note" | "flowchart" | "er" | "image" }>;
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object: copy }])) {
       setBoardSelectedId(copy.id);
       setBoardSelectedIds([copy.id]);
@@ -2217,6 +2269,7 @@ ${boardExportRuntimeScript}
           </> : <>
             <button onClick={createProjectFromMenu}><Plus size={14} /><span><strong>新建项目</strong><small>创建空白项目并打开</small></span></button>
             <input ref={projectImportRef} type="file" accept=".zip" style={{ display: "none" }} onChange={(event) => { const file = event.target.files?.[0]; if (file) void importProjectFromMenu(file); event.currentTarget.value = ""; }} />
+            <input ref={boardImageInputRef} type="file" accept="image/png,image/jpeg,image/jpg" style={{ display: "none" }} onChange={(event) => { const file = event.target.files?.[0]; if (file) handleBoardImageFile(file); event.currentTarget.value = ""; }} />
             <button onClick={() => projectImportRef.current?.click()}><Upload size={14} /><span><strong>导入整包</strong><small>从 prototype-project.zip 恢复项目</small></span></button>
             <i />
             {projectMenuProjects.map((project) => (
@@ -2337,6 +2390,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => { const next = boardTool === "marker" ? "none" : "marker"; setBoardTool(next); if (next === "none") setMarkerPicking(false); }}><MapPin size={13} />标注</button>
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
+                <button onClick={() => boardImageInputRef.current?.click()} title="选择 PNG/JPG 图片，或直接复制图片后在画布内粘贴"><ImageIcon size={13} />图片</button>
                 <i className="board-tools-divider" />
                 <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选画布对象生成修改指令"><MousePointer2 size={13} />框选修改</button>
                 <div className="board-more">
@@ -2533,6 +2587,15 @@ ${boardExportRuntimeScript}
               <SectionTitle>ER 图</SectionTitle>
               <div className="diagram-launch-card"><Database size={20} /><div><strong>{boardSelectedObject.er.entities.length} 个实体</strong><span>在独立编辑器中管理字段、关系和实体位置。</span></div></div>
               <button className="inspector-action is-primary" onClick={() => openDiagramEditor(boardSelectedObject.id)}><Maximize2 size={13} />打开 ER 图编辑器</button>
+            </> : null}
+            {boardSelectedObject.type === "image" ? <>
+              <SectionTitle>图片</SectionTitle>
+              <div className="board-image-inspector">
+                <img src={boardSelectedObject.src} alt={boardSelectedObject.alt ?? ""} />
+              </div>
+              <label className="inspector-field"><span>说明文字</span><input value={String(boardDraft.alt ?? boardSelectedObject.alt ?? "")} onChange={(event) => setBoardDraft({ ...boardDraft, alt: event.target.value })} onBlur={() => void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { alt: String(boardDraft.alt ?? "").trim() || undefined } }])} placeholder="可选，显示在图片底部" /></label>
+              <label className="inspector-field"><span>适配方式</span><select value={String(boardSelectedObject.objectFit ?? "contain")} onChange={(event) => { const objectFit = event.target.value as NonNullable<BoardImageObject["objectFit"]>; void runBoardCommands([{ type: "UPDATE_BOARD_OBJECT", target: boardSelectedObject.id, changes: { objectFit } }]); }}><option value="contain">完整显示（contain）</option><option value="cover">铺满裁剪（cover）</option><option value="fill">拉伸填满（fill）</option></select></label>
+              <button className="inspector-action" onClick={() => boardImageInputRef.current?.click()}><ImageIcon size={13} />替换图片</button>
             </> : null}
           </div>
           <div className="inspector-footer"><button className="is-danger" onClick={() => void deleteBoardObject(boardSelectedObject.id)}><Trash2 size={13} />删除对象</button><span>{boardSelectedObject.type}</span></div>
