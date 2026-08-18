@@ -45,6 +45,45 @@ export class CloudMcpService {
     return this.spaces.listSpaces(userId);
   }
 
+  async listAccountTemplates(userId: string) {
+    return this.metadata.listAccountTemplates(userId);
+  }
+
+  async getAccountTemplate(userId: string, templateId: string) {
+    const template = await this.metadata.getAccountTemplate(userId, templateId);
+    if (!template) throw new Error(`账号模板“${templateId}”不存在。`);
+    return template;
+  }
+
+  async createAccountTemplate(userId: string, input: { kind: "component" | "page"; name: string; description?: string; type: string; data: Record<string, unknown> }) {
+    const now = new Date().toISOString();
+    const row = {
+      id: crypto.randomUUID(),
+      ownerId: userId,
+      kind: input.kind,
+      name: input.name.trim(),
+      description: input.description?.trim() || undefined,
+      type: input.type.trim(),
+      data: input.data,
+      createdAt: now,
+      updatedAt: now
+    };
+    await this.metadata.createAccountTemplate(row);
+    return { template_id: row.id, kind: row.kind, name: row.name, type: row.type };
+  }
+
+  async updateAccountTemplate(userId: string, templateId: string, patch: { name?: string; description?: string; type?: string; data?: Record<string, unknown> }) {
+    await this.getAccountTemplate(userId, templateId);
+    await this.metadata.updateAccountTemplate(userId, templateId, patch);
+    return { template_id: templateId, updated: true };
+  }
+
+  async deleteAccountTemplate(userId: string, templateId: string) {
+    await this.getAccountTemplate(userId, templateId);
+    await this.metadata.deleteAccountTemplate(userId, templateId);
+    return { template_id: templateId, deleted: true };
+  }
+
   async createProject(userId: string, name: string, description?: string) {
     const user = await this.metadata.getUserById(userId);
     if (!user) throw new McpUnauthorizedError();

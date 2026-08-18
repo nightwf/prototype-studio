@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import pg from "pg";
-import type { MetadataStore, ProjectMemberRow, ProjectRow, SessionRow, ShareLinkRow, User } from "./metadata";
+import type { AccountTemplateRow, MetadataStore, ProjectMemberRow, ProjectRow, SessionRow, ShareLinkRow, User } from "./metadata";
 
 const { Pool } = pg;
 
@@ -17,6 +17,20 @@ function mapProject(row: Record<string, unknown>): ProjectRow {
     description: row.description == null ? undefined : String(row.description),
     status: String(row.status) as ProjectRow["status"],
     spacePath: String(row.space_path),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
+function mapAccountTemplate(row: Record<string, unknown>): AccountTemplateRow {
+  return {
+    id: String(row.id),
+    ownerId: String(row.owner_id),
+    kind: String(row.kind) as AccountTemplateRow["kind"],
+    name: String(row.name),
+    description: row.description == null ? undefined : String(row.description),
+    type: String(row.type),
+    data: typeof row.data === "object" && row.data !== null ? row.data as Record<string, unknown> : {},
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
@@ -166,6 +180,40 @@ export class PostgresMetadataStore implements MetadataStore {
 
   async deleteShareLink(token: string): Promise<void> {
     await this.pool.query("delete from share_links where token = $1", [token]);
+  }
+
+  async listAccountTemplates(ownerId: string): Promise<AccountTemplateRow[]> {
+    const result = await this.pool.query(
+      "select * from account_templates where owner_id = $1 order by updated_at desc",
+      [ownerId]
+    );
+    return result.rows.map(mapAccountTemplate);
+  }
+
+  async getAccountTemplate(ownerId: string, templateId: string): Promise<AccountTemplateRow | undefined> {
+    const result = await this.pool.query(
+      "select * from account_templates where owner_id = $1 and id = $2",
+      [ownerId, templateId]
+    );
+    return result.rows[0] ? mapAccountTemplate(result.rows[0]) : undefined;
+  }
+
+  async createAccountTemplate(row: AccountTemplateRow): Promise<void> {
+    await this.pool.query(
+      "insert into account_templates (id, owner_id, kind, name, description, type, data, created_at, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [row.id, row.ownerId, row.kind, row.name, row.description ?? null, row.type, JSON.stringify(row.data), row.createdAt, row.updatedAt]
+    );
+  }
+
+  async updateAccountTemplate(ownerId: string, templateId: string, patch: Partial<Pick<AccountTemplateRow, "name" | "description" | "type" | "data">>): Promise<void> {
+    await this.pool.query(
+      "update account_templates set name = coalesce($3, name), description = coalesce($4, description), type = coalesce($5, type), data = coalesce($6, data), updated_at = now() where owner_id = $1 and id = $2",
+      [ownerId, templateId, patch.name ?? null, patch.description ?? null, patch.type ?? null, patch.data === undefined ? null : JSON.stringify(patch.data)]
+    );
+  }
+
+  async deleteAccountTemplate(ownerId: string, templateId: string): Promise<void> {
+    await this.pool.query("delete from account_templates where owner_id = $1 and id = $2", [ownerId, templateId]);
   }
 
   async close(): Promise<void> {

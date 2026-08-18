@@ -43,6 +43,21 @@ export interface ShareLinkRow {
   createdAt: string;
 }
 
+export interface AccountTemplateRow {
+  id: string;
+  ownerId: string;
+  /** component=可复用组件模板；page=可复用页面模板。 */
+  kind: "component" | "page";
+  name: string;
+  description?: string;
+  /** 模板类型：组件为 modal/drawer/popover，页面为 list/form/detail。 */
+  type: string;
+  /** 完整模板数据：组件存 ComponentTemplateDSL，页面存 PageDSL。 */
+  data: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface MetadataStore {
   createUser(name: string, email: string, passwordHash: string, id?: string): Promise<User>;
   deleteUser(id: string): Promise<void>;
@@ -65,6 +80,11 @@ export interface MetadataStore {
   getShareLinkByToken(token: string): Promise<ShareLinkRow | undefined>;
   listShareLinksByProject(projectId: string): Promise<ShareLinkRow[]>;
   deleteShareLink(token: string): Promise<void>;
+  listAccountTemplates(ownerId: string): Promise<AccountTemplateRow[]>;
+  getAccountTemplate(ownerId: string, templateId: string): Promise<AccountTemplateRow | undefined>;
+  createAccountTemplate(row: AccountTemplateRow): Promise<void>;
+  updateAccountTemplate(ownerId: string, templateId: string, patch: Partial<Pick<AccountTemplateRow, "name" | "description" | "type" | "data">>): Promise<void>;
+  deleteAccountTemplate(ownerId: string, templateId: string): Promise<void>;
 }
 
 export class MemoryMetadataStore implements MetadataStore {
@@ -75,6 +95,7 @@ export class MemoryMetadataStore implements MetadataStore {
   private projects = new Map<string, ProjectRow>();
   private members = new Map<string, ProjectMemberRow>();
   private shareLinks = new Map<string, ShareLinkRow>();
+  private accountTemplates = new Map<string, AccountTemplateRow>();
   private readonly ready: Promise<void>;
 
   constructor(private readonly persistPath?: string) {
@@ -88,6 +109,7 @@ export class MemoryMetadataStore implements MetadataStore {
         users?: User[]; sessions?: SessionRow[]; apiTokens?: Array<{ token: string; userId: string }>;
         invites?: Array<{ code: string; consumedBy?: string }>; projects?: ProjectRow[];
         members?: ProjectMemberRow[]; shareLinks?: ShareLinkRow[];
+        accountTemplates?: AccountTemplateRow[];
       };
       raw.users?.forEach((user) => this.users.set(user.id, user));
       raw.sessions?.forEach((session) => this.sessions.set(session.token, session));
@@ -96,6 +118,7 @@ export class MemoryMetadataStore implements MetadataStore {
       raw.projects?.forEach((project) => this.projects.set(project.id, project));
       raw.members?.forEach((member) => this.members.set(`${member.projectId}:${member.userId}`, member));
       raw.shareLinks?.forEach((link) => this.shareLinks.set(link.token, link));
+      raw.accountTemplates?.forEach((template) => this.accountTemplates.set(`${template.ownerId}:${template.id}`, template));
     } catch {
       // 首次启动或无持久化文件时忽略
     }
@@ -110,7 +133,8 @@ export class MemoryMetadataStore implements MetadataStore {
       invites: [...this.invites.entries()].map(([code, consumedBy]) => ({ code, consumedBy })),
       projects: [...this.projects.values()],
       members: [...this.members.values()],
-      shareLinks: [...this.shareLinks.values()]
+      shareLinks: [...this.shareLinks.values()],
+      accountTemplates: [...this.accountTemplates.values()]
     };
     await mkdir(dirname(this.persistPath), { recursive: true });
     await writeFile(this.persistPath, JSON.stringify(state, null, 2));
@@ -238,6 +262,39 @@ export class MemoryMetadataStore implements MetadataStore {
 
   async deleteShareLink(token: string): Promise<void> {
     this.shareLinks.delete(token);
+    await this.persist();
+  }
+
+  async listAccountTemplates(ownerId: string): Promise<AccountTemplateRow[]> {
+    await this.ready;
+    return [...this.accountTemplates.values()]
+      .filter((template) => template.ownerId === ownerId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async getAccountTemplate(ownerId: string, templateId: string): Promise<AccountTemplateRow | undefined> {
+    await this.ready;
+    return this.accountTemplates.get(`${ownerId}:${templateId}`);
+  }
+
+  async createAccountTemplate(row: AccountTemplateRow): Promise<void> {
+    this.accountTemplates.set(`${row.ownerId}:${row.id}`, row);
+    await this.persist();
+  }
+
+  async updateAccountTemplate(ownerId: string, templateId: string, patch: Partial<Pick<AccountTemplateRow, "name" | "description" | "type" | "data">>): Promise<void> {
+    const current = this.accountTemplates.get(`${ownerId}:${templateId}`);
+    if (!current) return;
+    this.accountTemplates.set(`${ownerId}:${templateId}`, {
+      ...current,
+      ...patch,
+      updatedAt: new Date().toISOString()
+    });
+    await this.persist();
+  }
+
+  async deleteAccountTemplate(ownerId: string, templateId: string): Promise<void> {
+    this.accountTemplates.delete(`${ownerId}:${templateId}`);
     await this.persist();
   }
 }

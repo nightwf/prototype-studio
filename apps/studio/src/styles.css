@@ -490,6 +490,20 @@ button { color: inherit; }
 .diagram-launch-card strong,.diagram-launch-card span { display: block; }
 .board-image-inspector { margin: 4px 0 8px; padding: 6px; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe5eb; border-radius: 8px; background: #f6f8fa; overflow: hidden; }
 .board-image-inspector img { display: block; max-width: 100%; max-height: 150px; object-fit: contain; border-radius: 4px; }
+.board-tool-panel--library { width: 300px; max-height: min(520px, 70vh); display: flex; flex-direction: column; }
+.library-tabs { display: flex; gap: 6px; padding: 10px 12px 0; }
+.library-tabs span { padding: 5px 10px; border-radius: 6px; background: #eef2f6; color: #64748b; font: 600 11px/1 system-ui, -apple-system, "PingFang SC", sans-serif; }
+.library-tabs span.is-active { background: #2563eb; color: #fff; }
+.library-list { flex: 1; overflow-y: auto; padding: 8px 10px 12px; }
+.library-row { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; margin-bottom: 6px; }
+.library-row:hover { border-color: #bfdbfe; background: #f8fafc; }
+.library-row-icon { display: inline-flex; color: #94a3b8; flex: none; }
+.library-row-main { flex: 1; min-width: 0; }
+.library-row-main strong, .library-row-main small { display: block; }
+.library-row-main strong { color: #1e293b; font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.library-row-main small { color: #94a3b8; font-size: 10px; margin-top: 2px; }
+.library-row-add, .library-row-remove { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: #eff6ff; color: #2563eb; cursor: pointer; flex: none; }
+.library-row-remove { background: #fef2f2; color: #b91c1c; }
 .component-workspace { height: 100%; min-height: 0; overflow: auto; background: #f2f4f7; }
 .component-workspace-body { max-width: 880px; margin: 0 auto; padding: 28px 30px 60px; }
 .component-workspace-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }

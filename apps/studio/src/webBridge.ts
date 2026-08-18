@@ -73,6 +73,18 @@ export interface TrashedBoardSummary {
   deletedAt: string;
 }
 
+export interface AccountTemplate {
+  id: string;
+  ownerId: string;
+  kind: "component" | "page";
+  name: string;
+  description?: string;
+  type: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export const webAuth = {
   register(inviteCode: string, name: string, email: string, password: string) {
     return request<{ ok: boolean; user: WebUser }>("/api/auth/register", {
@@ -112,6 +124,27 @@ export const webProjects = {
       method: "POST",
       body: JSON.stringify({ name, zip: zipBase64 })
     });
+  }
+};
+
+export const webTemplates = {
+  list() {
+    return request<{ ok: boolean; templates: AccountTemplate[] }>("/api/templates");
+  },
+  create(input: { kind: "component" | "page"; name: string; description?: string; type: string; data: Record<string, unknown> }) {
+    return request<{ ok: boolean; template: AccountTemplate }>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  update(templateId: string, patch: { name?: string; description?: string; type?: string; data?: Record<string, unknown> }) {
+    return request<{ ok: boolean }>(`/api/templates/${encodeURIComponent(templateId)}`, {
+      method: "PUT",
+      body: JSON.stringify(patch)
+    });
+  },
+  remove(templateId: string) {
+    return request<{ ok: boolean }>(`/api/templates/${encodeURIComponent(templateId)}`, { method: "DELETE" });
   }
 };
 

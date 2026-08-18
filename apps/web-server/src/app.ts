@@ -6,7 +6,7 @@ import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import type { BoardCommand, Command, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
-import type { MetadataStore, User } from "./metadata";
+import type { AccountTemplateRow, MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { hashPassword, newToken, verifyPassword } from "./auth";
 import { ProjectSpaceManager, SpaceError } from "./spaces";
@@ -189,6 +189,70 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     }
     const project = await options.spaces.importZip(user.id, body.name ?? "导入项目", body.zip);
     reply.code(201).send({ ok: true, project });
+  });
+
+  app.get("/api/templates", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    return { ok: true, templates: await options.metadata.listAccountTemplates(user.id) };
+  });
+
+  app.post("/api/templates", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { kind?: string; name?: string; description?: string; type?: string; data?: Record<string, unknown> };
+    if (!body.kind || !["component", "page"].includes(body.kind) || !body.name?.trim() || !body.type?.trim() || !body.data) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "kind/name/type/data 为必填，kind 仅支持 component 或 page。" });
+      return;
+    }
+    const now = new Date().toISOString();
+    const row: AccountTemplateRow = {
+      id: randomUUID(),
+      ownerId: user.id,
+      kind: body.kind as AccountTemplateRow["kind"],
+      name: body.name.trim(),
+      description: body.description?.trim(),
+      type: body.type.trim(),
+      data: body.data,
+      createdAt: now,
+      updatedAt: now
+    };
+    await options.metadata.createAccountTemplate(row);
+    reply.code(201).send({ ok: true, template: row });
+  });
+
+  app.get("/api/templates/:templateId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { templateId?: string };
+    const template = await options.metadata.getAccountTemplate(user.id, params.templateId ?? "");
+    if (!template) {
+      reply.code(404).send({ ok: false, error: "NOT_FOUND", message: "模板不存在。" });
+      return;
+    }
+    return { ok: true, template };
+  });
+
+  app.put("/api/templates/:templateId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { templateId?: string };
+    const body = request.body as { name?: string; description?: string; type?: string; data?: Record<string, unknown> };
+    const existing = await options.metadata.getAccountTemplate(user.id, params.templateId ?? "");
+    if (!existing) {
+      reply.code(404).send({ ok: false, error: "NOT_FOUND", message: "模板不存在。" });
+      return;
+    }
+    await options.metadata.updateAccountTemplate(user.id, params.templateId ?? "", {
+      ...(body.name?.trim() ? { name: body.name.trim() } : {}),
+      ...(body.description !== undefined ? { description: body.description?.trim() || undefined } : {}),
+      ...(body.type?.trim() ? { type: body.type.trim() } : {}),
+      ...(body.data ? { data: body.data } : {})
+    });
+    return { ok: true };
+  });
+
+  app.delete("/api/templates/:templateId", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const params = request.params as { templateId?: string };
+    await options.metadata.deleteAccountTemplate(user.id, params.templateId ?? "");
+    return { ok: true };
   });
 
   app.patch("/api/projects/:projectId", async (request, reply) => {

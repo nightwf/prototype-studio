@@ -72,6 +72,61 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     inputSchema: z.object({ project_id: projectId }).strict()
   }, async (input) => respond(async (userId) => service.project(userId, input.project_id)));
 
+  const templateId = z.string().min(1).describe("账号模板 ID（来自 prototype_list_templates）");
+
+  server.registerTool("prototype_list_templates", {
+    title: "List Account Template Library",
+    description: "List the current account's reusable template library (component and page templates).",
+    inputSchema: z.object({}).strict()
+  }, async () => respond(async (userId) => ({ templates: await service.listAccountTemplates(userId) })));
+
+  server.registerTool("prototype_get_template", {
+    title: "Get Account Template",
+    description: "Read one account-level template (component or page) by template_id.",
+    inputSchema: z.object({ template_id: templateId }).strict()
+  }, async (input) => respond(async (userId) => ({ template: await service.getAccountTemplate(userId, input.template_id) })));
+
+  server.registerTool("prototype_create_template", {
+    title: "Create Account Template",
+    description: "Save a reusable template to the account library. kind=component stores a ComponentTemplateDSL (type modal/drawer/popover); kind=page stores a PageDSL.",
+    inputSchema: z.object({
+      kind: z.enum(["component", "page"]),
+      name: z.string().min(1).max(120),
+      description: z.string().max(1000).optional(),
+      type: z.string().min(1).max(80),
+      data: z.record(z.any())
+    }).strict()
+  }, async (input) => respond(async (userId) => service.createAccountTemplate(userId, {
+    kind: input.kind,
+    name: input.name,
+    description: input.description,
+    type: input.type,
+    data: input.data
+  })));
+
+  server.registerTool("prototype_update_template", {
+    title: "Update Account Template",
+    description: "Update name/description/type/data of an account-level template.",
+    inputSchema: z.object({
+      template_id: templateId,
+      name: z.string().min(1).max(120).optional(),
+      description: z.string().max(1000).optional(),
+      type: z.string().min(1).max(80).optional(),
+      data: z.record(z.any()).optional()
+    }).strict()
+  }, async (input) => respond(async (userId) => service.updateAccountTemplate(userId, input.template_id, {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.type !== undefined ? { type: input.type } : {}),
+    ...(input.data !== undefined ? { data: input.data } : {})
+  })));
+
+  server.registerTool("prototype_delete_template", {
+    title: "Delete Account Template",
+    description: "Delete an account-level template from the library.",
+    inputSchema: z.object({ template_id: templateId }).strict()
+  }, async (input) => respond(async (userId) => service.deleteAccountTemplate(userId, input.template_id)));
+
   server.registerTool("prototype_list_pages", {
     title: "List Prototype Studio Pages",
     description: "List pages of a project.",

@@ -65,3 +65,18 @@ create table if not exists audit_index (
 );
 
 create index if not exists audit_index_project_created on audit_index (project_id, created_at);
+
+-- 账号级模板库：组件模板与页面模板（完整 DSL 存 JSON，供跨项目复用）
+create table if not exists account_templates (
+  id uuid primary key,
+  owner_id uuid not null references users(id),
+  kind text not null check (kind in ('component', 'page')),
+  name text not null,
+  description text,
+  type text not null,
+  data jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists account_templates_owner on account_templates (owner_id, updated_at desc);

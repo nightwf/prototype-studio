@@ -107,7 +107,7 @@ import {
   type DesktopMcpConnectionInfo,
   type DesktopProjectSnapshot
 } from "./desktopBridge";
-import { getApiToken, webAuth, webMode, webProjects, webSpace, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
+import { getApiToken, webAuth, webMode, webProjects, webSpace, webTemplates, type AccountTemplate, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
 import { AuthScreen } from "./WebScreens";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
@@ -418,6 +418,8 @@ export function App() {
   const [showComponentCreator, setShowComponentCreator] = useState(false);
   const [newComponentType, setNewComponentType] = useState<ComponentTemplateType>("modal");
   const [selectedComponentId, setSelectedComponentId] = useState<string>();
+  const [accountTemplates, setAccountTemplates] = useState<AccountTemplate[]>([]);
+  const [templateLibraryOpen, setTemplateLibraryOpen] = useState(false);
   const [trashedBoards, setTrashedBoards] = useState<TrashedBoardSummary[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState("main");
   const currentBoardIdRef = useRef("main");
@@ -1763,6 +1765,143 @@ export function App() {
     }
   };
 
+  const refreshAccountTemplates = useCallback(async () => {
+    if (!webMode) return;
+    try {
+      setAccountTemplates((await webTemplates.list()).templates);
+    } catch { /* 模板库加载失败不阻断 */ }
+  }, []);
+
+  const savePageToTemplateLibrary = async (pageId: string) => {
+    if (!webMode || !webProjectId) return;
+    const page = pages.find((item) => item.page.id === pageId);
+    if (!page) return;
+    askText({
+      title: "保存页面为模板",
+      label: "模板名称",
+      defaultValue: page.page.title,
+      confirmText: "保存",
+      onConfirm: async (name) => {
+        if (!name.trim()) return;
+        try {
+          await webTemplates.create({
+            kind: "page",
+            name: name.trim(),
+            description: page.page.description,
+            type: page.page.type,
+            data: structuredClone(page) as unknown as Record<string, unknown>
+          });
+          await refreshAccountTemplates();
+          toast("success", "已保存到模板库", name.trim());
+        } catch (error) {
+          toast("danger", "保存模板失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
+  const saveComponentToTemplateLibrary = async (componentId: string) => {
+    if (!webMode || !webProjectId) return;
+    const dsl = await loadComponentDsl(componentId);
+    if (!dsl) return;
+    askText({
+      title: "保存组件为模板",
+      label: "模板名称",
+      defaultValue: dsl.component.name,
+      confirmText: "保存",
+      onConfirm: async (name) => {
+        if (!name.trim()) return;
+        try {
+          await webTemplates.create({
+            kind: "component",
+            name: name.trim(),
+            description: dsl.component.description,
+            type: dsl.component.type,
+            data: structuredClone(dsl) as unknown as Record<string, unknown>
+          });
+          await refreshAccountTemplates();
+          toast("success", "已保存到模板库", name.trim());
+        } catch (error) {
+          toast("danger", "保存模板失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
+  const insertAccountTemplateToBoard = async (templateId: string) => {
+    if (!webMode || !webProjectId) return;
+    const template = accountTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    if (template.kind === "component") {
+      const dsl = template.data as unknown as ComponentTemplateDSL;
+      const object: Extract<BoardObject, { type: "component" }> = {
+        id: `component-${Date.now()}`,
+        type: "component",
+        x: 1180,
+        y: 100 + board.objects.length * 20,
+        width: 420,
+        height: 320,
+        component: structuredClone(dsl.component.ui),
+        source: "explicit"
+      };
+      if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
+        setBoardSelectedId(object.id);
+        setViewMode("canvas");
+        setActiveWorkspace("boards");
+        toast("success", "已从模板库插入", template.name);
+      }
+      return;
+    }
+    // 页面模板：先创建页面，再放入当前画布
+    const pageDsl = template.data as unknown as PageDSL;
+    if (!pageDsl.page?.id || !pageDsl.page?.title) {
+      toast("warning", "模板数据不完整", "页面模板缺少 page.id/title");
+      return;
+    }
+    try {
+      if (!pages.some((page) => page.page.id === pageDsl.page.id)) {
+        await webSpace.createPage(webProjectId, pageDsl);
+        setPages((items) => [...items, pageDsl]);
+      }
+      const object: Extract<BoardObject, { type: "page" }> = {
+        id: `obj-${pageDsl.page.id}`,
+        type: "page",
+        pageId: pageDsl.page.id,
+        x: 120,
+        y: 80 + board.objects.filter((item) => item.type === "page").length * 720,
+        width: 960,
+        height: 640,
+        source: "explicit"
+      };
+      if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
+        setViewMode("canvas");
+        setActiveWorkspace("boards");
+        toast("success", "已从模板库插入", `${template.name}（页面已创建并放入画布）`);
+      }
+    } catch (error) {
+      toast("danger", "插入页面模板失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
+  const deleteAccountTemplate = async (templateId: string) => {
+    if (!webMode) return;
+    askConfirm({
+      title: "删除账号模板",
+      message: "删除后无法恢复，仅影响模板库，不影响已插入到项目的内容。",
+      confirmText: "删除",
+      danger: true,
+      onConfirm: async () => {
+        try {
+          await webTemplates.remove(templateId);
+          setAccountTemplates((items) => items.filter((item) => item.id !== templateId));
+          toast("success", "模板已删除");
+        } catch (error) {
+          toast("danger", "删除模板失败", error instanceof Error ? error.message : "未知错误");
+        }
+      }
+    });
+  };
+
   const addBoardLink = async (from: string, to: string, label: string, fromComponentId?: string, toComponentId?: string) => {
     await runBoardCommands([
       {
@@ -2480,6 +2619,7 @@ ${boardExportRuntimeScript}
           <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
           {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
+            <button disabled={!webMode || !webProjectId} onClick={() => void savePageToTemplateLibrary(page.page.id)}><FolderOpen size={12} />保存为模板</button>
             <button disabled={index === 0} onClick={() => void movePage(page.page.id, index - 1)}><ArrowUp size={12} />上移</button>
             <button disabled={index === pages.length - 1} onClick={() => void movePage(page.page.id, index + 1)}><ArrowDown size={12} />下移</button>
             <i />
@@ -2558,6 +2698,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
                 <button onClick={() => boardImageInputRef.current?.click()} title="选择 PNG/JPG 图片，或直接复制图片后在画布内粘贴"><ImageIcon size={13} />图片</button>
+                <button className={templateLibraryOpen ? "is-active" : ""} onClick={() => { setTemplateLibraryOpen((value) => !value); if (!accountTemplates.length) void refreshAccountTemplates(); }} title="从账号模板库添加组件或页面"><FolderOpen size={13} />模板库</button>
                 <i className="board-tools-divider" />
                 <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选画布对象生成修改指令"><MousePointer2 size={13} />框选修改</button>
                 <div className="board-more">
@@ -2592,6 +2733,7 @@ ${boardExportRuntimeScript}
                 <button disabled={!currentPage} onClick={() => void insertComponentToPage(selectedComponentId)} title={currentPage ? "复制为页面弹窗层" : "需要先打开一个页面"}><Layers3 size={13} />插入当前页面</button>
                 <button onClick={() => void insertComponentToBoard(selectedComponentId)} title="作为画布对象摆放"><LayoutGrid size={13} />插入画布</button>
                 <button onClick={() => renameComponent(selectedComponentId)}><Pencil size={13} />重命名</button>
+                <button onClick={() => void saveComponentToTemplateLibrary(selectedComponentId)} title="保存到账号模板库"><FolderOpen size={13} />保存为模板</button>
                 <button className="is-danger" onClick={() => void deleteComponent(selectedComponentId)}><Trash2 size={13} />删除</button>
               </div>
             </div>
@@ -2664,6 +2806,23 @@ ${boardExportRuntimeScript}
             <button key={page.page.id} className="board-tool-row" onClick={() => void addBoardPageObject(page.page.id)}><Layers3 size={13} /><span>{page.page.title}<small>{page.page.id}</small></span></button>
           ))}
           {pages.every((page) => board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)) ? <div className="board-tool-empty">所有页面都已在画布上</div> : null}
+        </div> : null}
+        {templateLibraryOpen ? <div className="board-tool-panel board-tool-panel--library">
+          <div className="board-tool-head"><span>ACCOUNT LIBRARY</span><strong>账号模板库</strong><button onClick={() => setTemplateLibraryOpen(false)}><X size={13} /></button></div>
+          <div className="library-tabs">
+            <span className="is-active">全部</span>
+          </div>
+          <div className="library-list">
+            {!accountTemplates.length ? <div className="board-tool-empty">模板库为空。可以在页面菜单或组件面板中「保存为模板」。</div> : null}
+            {accountTemplates.map((template) => (
+              <div className="library-row" key={template.id}>
+                <span className="library-row-icon">{template.kind === "component" ? <Box size={13} /> : <Layers3 size={13} />}</span>
+                <span className="library-row-main"><strong>{template.name}</strong><small>{template.kind === "component" ? template.type : `${template.type} 页面`}</small></span>
+                <button className="library-row-add" onClick={() => void insertAccountTemplateToBoard(template.id)} title="添加到当前画布"><Plus size={12} /></button>
+                <button className="library-row-remove" onClick={() => void deleteAccountTemplate(template.id)} title="删除模板"><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
         </div> : null}
         {boardTool === "marker" ? <MarkerPicker
           boardPageObjects={boardPageObjects}
