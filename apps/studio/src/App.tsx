@@ -1738,7 +1738,7 @@ export function App() {
     const dsl = await loadComponentDsl(componentId);
     if (!dsl) return;
     const overlay = structuredClone(dsl.component.ui);
-    overlay.id = `${overlay.id}-${Date.now().toString(36)}`;
+    overlay.id = `${overlay.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
     if (await runCommands([{ type: "CREATE_OVERLAY", overlay }], "manual")) {
       toast("success", "已插入页面", `组件已复制到「${currentPage.page.title}」的弹窗层`);
     }
@@ -1748,7 +1748,7 @@ export function App() {
     const dsl = await loadComponentDsl(componentId);
     if (!dsl) return;
     const object: Extract<BoardObject, { type: "component" }> = {
-      id: `component-${Date.now()}`,
+      id: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "component",
       x: 1180,
       y: 100 + board.objects.length * 20,
@@ -1835,7 +1835,7 @@ export function App() {
     if (template.kind === "component") {
       const dsl = template.data as unknown as ComponentTemplateDSL;
       const object: Extract<BoardObject, { type: "component" }> = {
-        id: `component-${Date.now()}`,
+        id: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         type: "component",
         x: 1180,
         y: 100 + board.objects.length * 20,
@@ -1864,7 +1864,7 @@ export function App() {
         setPages((items) => [...items, pageDsl]);
       }
       const object: Extract<BoardObject, { type: "page" }> = {
-        id: `obj-${pageDsl.page.id}`,
+        id: `obj-${pageDsl.page.id}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
         type: "page",
         pageId: pageDsl.page.id,
         x: 120,
