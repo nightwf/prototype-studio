@@ -1,5 +1,5 @@
 /* 流程图 / ER 图独立编辑器 —— 与 Studio 同风格（浅色、细描边、克制强调） */
-.diagram-editor-shell { position: fixed; inset: 0; z-index: 600; display: grid; grid-template-rows: 52px minmax(0, 1fr) / 236px minmax(0, 1fr) 288px; background: var(--ui-bg-subtle); }
+.diagram-editor-shell { position: fixed; inset: 0; z-index: 600; display: grid; grid-template: 52px minmax(0, 1fr) / 236px minmax(0, 1fr) 288px; background: var(--ui-bg-subtle); }
 .diagram-editor-topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--ui-border); background: var(--ui-bg); }
 .diagram-editor-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .diagram-editor-title > span { width: 26px; height: 26px; display: grid; place-items: center; border-radius: var(--ui-radius-sm); background: var(--ui-accent-wash); color: var(--ui-accent); flex: none; }
