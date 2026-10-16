@@ -8,6 +8,8 @@ import {
   createBoard,
   createBoards,
   createProject,
+  createPages as createPageBatch,
+  appendPagesToBoard,
   deleteComponentTemplate,
   deleteBoard,
   executeBoardCommands,
@@ -37,7 +39,7 @@ import {
 } from "@prototype-studio/project-store";
 import type { ExecuteCommandsInput } from "@prototype-studio/command-engine";
 import { validateDSL } from "@prototype-studio/dsl-validator";
-import type { BoardDSL, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardDSL, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, ProjectRow, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { newToken } from "./auth";
@@ -136,6 +138,30 @@ export class ProjectSpaceManager {
     await writePage(row.spacePath, dsl);
     await this.touchProject(projectId);
     return { id: dsl.page.id, title: dsl.page.title };
+  }
+
+  /** 原子批量建页：整体校验通过才写入，失败不留半成品。 */
+  async createPages(userId: string, projectId: string, dsls: PageDSL[]) {
+    const row = await this.requireProject(userId, projectId);
+    const created = await createPageBatch(row.spacePath, dsls);
+    await this.touchProject(projectId);
+    return created;
+  }
+
+  /** 把已有页面按两列自动铺到指定画布，跳过已放置的页面。 */
+  async placePagesOnBoard(userId: string, projectId: string, boardId: string, pageIds: string[], options: { source?: RevisionSource; operator?: string } = {}) {
+    const row = await this.requireProject(userId, projectId);
+    const result = await appendPagesToBoard(row.spacePath, boardId, pageIds, {
+      source: options.source ?? "api",
+      operator: options.operator ?? "system"
+    });
+    await this.touchProject(projectId);
+    return {
+      board_id: result.board.id,
+      revision: result.board.revision,
+      added_page_ids: result.addedPageIds,
+      skipped_page_ids: result.skippedPageIds
+    };
   }
 
   async applyPageCommands(userId: string, projectId: string, pageId: string, input: Omit<ExecuteCommandsInput, "dsl">) {

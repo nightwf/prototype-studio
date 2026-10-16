@@ -224,6 +224,12 @@ export const webSpace = {
   restoreBoard(projectId: string, trashId: string) {
     return request<{ ok: true; board: BoardDSL }>(`/api/projects/${projectId}/boards/trash/${encodeURIComponent(trashId)}/restore`, { method: "POST" });
   },
+  placePagesOnBoard(projectId: string, boardId: string, pageIds: string[]) {
+    return request<{ ok: true; board_id: string; revision: number; added_page_ids: string[]; skipped_page_ids: string[] }>(
+      `/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}/pages`,
+      { method: "POST", body: JSON.stringify({ page_ids: pageIds }) }
+    );
+  },
   boardCommands(projectId: string, boardId: string, baseRevision: number, commands: BoardCommand[], source: RevisionSource, operator: string) {
     return request<{ ok: true; revision: number }>(`/api/projects/${projectId}/boards/${encodeURIComponent(boardId)}/commands`, {
       method: "POST",

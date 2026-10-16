@@ -14,6 +14,8 @@ import {
   createBoardsInputSchema,
   createOverlayInputSchema,
   createPageInputSchema,
+  createPagesInputSchema,
+  placePagesOnBoardInputSchema,
   deletePageInputSchema,
   deleteComponentInputSchema,
   deleteBoardInputSchema,
@@ -202,6 +204,20 @@ export function createPrototypeStudioServer(options: CreateServerOptions): McpSe
     inputSchema: createPageInputSchema,
     annotations: createAnnotations
   }, async (input) => response(await service.createPage(input), "页面已创建。"));
+
+  server.registerTool("prototype_create_pages", {
+    title: "Create Prototype Studio Pages (batch, atomic)",
+    description: "Create many pages in one atomic call: every page is validated first (DSL rules, duplicate ids in the batch, conflicts with existing pages); if anything is wrong nothing is written and the failure details list index/pageId/path per problem. By default the new pages are laid out in two columns on the default board so the user sees them on the canvas; pass place_on_board=none to skip or board_id to target a specific board. Prefer this over calling prototype_create_page in a loop.",
+    inputSchema: createPagesInputSchema,
+    annotations: createAnnotations
+  }, async (input) => response(await service.createPages(input), "批量页面已创建。")) ;
+
+  server.registerTool("prototype_place_pages_on_board", {
+    title: "Place Prototype Studio Pages On Board",
+    description: "Lay existing pages out on a board (two columns, appended below current content) without duplicating pages already placed. Pages are content and boards are arrangement: call this when the user expects to see pages on the canvas, or when prototype_get_project reports pages_not_on_any_board.",
+    inputSchema: placePagesOnBoardInputSchema,
+    annotations: updateAnnotations
+  }, async (input) => response(await service.placePagesOnBoard(input), "页面已铺到画布。"));
 
   server.registerTool("prototype_delete_page", {
     title: "Delete Prototype Studio Page",

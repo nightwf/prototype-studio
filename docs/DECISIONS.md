@@ -40,3 +40,18 @@ MVP Revision 同时保存 Before/After 与 Command，便于可靠 Diff 和恢复
 - Studio 粘贴入口自动识别结构化模板，Markdown 路径保持不变。
 
 后续迭代：模板变更后的“增量同步”（新旧 DSL diff → 结构化命令 → 按版本链增量应用），避免全量重生成覆盖手动修改。
+
+## ADR-009：页面即内容、画布即编排，AI 交付必须一次成型（已实现）
+
+**背景**：AI（Codex）通过 MCP 生成原型时出现两类稳定性问题——(1) 校验失败只返回一句“页面 DSL 未通过校验”，拿不到出错位置，只能反复试错；(2) 批量生成多页时中途失败会留下半成品项目；(3) 页面生成后不进入任何画布，用户在“画布”里看不到东西，分不清该生成页面还是画布。
+
+**决策**：
+
+1. **语义固定**：`pages/*.ui.yaml` 是内容，`boards/*.board.yaml` 是编排。生成原型 = 建页面 + 把页面铺到画布；不存在“只生成画布就完成原型”的路径。
+2. **错误必须可定位**：MCP 错误信封统一携带 `details`；DSL 校验失败返回 `index / pageId / path / message / suggestion` 列表，不再丢诊断。
+3. **批量必须原子**：`prototype_create_pages` 先整体校验（DSL 合法性、批次内 ID 重复、与已有页面冲突），全部通过才写入；任一页有问题则整批不写入。`prototype_create_project` 携带 pages 时失败会把刚建的项目回滚进回收站。
+4. **默认可见**：批量建页默认把新页面按两列铺到默认画布（`place_on_board="default"`），可用 `"none"` 关闭。
+5. **可自检**：`prototype_get_project` 返回 `boards[].placed_page_ids`、`pages_not_on_any_board` 与 `workflow_hint`，AI 能自己发现“页面没上画布”并调用 `prototype_place_pages_on_board` 修正。
+6. **人在环可见**：Studio 顶栏提供「同步」按钮（网页端）重新拉取服务端页面与画布；页面树标记「未上画布」，页面菜单提供「放入当前画布」；画布为空但存在页面时给出引导提示。
+
+**影响**：MCP 工具从“能写”升级为“写得稳、错得清、结果可见”。已有单页 `prototype_create_page` 保持兼容，但描述里明确推荐批量工具；`prototype_validate_dsl` 支持 `dsl` 单页与 `dsls` 批量两种入参。

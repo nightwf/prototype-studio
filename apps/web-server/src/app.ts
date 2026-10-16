@@ -504,6 +504,24 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     return { ok: true, revision: result.revision.revision, changed_object_ids: result.revision.changedObjectIds };
   });
 
+  // 把已有页面按两列自动铺到画布（已在画布上的页面自动跳过）。
+  app.post("/api/projects/:projectId/boards/:boardId/pages", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as { page_ids?: string[] };
+    if (!Array.isArray(body.page_ids) || !body.page_ids.length) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "page_ids 为必填。" });
+      return;
+    }
+    const result = await options.spaces.placePagesOnBoard(
+      user.id,
+      projectIdOf(request.params),
+      boardIdOf(request.params),
+      body.page_ids,
+      { source: "api", operator: user.name }
+    );
+    return { ok: true, ...result };
+  });
+
   app.post("/api/projects/:projectId/board-commands", async (request, reply) => {
     const user = await requireUser(request, reply);
     const body = request.body as { base_revision?: number; commands?: BoardCommand[]; source?: RevisionSource; operator?: string };

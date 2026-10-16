@@ -27,14 +27,22 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
   const service = new CloudMcpService(options.metadata, options.spaces, options.baseUrl);
   const server = new McpServer({ name: "prototype-studio-cloud-mcp", version: "1.0.0" });
 
-  type Outcome<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
+  type Outcome<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string; details?: unknown } };
 
   const execute = async <T>(operation: () => Promise<T>): Promise<Outcome<T>> => {
     try {
       return { ok: true, data: await operation() };
     } catch (error) {
       if (error instanceof McpUnauthorizedError) return { ok: false, error: { code: "UNAUTHORIZED", message: error.message } };
-      return { ok: false, error: { code: (error as { code?: string }).code ?? "INTERNAL_ERROR", message: error instanceof Error ? error.message : "未知错误" } };
+      const details = (error as { details?: unknown }).details;
+      return {
+        ok: false,
+        error: {
+          code: (error as { code?: string }).code ?? "INTERNAL_ERROR",
+          message: error instanceof Error ? error.message : "未知错误",
+          ...(details === undefined ? {} : { details })
+        }
+      };
     }
   };
 
@@ -54,21 +62,31 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
 
   server.registerTool("prototype_create_project", {
     title: "Create Prototype Studio Project",
-    description: "Create a new project space. Optionally deliver pages so the project is immediately usable.",
+    description: "Create a new project space. Optionally deliver pages in the same call. Pages are validated as a batch: if any page is invalid nothing is written and the freshly created project is rolled back to trash, so no half-generated project is left behind. By default the delivered pages are laid out on the project's default board so the user immediately sees them on the canvas.",
     inputSchema: z.object({
       name: z.string().min(1),
       description: z.string().optional(),
-      pages: z.array(z.record(z.any())).optional()
+      pages: z.array(z.record(z.any())).max(50).optional(),
+      place_pages_on_board: z.enum(["none", "default"]).optional()
     }).strict()
   }, async (input) => respond(async (userId) => {
     const row = await service.createProject(userId, input.name, input.description);
-    for (const page of input.pages ?? []) await service.createPage(userId, row.id, page as unknown as import("@prototype-studio/dsl-schema").PageDSL);
-    return { project_id: row.id, name: row.name, preview_url: service.previewUrl(row.id) };
+    const pages = input.pages ?? [];
+    if (!pages.length) return { project_id: row.id, name: row.name, page_count: 0, preview_url: service.previewUrl(row.id) };
+    try {
+      const batch = await service.createPages(userId, row.id, pages as unknown as import("@prototype-studio/dsl-schema").PageDSL[], {
+        placeOnBoard: input.place_pages_on_board ?? "default"
+      });
+      return { project_id: row.id, name: row.name, page_count: batch.created_count, placement: batch.placement, preview_url: service.previewUrl(row.id) };
+    } catch (error) {
+      await service.archiveProject(userId, row.id).catch(() => undefined);
+      throw error;
+    }
   }));
 
   server.registerTool("prototype_get_project", {
     title: "Get Prototype Studio Project",
-    description: "Read project metadata and page list.",
+    description: "Read project metadata, pages, boards and which pages are placed on which board. pages_not_on_any_board lists pages that exist but are not visible on any canvas; use prototype_place_pages_on_board to fix that.",
     inputSchema: z.object({ project_id: projectId }).strict()
   }, async (input) => respond(async (userId) => service.project(userId, input.project_id)));
 
@@ -207,9 +225,31 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
 
   server.registerTool("prototype_create_page", {
     title: "Create Prototype Studio Page",
-    description: "Create a validated page DSL inside a project. For back-office systems, include layout.navigation (title + items with key/label/icon/path/active/children) so the renderer draws a left sidebar shell.",
-    inputSchema: z.object({ project_id: projectId, dsl: z.record(z.any()) }).strict()
-  }, async (input) => respond(async (userId) => service.createPage(userId, input.project_id, input.dsl as unknown as import("@prototype-studio/dsl-schema").PageDSL)));
+    description: "Create ONE validated page inside a project. Pages are content; a canvas/board is the arrangement of pages. When the user should see the result under 画布, pass place_on_board=\"default\" so the page is laid out on the default board. Prefer prototype_create_pages when creating several pages. Validation failures return every offending DSL path under error.details and write nothing.",
+    inputSchema: z.object({ project_id: projectId, dsl: z.record(z.any()), place_on_board: z.enum(["none", "default"]).optional() }).strict()
+  }, async (input) => respond(async (userId) => service.createPage(userId, input.project_id, input.dsl as unknown as import("@prototype-studio/dsl-schema").PageDSL, { placeOnBoard: input.place_on_board ?? "none" })));
+
+  server.registerTool("prototype_create_pages", {
+    title: "Create Prototype Studio Pages (batch, atomic)",
+    description: "Create MANY pages in one atomic call: every page is validated first (DSL rules, duplicate ids inside the batch, conflicts with existing pages); if anything is wrong nothing is written and error.details lists index/pageId/path per problem. By default the new pages are laid out in two columns on the default board so the user sees the prototype on the canvas; pass place_on_board=\"none\" to skip, or board_id to target a specific board. Use this instead of calling prototype_create_page in a loop.",
+    inputSchema: z.object({
+      project_id: projectId,
+      dsls: z.array(z.record(z.any())).min(1).max(50),
+      place_on_board: z.enum(["none", "default"]).optional(),
+      board_id: boardId.optional()
+    }).strict()
+  }, async (input) => respond(async (userId) => service.createPages(
+    userId,
+    input.project_id,
+    input.dsls as unknown as import("@prototype-studio/dsl-schema").PageDSL[],
+    { placeOnBoard: input.board_id ?? input.place_on_board ?? "default" }
+  )));
+
+  server.registerTool("prototype_place_pages_on_board", {
+    title: "Place Prototype Studio Pages On Board",
+    description: "Lay existing pages out on a board (two columns, appended below current content) without duplicating pages that are already placed. Pages are content and boards are arrangement: call this whenever the user expects to see pages on 画布, or when prototype_get_project reports pages_not_on_any_board.",
+    inputSchema: z.object({ project_id: projectId, board_id: boardId, page_ids: z.array(pageId).min(1).max(200) }).strict()
+  }, async (input) => respond(async (userId) => service.placePagesOnBoard(userId, input.project_id, input.board_id, input.page_ids)));
 
   server.registerTool("prototype_delete_page", {
     title: "Delete Prototype Studio Page",
@@ -249,7 +289,7 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
 
   server.registerTool("prototype_apply_commands", {
     title: "Apply Prototype Studio Page Commands",
-    description: "Atomically apply page commands through the shared Command Engine.",
+    description: "Atomically apply page commands through the shared Command Engine. Read the page with prototype_get_dsl first and pass that revision as base_revision; a stale revision fails with REVISION_CONFLICT (error.details carries currentRevision). Supported commands: ADD_COMPONENT {container, component, index?}; UPDATE_COMPONENT {target, changes}; MOVE_COMPONENT {target, container, index}; DELETE_COMPONENT {target}; CREATE_OVERLAY {overlay, index?}; UPDATE_OVERLAY {target, changes}; DELETE_OVERLAY {target}; ADD_RULE {rule}; UPDATE_RULE {target, changes}; DELETE_RULE {target}; ADD_EVENT {event}; UPDATE_EVENT {target, changes}. container is one of search.fields, search.actions, toolbar.actions, table.columns, form.fields, detail.children, sections, overlays. target is a stable component id such as search.status.",
     inputSchema: z.object({
       project_id: projectId,
       page_id: pageId,
@@ -273,9 +313,9 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
 
   server.registerTool("prototype_validate_dsl", {
     title: "Validate Prototype Studio DSL",
-    description: "Validate a candidate page DSL without writing.",
-    inputSchema: z.object({ dsl: z.record(z.any()) }).strict()
-  }, async (input) => respond(async () => service.validateDsl(input.dsl)));
+    description: "Validate one or many candidate page DSLs without writing. Pass dsl for a single page, or dsls for a batch; each result lists valid plus the exact error paths. Call this before prototype_create_pages when the DSL is large or hand-written.",
+    inputSchema: z.object({ dsl: z.record(z.any()).optional(), dsls: z.array(z.record(z.any())).min(1).max(50).optional() }).strict()
+  }, async (input) => respond(async () => (input.dsls ? service.validateDslBatch(input.dsls) : service.validateDsl(input.dsl))));
 
   server.registerTool("prototype_get_preview_url", {
     title: "Get Prototype Studio Preview URL",

@@ -86,6 +86,20 @@ export const createPageInputSchema = z.object({
   dsl: pageDsl
 }).strict();
 
+export const createPagesInputSchema = z.object({
+  dsls: z.array(pageDsl).min(1).max(50)
+    .describe("一次提交的多个页面 DSL；先整体校验，全部通过才写入。"),
+  place_on_board: z.enum(["none", "default"]).optional()
+    .describe("默认 default：把新页面按两列铺到默认画布，让用户在画布中直接看到原型；传 none 则不铺。"),
+  board_id: boardId.optional()
+    .describe("指定要铺入的画布；省略时使用默认画布。")
+}).strict();
+
+export const placePagesOnBoardInputSchema = z.object({
+  board_id: boardId,
+  page_ids: z.array(pageId).min(1).max(200).describe("要铺到画布上的页面 ID；已在画布上的页面会自动跳过。")
+}).strict();
+
 export const updateComponentInputSchema = z.object({
   page_id: pageId,
   component_id: componentId,
@@ -270,6 +284,8 @@ export type CreateComponentTemplateInput = z.infer<typeof createComponentTemplat
 export type UpdateComponentTemplateInput = z.infer<typeof updateComponentTemplateInputSchema>;
 export type DeleteComponentTemplateInput = z.infer<typeof deleteComponentTemplateInputSchema>;
 export type CreatePageInput = z.infer<typeof createPageInputSchema>;
+export type CreatePagesInput = z.infer<typeof createPagesInputSchema>;
+export type PlacePagesOnBoardInput = z.infer<typeof placePagesOnBoardInputSchema>;
 export type UpdateComponentInput = z.infer<typeof updateComponentInputSchema>;
 export type MoveComponentInput = z.infer<typeof moveComponentInputSchema>;
 export type DeleteComponentInput = z.infer<typeof deleteComponentInputSchema>;

@@ -11,6 +11,20 @@
 | Command Engine | 校验并增量修改 DSL、产生 Revision | 绕过 baseRevision 覆盖页面 |
 | Project Store | 本地文件、历史、审计、监听和迁移 | 云端账号与服务端数据库 |
 
+## 1.1 AI 交付链路（Codex / MCP）
+
+```text
+需求文档 → Codex 生成 PageDSL 批次
+→ prototype_validate_dsl（可选自检）
+→ prototype_create_pages（原子校验 + 写入）
+→ prototype_place_pages_on_board（默认自动完成：两列铺到默认画布）
+→ prototype_get_project 自检 pages_not_on_any_board 是否为空
+→ 用户在 Studio 点「同步」看到结果
+```
+
+- 页面 = 内容（`pages/*.ui.yaml`）；画布 = 编排（`boards/*.board.yaml`）。AI 交付原型时必须同时产出两者。
+- 失败语义：校验错误带 `index/pageId/path/message/suggestion`；revision 冲突带 `currentRevision`；批量操作不留半成品。
+
 ## 2. 修改链路
 
 所有来源使用同一入口：

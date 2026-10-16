@@ -10,7 +10,9 @@ import {
   DESIGN_SYSTEM_VERSION,
   DSL_VERSION,
   RENDERER_VERSION,
+  type BoardCommand,
   type BoardDSL,
+  type BoardPageObject,
   type BoardRevisionRecord,
   type Command,
   type ComponentTemplateDSL,
@@ -492,6 +494,70 @@ export async function executeBoardCommands(root: string, boardId: string, input:
   return result;
 }
 
+export interface AppendPagesToBoardResult {
+  board: BoardDSL;
+  addedPageIds: string[];
+  skippedPageIds: string[];
+}
+
+/**
+ * 把页面按两列自动铺到指定画布（已在该画布上的页面会跳过）。
+ * 走画布命令引擎，因此会生成新的 board revision 并写入审计。
+ */
+export async function appendPagesToBoard(
+  root: string,
+  boardId: string,
+  pageIds: string[],
+  options: { source?: RevisionSource; operator?: string } = {}
+): Promise<AppendPagesToBoardResult> {
+  const board = await readBoard(root, boardId);
+  const placed = new Set(
+    board.objects.filter((object): object is BoardPageObject => object.type === "page").map((object) => object.pageId)
+  );
+  const unique = [...new Set(pageIds)];
+  const known = new Set((await listPages(root)).map((page) => page.id));
+  const missing = unique.filter((pageId) => !known.has(pageId));
+  if (missing.length) throw new ProjectStoreError("PAGE_NOT_FOUND", `以下页面不存在：${missing.join("、")}。`);
+  const toAdd = unique.filter((pageId) => !placed.has(pageId));
+  const skipped = unique.filter((pageId) => placed.has(pageId));
+  if (!toAdd.length) return { board, addedPageIds: [], skippedPageIds: skipped };
+  const objectIds = new Set(board.objects.map((object) => object.id));
+  const maxY = board.objects.reduce(
+    (max, object) => ("y" in object && "height" in object ? Math.max(max, object.y + object.height) : max),
+    0
+  );
+  const startY = Math.max(80, maxY + 80);
+  const commands: BoardCommand[] = toAdd.map((pageId, index) => {
+    let objectId = `obj-${pageId}`;
+    let suffix = 2;
+    while (objectIds.has(objectId)) {
+      objectId = `obj-${pageId}-${suffix}`;
+      suffix += 1;
+    }
+    objectIds.add(objectId);
+    return {
+      type: "ADD_BOARD_OBJECT",
+      object: {
+        id: objectId,
+        type: "page",
+        pageId,
+        x: 120 + (index % 2) * 1040,
+        y: startY + Math.floor(index / 2) * 720,
+        width: 960,
+        height: 640,
+        source: "default"
+      }
+    };
+  });
+  const result = await executeBoardCommands(root, boardId, {
+    baseRevision: board.revision,
+    commands,
+    source: options.source ?? "api",
+    operator: options.operator ?? "system"
+  });
+  return { board: result.board, addedPageIds: toAdd, skippedPageIds: skipped };
+}
+
 export async function getBoardRevision(root: string, boardId: string, revision: number): Promise<BoardRevisionRecord> {
   const filePath = projectPath(root, `.prototype/revisions/boards/${assertBoardId(boardId)}/${String(revision).padStart(6, "0")}.json`);
   if (!(await pathExists(filePath))) {
@@ -716,6 +782,66 @@ export async function createPage(root: string, dsl: PageDSL): Promise<ProjectPag
     revision: dsl.revision,
     file: pageRelativePath(dsl.page.id)
   };
+}
+
+export interface PageBatchIssue {
+  index: number;
+  pageId?: string;
+  code: string;
+  message: string;
+  path?: string;
+  suggestion?: string;
+}
+
+/**
+ * 原子批量建页：先整体校验（批次内重复、已有页面冲突、DSL 合法性），全部通过才写入；
+ * 任一步写入失败则回滚已写页面，避免留下半成品项目。
+ */
+export async function createPages(root: string, dsls: PageDSL[]): Promise<ProjectPageSummary[]> {
+  await getManifest(root);
+  if (!dsls.length) return [];
+  const issues: PageBatchIssue[] = [];
+  const seen = new Set<string>();
+  for (const [index, dsl] of dsls.entries()) {
+    const pageId = typeof dsl?.page?.id === "string" ? dsl.page.id : undefined;
+    const validation = validateDSL(dsl);
+    if (!validation.valid) {
+      for (const error of validation.errors) {
+        issues.push({ index, pageId, code: error.code, message: error.message, path: error.path, suggestion: error.suggestion });
+      }
+      continue;
+    }
+    if (seen.has(dsl.page.id)) {
+      issues.push({ index, pageId, code: "DUPLICATE_COMPONENT_ID", message: `批次内页面 ID 重复：${dsl.page.id}`, path: "$.page.id" });
+      continue;
+    }
+    seen.add(dsl.page.id);
+    if (await pathExists(projectPath(root, pageRelativePath(dsl.page.id)))) {
+      issues.push({ index, pageId, code: "PAGE_EXISTS", message: `页面“${dsl.page.id}”已存在；如需覆盖请先删除该页面。`, path: "$.page.id" });
+      continue;
+    }
+  }
+  if (issues.length) {
+    throw new ProjectStoreError("INVALID_DSL_FILE", `批量建页校验未通过：${issues.length} 处问题，未写入任何页面。`, issues);
+  }
+  const written: string[] = [];
+  try {
+    for (const dsl of dsls) {
+      await writePage(root, dsl);
+      written.push(dsl.page.id);
+    }
+  } catch (error) {
+    await Promise.all(written.map((pageId) => rm(projectPath(root, pageRelativePath(pageId)), { force: true })));
+    throw error;
+  }
+  return dsls.map((dsl) => ({
+    id: dsl.page.id,
+    title: dsl.page.title,
+    type: dsl.page.type,
+    status: dsl.page.status,
+    revision: dsl.revision,
+    file: pageRelativePath(dsl.page.id)
+  }));
 }
 
 export async function deletePage(root: string, pageId: string): Promise<void> {

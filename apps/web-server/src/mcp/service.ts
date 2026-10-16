@@ -6,13 +6,15 @@ import {
   getComponentTemplate,
   getManifest,
   getPage,
+  listBoards,
   listComponentTemplates,
   listPages,
+  readBoard,
   writeComponentTemplate,
   writePage
 } from "@prototype-studio/project-store";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
-import type { BoardCommand, BoardDSL, Command, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, BoardDSL, BoardPageObject, Command, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
 import type { MetadataStore } from "../metadata";
 import type { ProjectSpaceManager } from "../spaces";
 
@@ -20,6 +22,17 @@ export class McpUnauthorizedError extends Error {
   constructor() {
     super("未授权：请提供有效的 Bearer Token。");
     this.name = "McpUnauthorizedError";
+  }
+}
+
+export class CloudMcpValidationError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly details?: unknown
+  ) {
+    super(message);
+    this.name = "CloudMcpValidationError";
   }
 }
 
@@ -94,7 +107,41 @@ export class CloudMcpService {
     const path = await this.projectPath(userId, projectId);
     const manifest = await getManifest(path);
     const pages = await listPages(path);
-    return { project: { id: projectId, name: manifest.name, description: manifest.description }, pages };
+    const boards = await listBoards(path);
+    const placedAnywhere = new Set<string>();
+    const boardSummaries = [];
+    for (const summary of boards) {
+      const board = await readBoard(path, summary.id);
+      const placedPageIds = board.objects
+        .filter((object): object is BoardPageObject => object.type === "page")
+        .map((object) => object.pageId);
+      for (const pageId of placedPageIds) placedAnywhere.add(pageId);
+      boardSummaries.push({
+        id: board.id,
+        name: board.name,
+        is_default: board.id === (manifest.defaultBoardId ?? "main"),
+        revision: board.revision,
+        object_count: board.objects.length,
+        placed_page_ids: [...new Set(placedPageIds)]
+      });
+    }
+    const unplaced = pages.filter((page) => !placedAnywhere.has(page.id)).map((page) => page.id);
+    return {
+      project: { id: projectId, name: manifest.name, description: manifest.description },
+      pages,
+      boards: boardSummaries,
+      default_board_id: manifest.defaultBoardId ?? "main",
+      pages_not_on_any_board: unplaced,
+      workflow_hint: unplaced.length
+        ? `有 ${unplaced.length} 个页面还没放到任何画布。页面是内容、画布是编排；若要用户在“画布”中看到原型，请调用 prototype_place_pages_on_board 把它们铺到画布上。`
+        : "所有页面都已经放到画布上。"
+    };
+  }
+
+  /** 回滚：把刚创建但内容未交付成功的项目移入回收站（可恢复）。 */
+  async archiveProject(userId: string, projectId: string) {
+    await this.spaces.archiveSpace(userId, projectId);
+    return { project_id: projectId, archived: true };
   }
 
   async listProjectPages(userId: string, projectId: string) {
@@ -136,12 +183,46 @@ export class CloudMcpService {
     return this.spaces.deleteBoard(userId, projectId, boardId);
   }
 
-  async createPage(userId: string, projectId: string, dsl: PageDSL) {
+  async createPage(userId: string, projectId: string, dsl: PageDSL, options: { placeOnBoard?: "none" | "default" | string } = {}) {
     const path = await this.projectPath(userId, projectId);
     const validation = validateDSL(dsl);
-    if (!validation.valid) throw new Error("页面 DSL 未通过校验。");
+    if (!validation.valid) {
+      throw new CloudMcpValidationError(
+        "INVALID_INPUT",
+        `页面 DSL 未通过校验（${validation.errors.length} 处问题），未写入任何文件。请按 details 中的 path 逐条修正后重试。`,
+        validation.errors
+      );
+    }
     await writePage(path, dsl);
-    return { page_id: dsl.page.id, title: dsl.page.title };
+    const mode = options.placeOnBoard ?? "none";
+    const placement = mode === "none"
+      ? undefined
+      : await this.spaces.placePagesOnBoard(userId, projectId, await this.resolveBoardId(path, mode), [dsl.page.id], { source: "mcp", operator: "codex" });
+    return { page_id: dsl.page.id, title: dsl.page.title, revision: dsl.revision, placement };
+  }
+
+  private async resolveBoardId(path: string, mode: "default" | string): Promise<string> {
+    if (mode !== "default") return mode;
+    const manifest = await getManifest(path);
+    return manifest.defaultBoardId ?? "main";
+  }
+
+  /** 原子批量建页；默认把新页面按两列铺到默认画布，确保用户在画布中能看到原型。 */
+  async createPages(userId: string, projectId: string, dsls: PageDSL[], options: { placeOnBoard?: "none" | "default" | string } = {}) {
+    const created = await this.spaces.createPages(userId, projectId, dsls);
+    const mode = options.placeOnBoard ?? "default";
+    const placement = mode === "none" || !created.length
+      ? undefined
+      : await this.spaces.placePagesOnBoard(userId, projectId, await this.resolveBoardId(await this.projectPath(userId, projectId), mode), created.map((page) => page.id), { source: "mcp", operator: "codex" });
+    return {
+      created_count: created.length,
+      pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })),
+      placement
+    };
+  }
+
+  async placePagesOnBoard(userId: string, projectId: string, boardId: string, pageIds: string[]) {
+    return this.spaces.placePagesOnBoard(userId, projectId, boardId, pageIds, { source: "mcp", operator: "codex" });
   }
 
   async deletePage(userId: string, projectId: string, pageId: string) {
@@ -190,7 +271,17 @@ export class CloudMcpService {
   }
 
   validateDsl(dsl: unknown) {
-    return { valid: validateDSL(dsl).valid, errors: validateDSL(dsl).errors };
+    const validation = validateDSL(dsl);
+    return { valid: validation.valid, errors: validation.errors, warnings: validation.warnings };
+  }
+
+  /** 批量校验：一次返回每一页的校验结果，便于提交前自检。 */
+  validateDslBatch(dsls: unknown[]) {
+    const results = dsls.map((dsl, index) => {
+      const validation = validateDSL(dsl);
+      return { index, valid: validation.valid, errors: validation.errors, warnings: validation.warnings };
+    });
+    return { valid: results.every((item) => item.valid), results };
   }
 
   previewUrl(projectId: string, pageId?: string) {

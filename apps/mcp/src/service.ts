@@ -3,7 +3,9 @@ import type { BoardCommand, Command, ComponentTemplateDSL, PageDSL, UIComponent 
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
 import {
   ProjectStoreError,
+  appendPagesToBoard,
   createComponentTemplate,
+  createPages,
   executeBoardCommands,
   createBoard,
   createBoards,
@@ -13,6 +15,7 @@ import {
   deletePage,
   executeProjectCommands,
   getComponentTemplate,
+  getManifest,
   getPage,
   listComponentTemplates,
   listPages,
@@ -45,7 +48,9 @@ import type {
   UpdateComponentInput,
   UpdateOverlayInput,
   ValidateDslInput,
-  DeleteComponentTemplateInput
+  DeleteComponentTemplateInput,
+  CreatePagesInput,
+  PlacePagesOnBoardInput
 } from "./schemas.js";
 
 export interface ToolSuccess<T> {
@@ -154,10 +159,33 @@ export class PrototypeService {
   getProject(): Promise<ToolOutcome<unknown>> {
     return run(async () => {
       const project = await openProject(this.projectRoot);
+      const boards = await listBoards(this.projectRoot);
+      const placedAnywhere = new Set<string>();
+      const boardSummaries = [];
+      for (const board of boards) {
+        const full = await readBoard(this.projectRoot, board.id);
+        const placedPageIds = full.objects.filter((object) => object.type === "page").map((object) => (object as { pageId: string }).pageId);
+        for (const pageId of placedPageIds) placedAnywhere.add(pageId);
+        boardSummaries.push({
+          id: full.id,
+          name: full.name,
+          is_default: full.id === (project.manifest.defaultBoardId ?? "main"),
+          revision: full.revision,
+          object_count: full.objects.length,
+          placed_page_ids: [...new Set(placedPageIds)]
+        });
+      }
+      const unplaced = project.pages.filter((page) => !placedAnywhere.has(page.id)).map((page) => page.id);
       return {
         manifest: project.manifest,
         page_count: project.pages.length,
-        scope: "configured-project-root"
+        scope: "configured-project-root",
+        boards: boardSummaries,
+        default_board_id: project.manifest.defaultBoardId ?? "main",
+        pages_not_on_any_board: unplaced,
+        workflow_hint: unplaced.length
+          ? `有 ${unplaced.length} 个页面还没放到任何画布；如需用户在画布中看到原型，请调用 prototype_place_pages_on_board。`
+          : "所有页面都已经放到画布上。"
       };
     });
   }
@@ -342,6 +370,32 @@ export class PrototypeService {
 
   createPage(input: CreatePageInput): Promise<ToolOutcome<unknown>> {
     return run(async () => ({ page: await createPage(this.projectRoot, asPageDsl(input.dsl)) }));
+  }
+
+  /** 原子批量建页；默认把新页面按两列铺到默认画布。 */
+  createPages(input: CreatePagesInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      const created = await createPages(this.projectRoot, input.dsls.map((dsl) => asPageDsl(dsl as Record<string, unknown>)));
+      const mode = input.place_on_board ?? "default";
+      if (mode === "none" || !created.length) {
+        return { created_count: created.length, pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })) };
+      }
+      const manifest = await getManifest(this.projectRoot);
+      const boardId = input.board_id ?? manifest.defaultBoardId ?? "main";
+      const result = await appendPagesToBoard(this.projectRoot, boardId, created.map((page) => page.id), { source: "mcp", operator: "codex" });
+      return {
+        created_count: created.length,
+        pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })),
+        placement: { board_id: result.board.id, revision: result.board.revision, added_page_ids: result.addedPageIds, skipped_page_ids: result.skippedPageIds }
+      };
+    });
+  }
+
+  placePagesOnBoard(input: PlacePagesOnBoardInput): Promise<ToolOutcome<unknown>> {
+    return run(async () => {
+      const result = await appendPagesToBoard(this.projectRoot, input.board_id, input.page_ids, { source: "mcp", operator: "codex" });
+      return { board_id: result.board.id, revision: result.board.revision, added_page_ids: result.addedPageIds, skipped_page_ids: result.skippedPageIds };
+    });
   }
 
   deletePage(input: DeletePageInput): Promise<ToolOutcome<unknown>> {

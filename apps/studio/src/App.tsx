@@ -931,6 +931,58 @@ export function App() {
     setTrashedBoards(trashed.boards);
   }, [webProjectId]);
 
+  /** 重新从服务端拉取页面与画布：Codex/AI 在外部生成内容后，用户点「同步」即可看到。 */
+  const refreshProjectData = useCallback(async () => {
+    if (!webMode || !webProjectId) {
+      toast("info", "桌面端自动同步", "桌面版由文件监听自动刷新，无需手动同步。");
+      return;
+    }
+    try {
+      const tree = await webSpace.tree(webProjectId);
+      const loadedPages: PageDSL[] = [];
+      for (const summary of tree.pages) loadedPages.push((await webSpace.getPage(webProjectId, summary.id)).dsl);
+      const boardId = tree.boards.some((item) => item.id === currentBoardIdRef.current)
+        ? currentBoardIdRef.current
+        : tree.manifest.defaultBoardId ?? tree.board.id;
+      const selectedBoard = boardId === tree.board.id ? tree.board : (await webSpace.board(webProjectId, boardId)).board;
+      setPages(loadedPages);
+      setBoards(tree.boards);
+      setComponents(tree.components ?? []);
+      setTrashedBoards((await webSpace.trashedBoards(webProjectId)).boards);
+      setCurrentBoardId(boardId);
+      setBoard(selectedBoard);
+      boardCacheRef.current = new Map([[boardId, selectedBoard]]);
+      if (currentPageIdRef.current && !loadedPages.some((page) => page.page.id === currentPageIdRef.current)) {
+        setCurrentPageId(loadedPages[0]?.page.id ?? null);
+      }
+      const placedCount = selectedBoard.objects.filter((object) => object.type === "page").length;
+      toast("success", "已同步最新内容", `页面 ${loadedPages.length} · 画布 ${tree.boards.length} · 当前画布 ${placedCount} 页`);
+    } catch (error) {
+      toast("danger", "同步失败", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [toast, webProjectId]);
+
+  /** 把单个页面铺到当前画布（页面=内容，画布=编排）。 */
+  const placePageOnCurrentBoard = async (pageId: string) => {
+    if (!webMode || !webProjectId) {
+      toast("info", "网页端可用", "桌面端请在画布中使用「+ 页面」添加。");
+      return;
+    }
+    try {
+      const result = await webSpace.placePagesOnBoard(webProjectId, currentBoardId, [pageId]);
+      await refreshProjectData();
+      setViewMode("canvas");
+      setActiveWorkspace("boards");
+      toast(
+        result.added_page_ids.length ? "success" : "info",
+        result.added_page_ids.length ? "已放入画布" : "该页面已在当前画布上",
+        `boards/${currentBoardId}`
+      );
+    } catch (error) {
+      toast("danger", "放入画布失败", error instanceof Error ? error.message : "未知错误");
+    }
+  };
+
   const selectBoard = useCallback(async (boardId: string) => {
     currentBoardIdRef.current = boardId;
     setActiveWorkspace("boards");
@@ -2516,6 +2568,15 @@ ${boardExportRuntimeScript}
     } else toast("warning", "当前仅支持同容器排序", "MVP 可拖动查询区字段调整顺序");
   };
 
+  const placedPageIdsOnCurrentBoard = useMemo(
+    () => new Set(board.objects.filter((object): object is Extract<BoardObject, { type: "page" }> => object.type === "page").map((object) => object.pageId)),
+    [board.objects]
+  );
+  const unplacedPageCount = useMemo(
+    () => pages.filter((page) => !placedPageIdsOnCurrentBoard.has(page.page.id)).length,
+    [pages, placedPageIdsOnCurrentBoard]
+  );
+
   const outlineComponents: UIComponent[] = [
     ...(dsl.search?.fields ?? []),
     ...(dsl.toolbar?.actions ?? []),
@@ -2577,6 +2638,7 @@ ${boardExportRuntimeScript}
         <span className="title-divider" />
         <ToolButton compact title="撤销" disabled={viewMode === "canvas" ? !boardUndoStack.length : !currentPage || !history.length} onClick={() => void undoActive()}><Undo2 size={15} /></ToolButton>
         <ToolButton compact title="重做" disabled={viewMode === "canvas" ? !boardRedoStack.length : !currentPage || !redoStack.length} onClick={() => void redoActive()}><Redo2 size={15} /></ToolButton>
+        <ToolButton disabled={!webMode || !webProjectId} onClick={() => void refreshProjectData()} title="重新同步服务端的页面与画布（Codex 生成内容后点这里）"><RotateCcw size={14} />同步</ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={() => { setShowVersions(!showVersions); if (!showVersions) void refreshVersions(); }} active={showVersions}><History size={14} />版本 <span className="revision-badge">{projectVersions.length}</span></ToolButton>
         <ToolButton disabled={!webMode || !webProjectId} onClick={openPublishDrawer}><Share2 size={14} />发布</ToolButton>
         <ToolButton compact title="设置" onClick={() => { setSettingsSection("account"); setShowSettings(true); void refreshMcpConnection(); }}><Settings2 size={15} /></ToolButton>
@@ -2601,7 +2663,7 @@ ${boardExportRuntimeScript}
         }}><Box size={14} />组件</button>
       </div>
       {activeWorkspace === "pages" ? <>
-        <div className="left-project-label"><span>页面结构 · {pages.length}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
+        <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
           <div className="page-type-picker">{(["list", "form", "detail"] as CreatablePageType[]).map((type) => <button key={type} className={newPageType === type ? "is-active" : ""} onClick={() => setNewPageType(type)}>{type}</button>)}</div>
@@ -2615,10 +2677,11 @@ ${boardExportRuntimeScript}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => { event.preventDefault(); const pageId = event.dataTransfer.getData("text/page-id"); if (pageId) void movePage(pageId, index); }}
         >
-          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon"><Monitor size={14} /></div><div><strong>{page.page.title}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
+          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon"><Monitor size={14} /></div><div><strong>{page.page.title}{!placedPageIdsOnCurrentBoard.has(page.page.id) ? <em className="page-badge">未上画布</em> : null}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
           <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
           {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
+            <button disabled={!webMode || !webProjectId || placedPageIdsOnCurrentBoard.has(page.page.id)} onClick={() => void placePageOnCurrentBoard(page.page.id)}><LayoutGrid size={12} />放入当前画布</button>
             <button disabled={!webMode || !webProjectId} onClick={() => void savePageToTemplateLibrary(page.page.id)}><FolderOpen size={12} />保存为模板</button>
             <button disabled={index === 0} onClick={() => void movePage(page.page.id, index - 1)}><ArrowUp size={12} />上移</button>
             <button disabled={index === pages.length - 1} onClick={() => void movePage(page.page.id, index + 1)}><ArrowDown size={12} />下移</button>
@@ -2799,6 +2862,13 @@ ${boardExportRuntimeScript}
             rows={3}
           />
           <button className="board-ai-action" onClick={() => { void copyText(buildAiInstruction("board", boardAiBarIds, boardAiText)); setBoardAiText(""); }}><Copy size={13} />复制指令</button>
+        </div> : null}
+        {board.objects.length === 0 && pages.length > 0 ? <div className="board-empty-hint">
+          <Layers3 size={16} />
+          <div>
+            <strong>画布还是空的</strong>
+            <span>项目里有 {pages.length} 个页面。点上方「+ 页面」把页面放进画布，或在左侧页面菜单选择「放入当前画布」。</span>
+          </div>
         </div> : null}
         {boardTool === "page" ? <div className="board-tool-panel">
           <div className="board-tool-head"><span>ADD PAGE</span><strong>添加页面到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>

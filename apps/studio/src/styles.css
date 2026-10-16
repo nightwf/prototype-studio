@@ -488,8 +488,13 @@ button { color: inherit; }
 .diagram-launch-card { margin: 4px 0 8px; padding: 11px; display: flex; align-items: center; gap: 10px; border: 1px solid #c9d6f3; border-radius: 8px; background: #f2f6ff; color: #315cc8; }
 .diagram-launch-card > div { min-width: 0; }
 .diagram-launch-card strong,.diagram-launch-card span { display: block; }
+.page-badge { margin-left: 6px; padding: 1px 5px; border-radius: 4px; background: #fff7ed; color: #c2410c; border: 1px solid #fed7aa; font: 700 8px/1.5 var(--ps-font-mono); font-style: normal; vertical-align: middle; }
 .board-image-inspector { margin: 4px 0 8px; padding: 6px; display: flex; align-items: center; justify-content: center; border: 1px solid #dfe5eb; border-radius: 8px; background: #f6f8fa; overflow: hidden; }
 .board-image-inspector img { display: block; max-width: 100%; max-height: 150px; object-fit: contain; border-radius: 4px; }
+.board-empty-hint { position: absolute; z-index: 55; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; align-items: flex-start; gap: 10px; max-width: 420px; padding: 16px 18px; border: 1px solid #cbd5e1; border-radius: 12px; background: #ffffffee; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.10); color: #334155; pointer-events: none; }
+.board-empty-hint strong, .board-empty-hint span { display: block; }
+.board-empty-hint strong { margin-bottom: 4px; color: #0f172a; font-size: 13px; }
+.board-empty-hint span { font-size: 11px; line-height: 1.7; }
 .board-tool-panel--library { width: 300px; max-height: min(520px, 70vh); display: flex; flex-direction: column; }
 .library-tabs { display: flex; gap: 6px; padding: 10px 12px 0; }
 .library-tabs span { padding: 5px 10px; border-radius: 6px; background: #eef2f6; color: #64748b; font: 600 11px/1 system-ui, -apple-system, "PingFang SC", sans-serif; }
