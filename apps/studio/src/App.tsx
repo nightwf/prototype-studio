@@ -409,7 +409,6 @@ export function App() {
   const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [showPageCreator, setShowPageCreator] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
-  const [newPageType, setNewPageType] = useState<CreatablePageType>("list");
   const [openPageMenuId, setOpenPageMenuId] = useState<string>();
   const [pageMenuAnchor, setPageMenuAnchor] = useState<{ x: number; y: number; up?: boolean }>();
   const [mcpState, setMcpState] = useState<"stopped" | "running" | "unavailable">("stopped");
@@ -1151,7 +1150,8 @@ export function App() {
       toast("warning", "请输入页面名称");
       return;
     }
-    const page = createMinimalPage(pageSlug(title, pages.map((item) => item.page.id)), title, newPageType);
+    // Studio 内手动新建的页面统一是线框页：建完直接在画板上拖拽绘制。
+    const page = createMinimalPage(pageSlug(title, pages.map((item) => item.page.id)), title, "wireframe");
     const validation = validateDSL(page);
     if (!validation.valid) {
       toast("danger", "新页面未通过校验", validation.errors[0]?.message);
@@ -1171,11 +1171,11 @@ export function App() {
       setNewPageTitle("");
       setShowPageCreator(false);
       setPreviewReady(false);
-      toast("success", "页面已创建", `${title} · ${newPageType.toUpperCase()}`);
+      toast("success", "页面已创建", `${title} · 线框页，可直接在画板上绘制`);
     } catch (error) {
       toast("danger", "无法创建页面", error instanceof Error ? error.message : "本地页面写入失败");
     }
-  }, [newPageTitle, newPageType, pages, projectRoot, toast, webProjectId]);
+  }, [newPageTitle, pages, projectRoot, toast, webProjectId]);
 
   const renamePage = useCallback((pageId: string) => {
     const page = pages.find((item) => item.page.id === pageId);
@@ -2708,7 +2708,7 @@ ${boardExportRuntimeScript}
         <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
-          <div className="page-type-picker">{(["list", "form", "detail", "wireframe"] as CreatablePageType[]).map((type) => <button key={type} className={newPageType === type ? "is-active" : ""} onClick={() => setNewPageType(type)}>{PAGE_TYPE_LABELS[type]}</button>)}</div>
+          <div className="page-creator-note"><Pencil size={12} />新建页面为线框页，创建后直接在画板上拖拽绘制。</div>
           <div className="page-creator-actions"><button onClick={() => setShowPageCreator(false)}>取消</button><button className="is-primary" onClick={() => void addPage()}>创建页面</button></div>
         </div> : null}
         <div className="page-tree" aria-label="页面树">{pages.map((page, index) => <div
@@ -2731,7 +2731,7 @@ ${boardExportRuntimeScript}
             <button className="is-danger" onClick={() => void deletePage(page.page.id)}><Trash2 size={12} />删除…</button>
           </div> : null}
         </div>)}</div>
-        {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单、详情或线框页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
+        {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建线框页后直接在画板上拖拽绘制。" /> : dsl.page.type === "wireframe" ? <><SectionTitle>线框元件</SectionTitle><div className="inspector-empty">线框页的元素不在组件树里：在画板上点选元件，用编辑器右侧的属性面板编辑。</div></> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
         <div className="left-footer"><FileCheck2 size={13} /><span>{currentPage ? `pages/${currentPage.page.id}.ui.yaml` : "pages/"}</span><StatusDot tone={currentPage ? "success" : "neutral"}>{currentPage ? "有效" : "空"}</StatusDot></div>
       </> : activeWorkspace === "components" ? <>
         <div className="left-project-label"><span>组件模板 · {components.length}</span><ToolButton compact title="新建组件" active={showComponentCreator} onClick={() => setShowComponentCreator(!showComponentCreator)}><Plus size={13} /></ToolButton></div>

@@ -81,6 +81,8 @@ button { color: inherit; }
 .page-type-picker button { height: 26px; border: 0; border-radius: var(--ui-radius-xs); background: transparent; color: var(--ui-text-secondary); font-size: 11px; font-weight: 500; cursor: pointer; }
 .page-type-picker button:hover { color: var(--ui-text); }
 .page-type-picker button.is-active { background: var(--ui-bg); color: var(--ui-text); box-shadow: var(--ui-shadow-sm); }
+.page-creator-note { display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: var(--ui-radius-sm); background: var(--ui-accent-wash); color: var(--ui-accent); font-size: 11px; line-height: 1.5; }
+.page-creator-note svg { flex: none; }
 .page-creator-actions { display: flex; justify-content: flex-end; gap: 6px; }
 .page-creator-actions button { height: 28px; padding: 0 12px; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg); color: var(--ui-text-secondary); font-size: 12px; font-weight: 500; cursor: pointer; }
 .page-creator-actions button:hover { background: var(--ui-bg-hover); color: var(--ui-text); }
