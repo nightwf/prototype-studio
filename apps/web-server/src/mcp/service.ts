@@ -14,7 +14,7 @@ import {
   writePage
 } from "@prototype-studio/project-store";
 import { getComponentLocation, validateDSL } from "@prototype-studio/dsl-validator";
-import type { BoardCommand, BoardDSL, BoardPageObject, Command, ComponentTemplateDSL, PageDSL } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, BoardDSL, BoardPageObject, Command, ComponentTemplateDSL, PageDSL, UIComponent } from "@prototype-studio/dsl-schema";
 import type { MetadataStore } from "../metadata";
 import type { ProjectSpaceManager } from "../spaces";
 
@@ -208,14 +208,22 @@ export class CloudMcpService {
   }
 
   /** 原子批量建页；默认把新页面按两列铺到默认画布，确保用户在画布中能看到原型。 */
-  async createPages(userId: string, projectId: string, dsls: PageDSL[], options: { placeOnBoard?: "none" | "default" | string } = {}) {
-    const created = await this.spaces.createPages(userId, projectId, dsls);
+  async createPages(
+    userId: string,
+    projectId: string,
+    dsls: PageDSL[],
+    options: { placeOnBoard?: "none" | "default" | string; onConflict?: "fail" | "skip" } = {}
+  ) {
+    const result = await this.spaces.createPages(userId, projectId, dsls, { onConflict: options.onConflict ?? "fail" });
+    const created = result.created;
     const mode = options.placeOnBoard ?? "default";
-    const placement = mode === "none" || !created.length
+    const pageIdsToPlace = [...created.map((page) => page.id), ...result.skippedPageIds];
+    const placement = mode === "none" || !pageIdsToPlace.length
       ? undefined
-      : await this.spaces.placePagesOnBoard(userId, projectId, await this.resolveBoardId(await this.projectPath(userId, projectId), mode), created.map((page) => page.id), { source: "mcp", operator: "codex" });
+      : await this.spaces.placePagesOnBoard(userId, projectId, await this.resolveBoardId(await this.projectPath(userId, projectId), mode), pageIdsToPlace, { source: "mcp", operator: "codex" });
     return {
       created_count: created.length,
+      skipped_page_ids: result.skippedPageIds,
       pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })),
       placement
     };
@@ -252,6 +260,58 @@ export class CloudMcpService {
   async deleteComponentTemplate(userId: string, projectId: string, componentId: string) {
     await deleteComponentTemplate(await this.projectPath(userId, projectId), componentId);
     return { component_id: componentId, deleted: true, recoverable: true };
+  }
+
+  /** 组件级精细编辑：统一走 Command Engine（revision 校验 + 审计）。 */
+  private async applyComponentCommand(
+    userId: string,
+    projectId: string,
+    pageId: string,
+    baseRevision: number,
+    command: Command,
+    operator: string
+  ) {
+    return this.applyPageCommands(userId, projectId, pageId, baseRevision, [command], "mcp", operator);
+  }
+
+  async createOverlay(userId: string, projectId: string, pageId: string, baseRevision: number, overlay: Record<string, unknown>, index: number | undefined, operator: string) {
+    return this.applyComponentCommand(userId, projectId, pageId, baseRevision, {
+      type: "CREATE_OVERLAY",
+      overlay: overlay as unknown as UIComponent,
+      ...(index === undefined ? {} : { index })
+    }, operator);
+  }
+
+  async updateOverlay(userId: string, projectId: string, pageId: string, baseRevision: number, target: string, changes: Record<string, unknown>, operator: string) {
+    return this.applyComponentCommand(userId, projectId, pageId, baseRevision, {
+      type: "UPDATE_OVERLAY",
+      target,
+      changes: changes as Partial<UIComponent>
+    }, operator);
+  }
+
+  async updateComponent(userId: string, projectId: string, pageId: string, baseRevision: number, componentId: string, changes: Record<string, unknown>, operator: string) {
+    return this.applyComponentCommand(userId, projectId, pageId, baseRevision, {
+      type: "UPDATE_COMPONENT",
+      target: componentId,
+      changes: changes as Partial<UIComponent>
+    }, operator);
+  }
+
+  async moveComponent(userId: string, projectId: string, pageId: string, baseRevision: number, componentId: string, container: string, index: number, operator: string) {
+    return this.applyComponentCommand(userId, projectId, pageId, baseRevision, {
+      type: "MOVE_COMPONENT",
+      target: componentId,
+      container,
+      index
+    }, operator);
+  }
+
+  async deleteComponent(userId: string, projectId: string, pageId: string, baseRevision: number, componentId: string, operator: string) {
+    return this.applyComponentCommand(userId, projectId, pageId, baseRevision, {
+      type: "DELETE_COMPONENT",
+      target: componentId
+    }, operator);
   }
 
   async applyPageCommands(userId: string, projectId: string, pageId: string, baseRevision: number, commands: Command[], source: string, operator: string) {

@@ -92,7 +92,9 @@ export const createPagesInputSchema = z.object({
   place_on_board: z.enum(["none", "default"]).optional()
     .describe("默认 default：把新页面按两列铺到默认画布，让用户在画布中直接看到原型；传 none 则不铺。"),
   board_id: boardId.optional()
-    .describe("指定要铺入的画布；省略时使用默认画布。")
+    .describe("指定要铺入的画布；省略时使用默认画布。"),
+  on_conflict: z.enum(["fail", "skip"]).optional()
+    .describe("已存在同名页面时的策略：fail（默认）整批失败；skip 跳过已存在页面以便断点续跑。")
 }).strict();
 
 export const placePagesOnBoardInputSchema = z.object({

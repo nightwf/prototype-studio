@@ -375,16 +375,27 @@ export class PrototypeService {
   /** 原子批量建页；默认把新页面按两列铺到默认画布。 */
   createPages(input: CreatePagesInput): Promise<ToolOutcome<unknown>> {
     return run(async () => {
-      const created = await createPages(this.projectRoot, input.dsls.map((dsl) => asPageDsl(dsl as Record<string, unknown>)));
+      const batch = await createPages(
+        this.projectRoot,
+        input.dsls.map((dsl) => asPageDsl(dsl as Record<string, unknown>)),
+        { onConflict: input.on_conflict ?? "fail" }
+      );
+      const created = batch.created;
       const mode = input.place_on_board ?? "default";
-      if (mode === "none" || !created.length) {
-        return { created_count: created.length, pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })) };
+      const pageIdsToPlace = [...created.map((page) => page.id), ...batch.skippedPageIds];
+      if (mode === "none" || !pageIdsToPlace.length) {
+        return {
+          created_count: created.length,
+          skipped_page_ids: batch.skippedPageIds,
+          pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision }))
+        };
       }
       const manifest = await getManifest(this.projectRoot);
       const boardId = input.board_id ?? manifest.defaultBoardId ?? "main";
-      const result = await appendPagesToBoard(this.projectRoot, boardId, created.map((page) => page.id), { source: "mcp", operator: "codex" });
+      const result = await appendPagesToBoard(this.projectRoot, boardId, pageIdsToPlace, { source: "mcp", operator: "codex" });
       return {
         created_count: created.length,
+        skipped_page_ids: batch.skippedPageIds,
         pages: created.map((page) => ({ page_id: page.id, title: page.title, revision: page.revision })),
         placement: { board_id: result.board.id, revision: result.board.revision, added_page_ids: result.addedPageIds, skipped_page_ids: result.skippedPageIds }
       };

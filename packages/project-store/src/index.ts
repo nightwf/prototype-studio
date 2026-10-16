@@ -797,11 +797,24 @@ export interface PageBatchIssue {
  * 原子批量建页：先整体校验（批次内重复、已有页面冲突、DSL 合法性），全部通过才写入；
  * 任一步写入失败则回滚已写页面，避免留下半成品项目。
  */
-export async function createPages(root: string, dsls: PageDSL[]): Promise<ProjectPageSummary[]> {
+export interface CreatePagesResult {
+  created: ProjectPageSummary[];
+  /** onConflict="skip" 时被跳过的已存在页面。 */
+  skippedPageIds: string[];
+}
+
+export async function createPages(
+  root: string,
+  dsls: PageDSL[],
+  options: { onConflict?: "fail" | "skip" } = {}
+): Promise<CreatePagesResult> {
   await getManifest(root);
-  if (!dsls.length) return [];
+  if (!dsls.length) return { created: [], skippedPageIds: [] };
+  const onConflict = options.onConflict ?? "fail";
   const issues: PageBatchIssue[] = [];
   const seen = new Set<string>();
+  const skippedPageIds: string[] = [];
+  const pending: PageDSL[] = [];
   for (const [index, dsl] of dsls.entries()) {
     const pageId = typeof dsl?.page?.id === "string" ? dsl.page.id : undefined;
     const validation = validateDSL(dsl);
@@ -817,16 +830,21 @@ export async function createPages(root: string, dsls: PageDSL[]): Promise<Projec
     }
     seen.add(dsl.page.id);
     if (await pathExists(projectPath(root, pageRelativePath(dsl.page.id)))) {
-      issues.push({ index, pageId, code: "PAGE_EXISTS", message: `页面“${dsl.page.id}”已存在；如需覆盖请先删除该页面。`, path: "$.page.id" });
+      if (onConflict === "skip") {
+        skippedPageIds.push(dsl.page.id);
+        continue;
+      }
+      issues.push({ index, pageId, code: "PAGE_EXISTS", message: `页面“${dsl.page.id}”已存在；如需覆盖请先删除该页面，或传 on_conflict="skip" 跳过已存在页面。`, path: "$.page.id" });
       continue;
     }
+    pending.push(dsl);
   }
   if (issues.length) {
     throw new ProjectStoreError("INVALID_DSL_FILE", `批量建页校验未通过：${issues.length} 处问题，未写入任何页面。`, issues);
   }
   const written: string[] = [];
   try {
-    for (const dsl of dsls) {
+    for (const dsl of pending) {
       await writePage(root, dsl);
       written.push(dsl.page.id);
     }
@@ -834,14 +852,17 @@ export async function createPages(root: string, dsls: PageDSL[]): Promise<Projec
     await Promise.all(written.map((pageId) => rm(projectPath(root, pageRelativePath(pageId)), { force: true })));
     throw error;
   }
-  return dsls.map((dsl) => ({
-    id: dsl.page.id,
-    title: dsl.page.title,
-    type: dsl.page.type,
-    status: dsl.page.status,
-    revision: dsl.revision,
-    file: pageRelativePath(dsl.page.id)
-  }));
+  return {
+    created: pending.map((dsl) => ({
+      id: dsl.page.id,
+      title: dsl.page.title,
+      type: dsl.page.type,
+      status: dsl.page.status,
+      revision: dsl.revision,
+      file: pageRelativePath(dsl.page.id)
+    })),
+    skippedPageIds
+  };
 }
 
 export async function deletePage(root: string, pageId: string): Promise<void> {

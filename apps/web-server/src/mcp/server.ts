@@ -236,13 +236,14 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
       project_id: projectId,
       dsls: z.array(z.record(z.any())).min(1).max(50),
       place_on_board: z.enum(["none", "default"]).optional(),
-      board_id: boardId.optional()
+      board_id: boardId.optional(),
+      on_conflict: z.enum(["fail", "skip"]).optional()
     }).strict()
   }, async (input) => respond(async (userId) => service.createPages(
     userId,
     input.project_id,
     input.dsls as unknown as import("@prototype-studio/dsl-schema").PageDSL[],
-    { placeOnBoard: input.board_id ?? input.place_on_board ?? "default" }
+    { placeOnBoard: input.board_id ?? input.place_on_board ?? "default", onConflict: input.on_conflict ?? "fail" }
   )));
 
   server.registerTool("prototype_place_pages_on_board", {
@@ -286,6 +287,73 @@ export function buildCloudMcpServer(options: BuildCloudMcpOptions): McpServer {
     description: "Move a component template to the project trash.",
     inputSchema: z.object({ project_id: projectId, component_id: z.string().min(1) }).strict()
   }, async (input) => respond(async (userId) => service.deleteComponentTemplate(userId, input.project_id, input.component_id)));
+
+  const revisionNumber = z.number().int().min(1).describe("页面当前 revision，先用 prototype_get_dsl 读取");
+
+  server.registerTool("prototype_create_overlay", {
+    title: "Create Prototype Studio Overlay",
+    description: "Create a modal/drawer/popover in the page overlays through Command Engine. Use this instead of hand-writing CREATE_OVERLAY inside prototype_apply_commands.",
+    inputSchema: z.object({
+      project_id: projectId,
+      page_id: pageId,
+      base_revision: revisionNumber,
+      overlay: z.record(z.any()),
+      index: z.number().int().min(0).optional(),
+      operator
+    }).strict()
+  }, async (input) => respond(async (userId) => service.createOverlay(userId, input.project_id, input.page_id, input.base_revision, input.overlay, input.index, input.operator)));
+
+  server.registerTool("prototype_update_overlay", {
+    title: "Update Prototype Studio Overlay",
+    description: "Shallow-update one overlay by its stable componentId (for example converting a modal into a drawer). revision-checked and audited.",
+    inputSchema: z.object({
+      project_id: projectId,
+      page_id: pageId,
+      base_revision: revisionNumber,
+      component_id: z.string().min(1),
+      changes: z.record(z.any()),
+      operator
+    }).strict()
+  }, async (input) => respond(async (userId) => service.updateOverlay(userId, input.project_id, input.page_id, input.base_revision, input.component_id, input.changes, input.operator)));
+
+  server.registerTool("prototype_update_component", {
+    title: "Update Prototype Studio Component",
+    description: "Shallow-update any component (search field, table column, form field, button, section) by stable componentId. The id itself cannot be changed.",
+    inputSchema: z.object({
+      project_id: projectId,
+      page_id: pageId,
+      base_revision: revisionNumber,
+      component_id: z.string().min(1),
+      changes: z.record(z.any()),
+      operator
+    }).strict()
+  }, async (input) => respond(async (userId) => service.updateComponent(userId, input.project_id, input.page_id, input.base_revision, input.component_id, input.changes, input.operator)));
+
+  server.registerTool("prototype_move_component", {
+    title: "Move Prototype Studio Component",
+    description: "Move a component to a supported container (search.fields, search.actions, toolbar.actions, table.columns, form.fields, detail.children, sections, overlays) at a zero-based index.",
+    inputSchema: z.object({
+      project_id: projectId,
+      page_id: pageId,
+      base_revision: revisionNumber,
+      component_id: z.string().min(1),
+      container: z.string().min(1),
+      index: z.number().int().min(0),
+      operator
+    }).strict()
+  }, async (input) => respond(async (userId) => service.moveComponent(userId, input.project_id, input.page_id, input.base_revision, input.component_id, input.container, input.index, input.operator)));
+
+  server.registerTool("prototype_delete_component", {
+    title: "Delete Prototype Studio Component",
+    description: "Delete one component by stable componentId. revision-checked and audited.",
+    inputSchema: z.object({
+      project_id: projectId,
+      page_id: pageId,
+      base_revision: revisionNumber,
+      component_id: z.string().min(1),
+      operator
+    }).strict()
+  }, async (input) => respond(async (userId) => service.deleteComponent(userId, input.project_id, input.page_id, input.base_revision, input.component_id, input.operator)));
 
   server.registerTool("prototype_apply_commands", {
     title: "Apply Prototype Studio Page Commands",

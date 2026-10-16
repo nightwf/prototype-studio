@@ -25,6 +25,9 @@
 - 页面 = 内容（`pages/*.ui.yaml`）；画布 = 编排（`boards/*.board.yaml`）。AI 交付原型时必须同时产出两者。
 - 失败语义：校验错误带 `index/pageId/path/message/suggestion`；revision 冲突带 `currentRevision`；批量操作不留半成品。
 
+- 续跑：`prototype_create_pages` 传 `on_conflict="skip"` 可整批重试而不报错，返回 `skipped_page_ids` 标明已存在的页面。
+- 组件级编辑：`prototype_create_overlay` / `prototype_update_overlay` / `prototype_update_component` / `prototype_move_component` / `prototype_delete_component`，均需 `base_revision`。
+
 ## 2. 修改链路
 
 所有来源使用同一入口：

@@ -55,3 +55,15 @@ MVP Revision 同时保存 Before/After 与 Command，便于可靠 Diff 和恢复
 6. **人在环可见**：Studio 顶栏提供「同步」按钮（网页端）重新拉取服务端页面与画布；页面树标记「未上画布」，页面菜单提供「放入当前画布」；画布为空但存在页面时给出引导提示。
 
 **影响**：MCP 工具从“能写”升级为“写得稳、错得清、结果可见”。已有单页 `prototype_create_page` 保持兼容，但描述里明确推荐批量工具；`prototype_validate_dsl` 支持 `dsl` 单页与 `dsls` 批量两种入参。
+
+## ADR-010：补齐 AI 编辑能力与续跑体验（已实现）
+
+**背景**：ADR-009 解决了“写得稳”，但仍有四处缺口：云端 MCP 缺少组件级精细编辑工具（只能手写通用命令）；跨多批生成时无法断点续跑；用户回到窗口后看不到 AI 的新产出；页面预览与画布导出的一致性没有回归保护。
+
+**决策**：
+
+1. **组件级工具与桌面端对齐**：云端 MCP 新增 `prototype_create_overlay`、`prototype_update_overlay`、`prototype_update_component`、`prototype_move_component`、`prototype_delete_component`，全部走 Command Engine（revision 校验 + 审计），避免 AI 手写命令结构出错。
+2. **断点续跑**：`prototype_create_pages` 新增 `on_conflict`（`fail` 默认 / `skip`）。`skip` 会跳过已存在页面并返回 `skipped_page_ids`，因此整批重试天然幂等，跨多批生成可以安全续跑。
+3. **回到窗口自动同步**：Studio 网页端在窗口重新聚焦/可见时静默拉取服务端状态（8 秒节流），AI 在外部生成的内容自动出现；顶栏「同步」按钮保留用于手动强制刷新。
+4. **一致性回归**：新增导出一致性测试，覆盖页面、说明、标注、流程图、ER 图、图片、组件七类画布对象 + 页面内嵌渲染，断言不落入通用降级卡片；页面预览与画布导出共用同一份 PageDSL 与 Renderer。
+

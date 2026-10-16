@@ -110,6 +110,63 @@ describe("AI 生成链路：批量建页与页面/画布编排", () => {
     expect(second.skipped_page_ids).toEqual(["page-b"]);
   });
 
+  it("on_conflict=skip 支持断点续跑（整批重试不会失败）", async () => {
+    const { service, user, project } = await setup();
+    await service.createPages(user.id, project.id, [makePage("page-a"), makePage("page-b")], { placeOnBoard: "none" });
+
+    const retry = await service.createPages(
+      user.id,
+      project.id,
+      [makePage("page-a"), makePage("page-b"), makePage("page-c")],
+      { onConflict: "skip" }
+    );
+
+    expect(retry.created_count).toBe(1);
+    expect([...retry.skipped_page_ids].sort()).toEqual(["page-a", "page-b"]);
+    const path = await service.projectPath(user.id, project.id);
+    expect((await listPages(path)).map((page) => page.id).sort()).toEqual(["page-a", "page-b", "page-c"]);
+  });
+
+  it("组件级工具走命令引擎并逐步推进 revision", async () => {
+    const { service, user, project } = await setup();
+    await service.createPages(user.id, project.id, [makePage("page-x")], { placeOnBoard: "none" });
+    const start = await service.getPageDsl(user.id, project.id, "page-x");
+
+    const created = await service.createOverlay(
+      user.id, project.id, "page-x", start.revision,
+      { id: "modal-check", type: "modal", title: "确认" }, undefined, "codex"
+    );
+    expect(created.revision).toBe(start.revision + 1);
+
+    const updated = await service.updateOverlay(user.id, project.id, "page-x", created.revision, "modal-check", { title: "确认核销" }, "codex");
+    expect(updated.revision).toBe(created.revision + 1);
+
+    const bumped = await service.updateComponent(user.id, project.id, "page-x", updated.revision, "search.status", { label: "状态" }, "codex");
+    expect(bumped.revision).toBe(updated.revision + 1);
+
+    const deleted = await service.deleteComponent(user.id, project.id, "page-x", bumped.revision, "modal-check", "codex");
+    expect(deleted.revision).toBe(bumped.revision + 1);
+
+    const fresh = await service.getPageDsl(user.id, project.id, "page-x");
+    expect(fresh.overlays.some((overlay) => overlay.id === "modal-check")).toBe(false);
+  });
+
+  it("修订冲突返回 currentRevision，便于 AI 直接重试", async () => {
+    const { service, user, project } = await setup();
+    await service.createPages(user.id, project.id, [makePage("page-r")], { placeOnBoard: "none" });
+    await service.updateComponent(user.id, project.id, "page-r", 1, "search.status", { label: "状态A" }, "codex");
+
+    let caught: unknown;
+    try {
+      await service.updateComponent(user.id, project.id, "page-r", 1, "search.status", { label: "状态B" }, "codex");
+    } catch (error) {
+      caught = error;
+    }
+
+    expect((caught as { code?: string }).code).toBe("REVISION_CONFLICT");
+    expect((caught as { details?: unknown }).details).toMatchObject({ currentRevision: 2, baseRevision: 1 });
+  });
+
   it("项目概览会指出未放入画布的页面", async () => {
     const { service, user, project } = await setup();
     await service.createPages(user.id, project.id, [makePage("page-a")], { placeOnBoard: "none" });

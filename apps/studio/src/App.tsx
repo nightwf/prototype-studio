@@ -932,9 +932,9 @@ export function App() {
   }, [webProjectId]);
 
   /** 重新从服务端拉取页面与画布：Codex/AI 在外部生成内容后，用户点「同步」即可看到。 */
-  const refreshProjectData = useCallback(async () => {
+  const refreshProjectData = useCallback(async (options: { silent?: boolean } = {}) => {
     if (!webMode || !webProjectId) {
-      toast("info", "桌面端自动同步", "桌面版由文件监听自动刷新，无需手动同步。");
+      if (!options.silent) toast("info", "桌面端自动同步", "桌面版由文件监听自动刷新，无需手动同步。");
       return;
     }
     try {
@@ -956,11 +956,30 @@ export function App() {
         setCurrentPageId(loadedPages[0]?.page.id ?? null);
       }
       const placedCount = selectedBoard.objects.filter((object) => object.type === "page").length;
-      toast("success", "已同步最新内容", `页面 ${loadedPages.length} · 画布 ${tree.boards.length} · 当前画布 ${placedCount} 页`);
+      if (!options.silent) toast("success", "已同步最新内容", `页面 ${loadedPages.length} · 画布 ${tree.boards.length} · 当前画布 ${placedCount} 页`);
     } catch (error) {
-      toast("danger", "同步失败", error instanceof Error ? error.message : "未知错误");
+      if (!options.silent) toast("danger", "同步失败", error instanceof Error ? error.message : "未知错误");
     }
   }, [toast, webProjectId]);
+
+  // 回到窗口时静默同步一次，Codex 在外部生成的内容会自动出现（8 秒节流）。
+  const lastAutoSyncRef = useRef(0);
+  useEffect(() => {
+    if (!webMode || !webProjectId) return;
+    const trySync = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastAutoSyncRef.current < 8000) return;
+      lastAutoSyncRef.current = now;
+      void refreshProjectData({ silent: true });
+    };
+    window.addEventListener("focus", trySync);
+    document.addEventListener("visibilitychange", trySync);
+    return () => {
+      window.removeEventListener("focus", trySync);
+      document.removeEventListener("visibilitychange", trySync);
+    };
+  }, [refreshProjectData, webProjectId]);
 
   /** 把单个页面铺到当前画布（页面=内容，画布=编排）。 */
   const placePageOnCurrentBoard = async (pageId: string) => {

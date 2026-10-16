@@ -140,12 +140,12 @@ export class ProjectSpaceManager {
     return { id: dsl.page.id, title: dsl.page.title };
   }
 
-  /** 原子批量建页：整体校验通过才写入，失败不留半成品。 */
-  async createPages(userId: string, projectId: string, dsls: PageDSL[]) {
+  /** 原子批量建页：整体校验通过才写入，失败不留半成品；onConflict="skip" 可跳过已存在页面以便续跑。 */
+  async createPages(userId: string, projectId: string, dsls: PageDSL[], options: { onConflict?: "fail" | "skip" } = {}) {
     const row = await this.requireProject(userId, projectId);
-    const created = await createPageBatch(row.spacePath, dsls);
+    const result = await createPageBatch(row.spacePath, dsls, options);
     await this.touchProject(projectId);
-    return created;
+    return result;
   }
 
   /** 把已有页面按两列自动铺到指定画布，跳过已放置的页面。 */
