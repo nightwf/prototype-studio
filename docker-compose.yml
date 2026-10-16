@@ -3,6 +3,7 @@ name: prototype-studio
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env.production}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
@@ -17,6 +18,7 @@ services:
 
   app:
     build: .
+    restart: unless-stopped
     ports:
       - "8787:8787"
     environment:
