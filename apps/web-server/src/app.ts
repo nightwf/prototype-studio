@@ -48,7 +48,8 @@ function toHttpError(error: unknown): { status: number; code: string; message: s
 }
 
 export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
+  // 页面与画布可以内嵌 data URL 图片，默认 1MB 的请求体上限会让大图的保存静默失败。
+  const app = Fastify({ logger: false, bodyLimit: 32 * 1024 * 1024 });
   const baseUrl = options.baseUrl ?? "http://127.0.0.1:8787";
   await app.register(cookie);
   await app.register(cors, { origin: true, credentials: true, allowedHeaders: ["content-type", "authorization"] });

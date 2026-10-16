@@ -2781,6 +2781,7 @@ ${boardExportRuntimeScript}
           selectedIds={wireframeSelectedIds}
           onSelect={setWireframeSelectedIds}
           onCommit={(wireframe) => runCommands([{ type: "SET_WIREFRAME", wireframe }], "manual")}
+          onNotice={toast}
         />
       </Suspense> : <>
       <div className="canvas-toolbar">

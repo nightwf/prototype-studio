@@ -56,6 +56,11 @@
 .wf-align button { width: 32px; height: 28px; display: grid; place-items: center; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg); color: var(--ui-text-secondary); cursor: pointer; }
 .wf-align button:hover { background: var(--ui-bg-hover); color: var(--ui-text); }
 .wf-align button.is-active { border-color: var(--ui-accent-border); background: var(--ui-accent-wash); color: var(--ui-accent); }
+.wf-img-btn { width: 100%; height: 30px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--ui-accent-border); border-radius: var(--ui-radius-sm); background: var(--ui-accent-wash); color: var(--ui-accent); font-size: 12px; font-weight: 500; cursor: pointer; }
+.wf-img-btn:hover { background: var(--ui-accent); border-color: var(--ui-accent); color: #fff; }
+.wf-img-clear { width: 100%; height: 28px; margin-top: 6px; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg); color: var(--ui-text-secondary); font-size: 11px; cursor: pointer; }
+.wf-img-clear:hover { border-color: var(--ui-danger-border); background: var(--ui-danger-wash); color: var(--ui-danger); }
+.wf-hint-text { margin: 8px 0 0; color: var(--ui-text-tertiary); font-size: 11px; line-height: 1.7; }
 .wf-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .wf-presets button { height: 28px; padding: 0 10px; border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-sm); background: var(--ui-bg); color: var(--ui-text-secondary); font-size: 11px; cursor: pointer; }
 .wf-presets button:hover { border-color: var(--ui-accent-border); background: var(--ui-accent-wash); color: var(--ui-accent); }

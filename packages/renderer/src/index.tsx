@@ -827,7 +827,7 @@ export function WireframeElementView({ element }: { element: WireframeElement })
     }
     case "image":
       return element.src ? (
-        <img src={element.src} alt={element.text ?? ""} draggable={false} style={{ ...box, objectFit: "cover", borderRadius: radius }} />
+        <img src={element.src} alt={element.text ?? ""} draggable={false} style={{ ...box, objectFit: "contain", borderRadius: radius }} />
       ) : (
         <div style={{ ...box, display: "grid", placeItems: "center", border: `1px dashed ${WF.stroke}`, borderRadius: radius, color: "#b3b3b3", fontSize: 11 }}>图片</div>
       );

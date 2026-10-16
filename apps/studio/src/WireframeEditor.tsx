@@ -18,6 +18,7 @@ import {
   Square,
   Type as TypeIcon,
   Unlock,
+  Upload,
   X,
   Zap
 } from "lucide-react";
@@ -28,6 +29,42 @@ interface WireframeEditorProps {
   selectedIds: string[];
   onSelect: (ids: string[]) => void;
   onCommit: (wireframe: WireframeDSL) => Promise<boolean> | void;
+  /** 图片上传等需要反馈的操作统一抛给 Studio 的全局提示。 */
+  onNotice?: (tone: "success" | "warning" | "danger", title: string, detail?: string) => void;
+}
+
+/** 图片上传的压缩上限：长边 1600px、编码后约 2.6MB，避免页面 YAML 过大。 */
+const MAX_IMAGE_SIDE = 1600;
+const MAX_IMAGE_BYTES = 2_600_000;
+
+async function readImageFile(file: File): Promise<{ src: string; oversized: boolean }> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("无法读取该文件"));
+    reader.readAsDataURL(file);
+  });
+  if (!dataUrl) throw new Error("无法读取该文件");
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const probe = new Image();
+    probe.onload = () => resolve(probe);
+    probe.onerror = () => reject(new Error("这张图片无法解码，请换 PNG / JPG / WebP"));
+    probe.src = dataUrl;
+  });
+  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(image.naturalWidth, image.naturalHeight));
+  if (scale === 1 && dataUrl.length <= MAX_IMAGE_BYTES) return { src: dataUrl, oversized: false };
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext("2d");
+  if (!context) return { src: dataUrl, oversized: dataUrl.length > MAX_IMAGE_BYTES };
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  let encoded = file.type === "image/png" ? canvas.toDataURL("image/png") : canvas.toDataURL("image/jpeg", 0.86);
+  if (encoded.length > MAX_IMAGE_BYTES) {
+    const jpeg = canvas.toDataURL("image/jpeg", 0.82);
+    if (jpeg.length < encoded.length) encoded = jpeg;
+  }
+  return { src: encoded, oversized: encoded.length > MAX_IMAGE_BYTES };
 }
 
 interface PaletteItem {
@@ -73,7 +110,7 @@ function elementLabel(element: WireframeElement): string {
   return map[element.type] ?? element.type;
 }
 
-export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: WireframeEditorProps) {
+export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit, onNotice }: WireframeEditorProps) {
   const [elements, setElements] = useState<WireframeElement[]>(() => dsl.wireframe?.elements ?? []);
   const [artboard, setArtboard] = useState(() => ({
     width: dsl.wireframe?.width ?? 1440,
@@ -103,13 +140,15 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
   const boardRef = useRef<HTMLDivElement>(null);
   const draftRef = useRef<{ mode: "draw" | "move" | "resize" | "marquee"; startX: number; startY: number; lastX?: number; lastY?: number; handle?: string; origin: WireframeElement[]; element?: WireframeElement } | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const imageTargetRef = useRef<string | undefined>(undefined);
 
   const selected = useMemo(() => elements.filter((element) => selectedIds.includes(element.id)), [elements, selectedIds]);
   const single = selected.length === 1 ? selected[0] : undefined;
 
   const commit = useCallback((next: WireframeElement[]) => {
     setElements(next);
-    onCommit({ width: artboardWidth, height: artboardHeight, background, elements: next });
+    return Promise.resolve(onCommit({ width: artboardWidth, height: artboardHeight, background, elements: next }));
   }, [artboardHeight, artboardWidth, background, onCommit]);
 
   const applyArtboard = (patch: Partial<{ width: number; height: number; background: string }>) => {
@@ -304,6 +343,37 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
     commit(elements.map((element) => selectedIds.includes(element.id) ? { ...element, z: target } : element));
   };
 
+  const pickImage = (elementId: string) => {
+    imageTargetRef.current = elementId;
+    imageInputRef.current?.click();
+  };
+
+  const handleImageFile = async (file: File) => {
+    const elementId = imageTargetRef.current;
+    imageTargetRef.current = undefined;
+    if (!elementId) return;
+    if (!file.type.startsWith("image/")) {
+      onNotice?.("warning", "只支持图片文件", file.type || file.name);
+      return;
+    }
+    try {
+      const { src, oversized } = await readImageFile(file);
+      const saved = await commit(elements.map((element) => element.id === elementId ? { ...element, src, text: file.name } : element));
+      if (saved === false) {
+        setElements(elements);
+        onNotice?.("danger", "图片保存失败", "页面没有写入服务端，请换一张更小的图片重试");
+        return;
+      }
+      onNotice?.(
+        oversized ? "warning" : "success",
+        oversized ? "图片已插入，但体积偏大" : "图片已插入",
+        oversized ? "已压到长边 1600px 仍偏大，换张小图会更流畅" : `${file.name} · 双击图片框可替换`
+      );
+    } catch (error) {
+      onNotice?.("danger", "图片读取失败", error instanceof Error ? error.message : undefined);
+    }
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
@@ -330,6 +400,13 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
 
   return (
     <div className="wf-editor">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        style={{ display: "none" }}
+        onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleImageFile(file); event.currentTarget.value = ""; }}
+      />
       <aside className="wf-palette">
         <div className="wf-palette-group">
           <span className="wf-palette-title">基础图形</span>
@@ -361,7 +438,7 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
           <button onClick={() => setScale((value) => Math.min(1.5, Math.round((value + 0.1) * 100) / 100))}>+</button>
           <button onClick={() => setScale(0.62)}>适配</button>
           <span className="wf-toolbar-hint">
-            {tool === "select" ? "拖动移动 · 框选多选 · Delete 删除 · ⌘D 复制 · 方向键微调" : `按住拖拽绘制「${paletteItem?.label ?? ""}」`}
+            {tool === "select" ? "拖动移动 · 框选多选 · 双击图片框上传 · Delete 删除 · ⌘D 复制 · 方向键微调" : `按住拖拽绘制「${paletteItem?.label ?? ""}」`}
           </span>
         </div>
 
@@ -378,6 +455,7 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
                     className={`wf-hit ${selectedIds.includes(element.id) ? "is-selected" : ""} ${element.locked ? "is-locked" : ""}`}
                     style={{ left: element.x, top: element.y, width: element.width, height: element.height }}
                     onPointerDown={(event) => onElementPointerDown(event, element)}
+                    onDoubleClick={(event) => { if (tool === "select" && element.type === "image") { event.stopPropagation(); pickImage(element.id); } }}
                   />
                 ))}
                 {single && !single.locked && tool === "select" ? (
@@ -487,6 +565,19 @@ export function WireframeEditor({ dsl, selectedIds, onSelect, onCommit }: Wirefr
                         ))}
                       </div>
                     ) : null}
+                  </>
+                ) : null}
+                {single.type === "image" ? (
+                  <>
+                    <span className="wf-section">图片</span>
+                    <button className="wf-img-btn" onClick={() => pickImage(single.id)}>
+                      <Upload size={12} />{single.src ? "替换图片" : "上传图片"}
+                    </button>
+                    {single.src ? (
+                      <button className="wf-img-clear" onClick={() => updateSelected({ src: undefined, text: undefined })}>移除图片，恢复占位框</button>
+                    ) : (
+                      <p className="wf-hint-text">也可以直接在画板上双击这个图片框上传。</p>
+                    )}
                   </>
                 ) : null}
                 {["text", "button"].includes(single.type) ? (
