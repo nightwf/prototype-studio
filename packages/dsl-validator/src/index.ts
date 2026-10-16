@@ -5,6 +5,7 @@ import {
   conditionOperators,
   eventTypes,
   pageDslJsonSchema,
+  wireframeElementTypes,
   type BoardDSL,
   type BoardLink,
   type NavigationItem,
@@ -270,6 +271,55 @@ function validateEvent(
   }
 }
 
+/** 线框页校验：画板尺寸、元件 id 唯一、坐标与样式字段类型。 */
+export function validateWireframe(wireframe: unknown, path = "$.wireframe", issues?: { errors: DSLValidationIssue[]; warnings: DSLValidationIssue[] }): { errors: DSLValidationIssue[]; warnings: DSLValidationIssue[] } {
+  const errors = issues?.errors ?? [];
+  const warnings = issues?.warnings ?? [];
+  if (!isRecord(wireframe)) {
+    errors.push(boardIssue("SCHEMA_INVALID", "线框页缺少 wireframe 内容。", path));
+    return { errors, warnings };
+  }
+  for (const field of ["width", "height"]) {
+    if (typeof wireframe[field] !== "number" || !Number.isFinite(wireframe[field]) || (wireframe[field] as number) <= 0) {
+      errors.push(boardIssue("SCHEMA_INVALID", `线框画板 ${field} 必须是正数。`, `${path}.${field}`));
+    }
+  }
+  if (!Array.isArray(wireframe.elements)) {
+    errors.push(boardIssue("SCHEMA_INVALID", "线框页 elements 必须是数组。", `${path}.elements`));
+    return { errors, warnings };
+  }
+  const known = new Set<string>(wireframeElementTypes);
+  const ids = new Set<string>();
+  (wireframe.elements as unknown[]).forEach((candidate, index) => {
+    const elementPath = `${path}.elements[${index}]`;
+    if (!isRecord(candidate)) {
+      errors.push(boardIssue("SCHEMA_INVALID", "线框元件必须是对象。", elementPath));
+      return;
+    }
+    const id = typeof candidate.id === "string" ? candidate.id : "";
+    if (!id) errors.push(boardIssue("INVALID_COMPONENT_ID", "线框元件缺少 id。", `${elementPath}.id`));
+    else if (ids.has(id)) errors.push(boardIssue("DUPLICATE_COMPONENT_ID", `线框元件 id 重复：${id}`, `${elementPath}.id`));
+    else ids.add(id);
+    const type = candidate.type;
+    if (typeof type !== "string" || !known.has(type)) {
+      errors.push(boardIssue("INVALID_COMPONENT_TYPE", `未知线框元件类型“${String(type)}”。`, `${elementPath}.type`));
+    }
+    for (const field of ["x", "y", "width", "height"]) {
+      const value = candidate[field];
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        errors.push(boardIssue("SCHEMA_INVALID", `线框元件缺少数值字段 ${field}。`, `${elementPath}.${field}`));
+      }
+    }
+    for (const field of ["strokeWidth", "radius", "fontSize", "z", "rows", "cols"]) {
+      const value = candidate[field];
+      if (value !== undefined && (typeof value !== "number" || !Number.isFinite(value))) {
+        errors.push(boardIssue("SCHEMA_INVALID", `线框元件 ${field} 必须是数字。`, `${elementPath}.${field}`));
+      }
+    }
+  });
+  return { errors, warnings };
+}
+
 export function validateDSL(input: unknown): DSLValidationResult {
   const errors: DSLValidationIssue[] = [];
   const warnings: DSLValidationIssue[] = [];
@@ -288,6 +338,12 @@ export function validateDSL(input: unknown): DSLValidationResult {
     ...locations.map(({ component }) => component.id)
   ].filter(Boolean));
   const seen = new Map<string, string>();
+
+  if (dsl.page.type === "wireframe") {
+    validateWireframe(dsl.wireframe, "$.wireframe", { errors, warnings });
+  } else if (dsl.wireframe && Array.isArray(dsl.wireframe.elements) && dsl.wireframe.elements.length) {
+    warnings.push(boardIssue("SCHEMA_INVALID", "非线框页包含 wireframe 内容，渲染器会忽略。", "$.wireframe"));
+  }
 
   for (const { component, path } of locations) {
     if (!component.id || !/^[a-zA-Z][a-zA-Z0-9_.-]*$/.test(component.id)) {

@@ -221,6 +221,17 @@ function applyCommand(dsl: PageDSL, command: Command, changed: Set<string>): voi
       updateObject<PageEvent>(event, command.changes);
       return;
     }
+    case "SET_WIREFRAME": {
+      const next = clone(command.wireframe);
+      const previous = new Set((dsl.wireframe?.elements ?? []).map((element) => element.id));
+      dsl.wireframe = next;
+      next.elements.forEach((element) => {
+        changed.add(element.id);
+        previous.delete(element.id);
+      });
+      previous.forEach((id) => changed.add(id));
+      return;
+    }
     case "CREATE_PAGE":
     case "DELETE_PAGE":
       throw new CommandEngineError("INVALID_COMMAND", `${command.type} 必须由 Project Store 执行。`);

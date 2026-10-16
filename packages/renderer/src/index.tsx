@@ -11,7 +11,9 @@ import {
 import {
   Activity,
   BarChart3,
+  Bell,
   Building2,
+  Calendar,
   Check,
   ChevronDown,
   ChevronRight,
@@ -19,16 +21,26 @@ import {
   CircleHelp,
   CreditCard,
   Database,
+  Download,
   FileText,
+  Filter,
   FolderOpen,
   Home,
   Info,
   KeyRound,
   LayoutDashboard,
+  Menu,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  RefreshCw,
   Search,
   Settings,
   Shield,
   Table2,
+  Trash2,
+  Upload,
+  User,
   Users,
   X
 } from "lucide-react";
@@ -38,7 +50,9 @@ import type {
   PageDSL,
   PrototypeEvent,
   TableColumn,
-  UIComponent
+  UIComponent,
+  WireframeDSL,
+  WireframeElement
 } from "@prototype-studio/dsl-schema";
 import { diagramPath, materializeEr, materializeFlowchart } from "./diagramLayout";
 import "@prototype-studio/design-system/styles.css";
@@ -707,7 +721,245 @@ function validationErrors(component: UIComponent | undefined, values: Readonly<R
   return next;
 }
 
-export function PrototypeRenderer({ dsl, selectedId, interactive = true, onSelect, onRuntimeEvent }: PrototypeRendererProps) {
+/** 线框元件可用的图标名（编辑器图标选择器共用）。 */
+export const WIREFRAME_ICON_NAMES = [
+  "search", "plus", "pencil", "trash", "user", "users", "settings", "bell",
+  "calendar", "filter", "download", "upload", "more", "refresh", "menu",
+  "check", "close", "info", "help", "chart", "card", "shield", "database",
+  "file", "folder", "home", "table", "dashboard"
+] as const;
+
+const WIREFRAME_ICONS: Record<string, ComponentType<{ size?: number | string; strokeWidth?: number }>> = {
+  search: Search,
+  plus: Plus,
+  pencil: Pencil,
+  trash: Trash2,
+  user: User,
+  users: Users,
+  settings: Settings,
+  bell: Bell,
+  calendar: Calendar,
+  filter: Filter,
+  download: Download,
+  upload: Upload,
+  more: MoreHorizontal,
+  refresh: RefreshCw,
+  menu: Menu,
+  check: Check,
+  close: X,
+  info: Info,
+  help: CircleHelp,
+  chart: BarChart3,
+  card: CreditCard,
+  shield: Shield,
+  database: Database,
+  file: FileText,
+  folder: FolderOpen,
+  home: Home,
+  table: Table2,
+  dashboard: LayoutDashboard
+};
+
+const WF = {
+  fill: "#fafafa",
+  stroke: "#d6d6d6",
+  line: "#ebebeb",
+  text: "#666666",
+  faint: "#e6e6e6"
+};
+
+/** 单个线框元件的视觉；显示与编辑共用，保证「编辑看到的」和「导出/分享的」一致。 */
+export function WireframeElementView({ element }: { element: WireframeElement }) {
+  const stroke = element.stroke ?? WF.stroke;
+  const strokeWidth = element.strokeWidth ?? 1;
+  const color = element.color ?? WF.text;
+  const fontSize = element.fontSize ?? 13;
+  const weight = element.fontWeight === "bold" ? 600 : element.fontWeight === "medium" ? 500 : 400;
+  const align = element.align ?? "left";
+  const box: CSSProperties = { width: "100%", height: "100%", boxSizing: "border-box" };
+  const label: CSSProperties = { color, fontSize, fontWeight: weight, textAlign: align };
+  const radius = element.radius ?? 6;
+
+  switch (element.type) {
+    case "rect":
+      return <div style={{ ...box, background: element.fill ?? WF.fill, border: `${strokeWidth}px solid ${stroke}`, borderRadius: element.radius ?? 0 }} />;
+    case "roundRect":
+      return <div style={{ ...box, background: element.fill ?? WF.fill, border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius }} />;
+    case "ellipse":
+      return <div style={{ ...box, background: element.fill ?? WF.fill, border: `${strokeWidth}px solid ${stroke}`, borderRadius: "50%" }} />;
+    case "line":
+    case "arrow": {
+      const markerId = `wf-arrow-${element.id.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+      return (
+        <svg width="100%" height="100%" viewBox={`0 0 ${Math.max(1, element.width)} ${Math.max(1, element.height)}`} preserveAspectRatio="none">
+          {element.type === "arrow" ? (
+            <defs>
+              <marker id={markerId} markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                <polygon points="0 0, 10 4, 0 8" fill={stroke} />
+              </marker>
+            </defs>
+          ) : null}
+          <line
+            x1={0}
+            y1={element.height / 2}
+            x2={element.width}
+            y2={element.height / 2}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            markerEnd={element.type === "arrow" ? `url(#${markerId})` : undefined}
+          />
+        </svg>
+      );
+    }
+    case "text":
+      return (
+        <div style={{ ...box, display: "flex", alignItems: "center", lineHeight: 1.5, whiteSpace: "pre-wrap", ...label }}>
+          {element.text ?? "文本"}
+        </div>
+      );
+    case "icon": {
+      const Icon = WIREFRAME_ICONS[element.icon ?? "search"] ?? Search;
+      return (
+        <div style={{ ...box, display: "grid", placeItems: "center", color }}>
+          <Icon size={Math.max(12, Math.round(Math.min(element.width, element.height) * 0.62))} strokeWidth={1.6} />
+        </div>
+      );
+    }
+    case "image":
+      return element.src ? (
+        <img src={element.src} alt={element.text ?? ""} draggable={false} style={{ ...box, objectFit: "cover", borderRadius: radius }} />
+      ) : (
+        <div style={{ ...box, display: "grid", placeItems: "center", border: `1px dashed ${WF.stroke}`, borderRadius: radius, color: "#b3b3b3", fontSize: 11 }}>图片</div>
+      );
+    case "button":
+      return (
+        <div style={{ ...box, display: "grid", placeItems: "center", background: element.fill ?? "#ffffff", border: `${strokeWidth}px solid ${element.stroke ?? "#b3b3b3"}`, borderRadius: radius, ...label, textAlign: element.align ?? "center" }}>
+          {element.text ?? "按钮"}
+        </div>
+      );
+    case "input":
+      return (
+        <div style={{ ...box, display: "flex", alignItems: "center", padding: "0 10px", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
+          <span style={{ color: "#b3b3b3", fontSize }}>{element.text ?? "请输入"}</span>
+        </div>
+      );
+    case "select":
+      return (
+        <div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
+          <span style={{ color: "#b3b3b3", fontSize }}>{element.text ?? "请选择"}</span>
+          <ChevronDown size={14} style={{ color: WF.text, opacity: 0.6, flex: "none" }} />
+        </div>
+      );
+    case "table": {
+      const cols = Math.max(1, Math.min(element.cols ?? 4, 12));
+      const rows = Math.max(1, Math.min(element.rows ?? 4, 20));
+      const headers = element.items ?? [];
+      const grid = `repeat(${cols}, minmax(0, 1fr))`;
+      return (
+        <div style={{ ...box, display: "flex", flexDirection: "column", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: grid, background: "#fafafa", borderBottom: `1px solid ${WF.line}` }}>
+            {Array.from({ length: cols }).map((_, index) => (
+              <div key={index} style={{ padding: "7px 9px", color, fontSize: Math.max(10, fontSize - 1), fontWeight: 500, borderRight: index < cols - 1 ? `1px solid ${WF.line}` : undefined, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
+                {headers[index] ?? `列 ${index + 1}`}
+              </div>
+            ))}
+          </div>
+          {Array.from({ length: rows }).map((_, rowIndex) => (
+            <div key={rowIndex} style={{ display: "grid", gridTemplateColumns: grid, flex: 1, borderBottom: rowIndex < rows - 1 ? `1px solid ${WF.line}` : undefined }}>
+              {Array.from({ length: cols }).map((_, colIndex) => (
+                <div key={colIndex} style={{ display: "flex", alignItems: "center", padding: "0 9px", borderRight: colIndex < cols - 1 ? `1px solid ${WF.line}` : undefined }}>
+                  <span style={{ display: "block", height: 6, width: colIndex === 0 ? "70%" : "50%", borderRadius: 3, background: WF.faint }} />
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    case "card":
+      return (
+        <div style={{ ...box, display: "flex", flexDirection: "column", gap: 8, padding: 14, background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
+          <span style={{ color, fontSize: Math.max(11, fontSize), fontWeight: 500 }}>{element.text ?? "卡片标题"}</span>
+          {[0, 1, 2].map((index) => (
+            <span key={index} style={{ display: "block", height: 7, width: index === 2 ? "60%" : "100%", borderRadius: 3, background: WF.faint }} />
+          ))}
+        </div>
+      );
+    case "tabs": {
+      const items = element.items?.length ? element.items : ["页签一", "页签二", "页签三"];
+      return (
+        <div style={{ ...box, display: "flex", alignItems: "flex-end", gap: 18, borderBottom: `1px solid ${WF.line}`, paddingLeft: 4 }}>
+          {items.map((item, index) => (
+            <span key={index} style={{ paddingBottom: 7, color: index === 0 ? WF.text : "#a3a3a3", fontSize, fontWeight: index === 0 ? 500 : 400, borderBottom: index === 0 ? `2px solid ${WF.text}` : "2px solid transparent" }}>
+              {item}
+            </span>
+          ))}
+        </div>
+      );
+    }
+    case "modal":
+      return (
+        <div style={{ ...box, display: "flex", flexDirection: "column", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: Math.max(radius, 8), overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: `1px solid ${WF.line}` }}>
+            <span style={{ color, fontSize: Math.max(12, fontSize), fontWeight: 600 }}>{element.text ?? "弹窗标题"}</span>
+            <X size={14} style={{ color: "#b3b3b3" }} />
+          </div>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14 }}>
+            {[0, 1].map((index) => (
+              <div key={index} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <span style={{ height: 7, width: 60, borderRadius: 3, background: WF.faint }} />
+                <span style={{ display: "block", height: 26, borderRadius: 4, border: `1px solid ${WF.line}`, background: "#fafafa" }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 14px", borderTop: `1px solid ${WF.line}`, background: "#fafafa" }}>
+            <span style={{ padding: "5px 14px", border: `1px solid ${stroke}`, borderRadius: 4, color: WF.text, fontSize: Math.max(11, fontSize - 1) }}>取消</span>
+            <span style={{ padding: "5px 14px", borderRadius: 4, background: "#dcdcdc", color: "#4d4d4d", fontSize: Math.max(11, fontSize - 1), fontWeight: 500 }}>确定</span>
+          </div>
+        </div>
+      );
+    default:
+      return <div style={{ ...box, border: `1px dashed ${WF.stroke}` }} />;
+  }
+}
+
+/** 线框页画板：固定尺寸 + 绝对坐标元件。 */
+export function WireframeRenderer({ wireframe, className }: { wireframe: WireframeDSL; className?: string }) {
+  const ordered = [...wireframe.elements].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
+  return (
+    <div
+      className={`proto-wireframe ${className ?? ""}`}
+      style={{ position: "relative", width: wireframe.width, height: wireframe.height, background: wireframe.background ?? "#ffffff" }}
+    >
+      {ordered.map((element) => (
+        <div
+          key={element.id}
+          className="proto-wireframe-element"
+          data-wireframe-element={element.id}
+          style={{
+            position: "absolute",
+            left: element.x,
+            top: element.y,
+            width: element.width,
+            height: element.height,
+            zIndex: element.z ?? 0
+          }}
+        >
+          <WireframeElementView element={element} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function PrototypeRenderer(props: PrototypeRendererProps) {
+  if (props.dsl.page.type === "wireframe" && props.dsl.wireframe) {
+    return <WireframeRenderer wireframe={props.dsl.wireframe} />;
+  }
+  return <StructuredPrototypeRenderer {...props} />;
+}
+
+function StructuredPrototypeRenderer({ dsl, selectedId, interactive = true, onSelect, onRuntimeEvent }: PrototypeRendererProps) {
   const roots = useMemo(() => componentRoots(dsl), [dsl]);
   const initialOverlayId = dsl.meta?.viewMode === "overlay-spec" ? dsl.overlays[0]?.id : undefined;
   const initialValues = useMemo(() => {

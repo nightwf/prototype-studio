@@ -28,6 +28,23 @@
 - 续跑：`prototype_create_pages` 传 `on_conflict="skip"` 可整批重试而不报错，返回 `skipped_page_ids` 标明已存在的页面。
 - 组件级编辑：`prototype_create_overlay` / `prototype_update_overlay` / `prototype_update_component` / `prototype_move_component` / `prototype_delete_component`，均需 `base_revision`。
 
+### 1.2 线框页（page.type = wireframe）
+
+线框页是页面的一种类型，不是画布对象：画板固定在页面内，用户直接拖拽绘制，属于「内容」而不是「编排」。
+
+```text
+Studio 页面视图（page.type === wireframe）
+→ WireframeEditor（调色板 / 画板 / 检查器，纯前端草稿）
+→ SET_WIREFRAME 命令（一次手势一次提交，revision +1）
+→ PageDSL.wireframe = { width, height, background, elements[] }
+→ Renderer.WireframeRenderer（页面预览、画布内嵌、全部导出与分享共用）
+```
+
+- 数据源唯一：`wireframe` 是 DSL 的一部分，编辑器不保存 React 私有状态；元件没有坐标时由编辑器按 8px 网格落位。
+- 画布摆放：线框页加入画布时对象尺寸取画板尺寸（`boardPageSize`），避免出现滚动条与裁剪。
+- 交互能力：第一版只做静态绘制（拖动、框选、缩放、对齐、快捷键、撤销/重做走页面 Revision），不产出运行期交互。
+- Codex 侧：`prototype_create_page` 可直接传完整线框 DSL 生成初稿，后续用 `SET_WIREFRAME` 增量重写。
+
 ## 2. 修改链路
 
 所有来源使用同一入口：

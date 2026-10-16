@@ -2,7 +2,7 @@ export const DSL_VERSION = "1.0" as const;
 export const RENDERER_VERSION = "0.1.0" as const;
 export const DESIGN_SYSTEM_VERSION = "0.1.0" as const;
 
-export const pageTypes = ["list", "detail", "form", "dashboard", "wizard"] as const;
+export const pageTypes = ["list", "detail", "form", "dashboard", "wizard", "wireframe"] as const;
 export type PageType = (typeof pageTypes)[number];
 
 export const pageStatuses = ["Draft", "InDesign", "Review", "Approved", "Archived"] as const;
@@ -172,6 +172,67 @@ export interface PageEvent {
   actions: PrototypeEvent[];
 }
 
+/** 线框元件类型：基础图形 + 后台控件骨架。 */
+export const wireframeElementTypes = [
+  "rect",
+  "roundRect",
+  "ellipse",
+  "line",
+  "arrow",
+  "text",
+  "icon",
+  "image",
+  "button",
+  "input",
+  "select",
+  "table",
+  "card",
+  "tabs",
+  "modal"
+] as const;
+export type WireframeElementType = (typeof wireframeElementTypes)[number];
+
+/** 线框页元件：绝对坐标摆放在固定尺寸画板上。 */
+export interface WireframeElement {
+  id: string;
+  type: WireframeElementType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** 文本内容（text / button / input / select / card / modal / tabs 标签）。 */
+  text?: string;
+  /** tabs 的页签文字。 */
+  items?: string[];
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  radius?: number;
+  color?: string;
+  fontSize?: number;
+  fontWeight?: "normal" | "medium" | "bold";
+  align?: "left" | "center" | "right";
+  /** icon 元件的图标名（内置图标集）。 */
+  icon?: string;
+  /** image 元件的图片内容（data: URL）。 */
+  src?: string;
+  /** table 骨架的行列数。 */
+  rows?: number;
+  cols?: number;
+  z?: number;
+  locked?: boolean;
+  /** 成组标记：相同 groupId 的元件一起移动。 */
+  groupId?: string;
+}
+
+/** 线框页内容：固定尺寸画板 + 自由摆放的元件。 */
+export interface WireframeDSL {
+  width: number;
+  height: number;
+  background?: string;
+  elements: WireframeElement[];
+}
+
 export interface PageDSL {
   dslVersion: typeof DSL_VERSION;
   rendererVersion: string;
@@ -203,6 +264,8 @@ export interface PageDSL {
   form?: UIComponent;
   detail?: UIComponent;
   sections?: UIComponent[];
+  /** 线框页内容：page.type 为 wireframe 时使用。 */
+  wireframe?: WireframeDSL;
   overlays: UIComponent[];
   rules: PageRule[];
   events: PageEvent[];
@@ -250,7 +313,8 @@ export const commandTypes = [
   "UPDATE_RULE",
   "DELETE_RULE",
   "ADD_EVENT",
-  "UPDATE_EVENT"
+  "UPDATE_EVENT",
+  "SET_WIREFRAME"
 ] as const;
 export type CommandType = (typeof commandTypes)[number];
 
@@ -268,7 +332,9 @@ export type Command =
   | { type: "UPDATE_RULE"; target: string; changes: Partial<PageRule> }
   | { type: "DELETE_RULE"; target: string }
   | { type: "ADD_EVENT"; event: PageEvent }
-  | { type: "UPDATE_EVENT"; target: string; changes: Partial<PageEvent> };
+  | { type: "UPDATE_EVENT"; target: string; changes: Partial<PageEvent> }
+  /** 线框页整体替换：自由绘制属于高频手势编辑，按手势提交一次，仍走 revision 校验与审计。 */
+  | { type: "SET_WIREFRAME"; wireframe: WireframeDSL };
 
 export type RevisionSource = "manual" | "ai" | "mcp" | "api" | "import" | "undo" | "redo" | "external";
 

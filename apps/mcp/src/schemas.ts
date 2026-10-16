@@ -185,6 +185,7 @@ const updateRuleCommand = z.object({ type: z.literal("UPDATE_RULE"), target: ide
 const deleteRuleCommand = z.object({ type: z.literal("DELETE_RULE"), target: identifier }).strict();
 const addEventCommand = z.object({ type: z.literal("ADD_EVENT"), event: jsonObject }).strict();
 const updateEventCommand = z.object({ type: z.literal("UPDATE_EVENT"), target: identifier, changes: jsonObject }).strict();
+const setWireframeCommand = z.object({ type: z.literal("SET_WIREFRAME"), wireframe: jsonObject }).strict();
 
 export const commandSchema = z.discriminatedUnion("type", [
   addComponentCommand,
@@ -198,7 +199,8 @@ export const commandSchema = z.discriminatedUnion("type", [
   updateRuleCommand,
   deleteRuleCommand,
   addEventCommand,
-  updateEventCommand
+  updateEventCommand,
+  setWireframeCommand
 ]);
 
 export const applyCommandsInputSchema = z.object({

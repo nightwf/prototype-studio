@@ -200,7 +200,7 @@ export function createPrototypeStudioServer(options: CreateServerOptions): McpSe
 
   server.registerTool("prototype_create_page", {
     title: "Create Prototype Studio Page",
-    description: "Validate and atomically create a new page DSL file inside the configured project. Fails if the page ID already exists; never overwrites an existing page.",
+    description: "Validate and atomically create a new page DSL file inside the configured project. Fails if the page ID already exists; never overwrites an existing page. Supports every page type including wireframe: set page.type to \"wireframe\" and pass a wireframe artboard ({ width, height, background, elements }) so the page becomes a static free-drawn wireframe that users can keep editing in the Studio wireframe editor.",
     inputSchema: createPageInputSchema,
     annotations: createAnnotations
   }, async (input) => response(await service.createPage(input), "页面已创建。"));
@@ -263,7 +263,7 @@ export function createPrototypeStudioServer(options: CreateServerOptions): McpSe
 
   server.registerTool("prototype_apply_commands", {
     title: "Apply Prototype Studio Commands",
-    description: "Atomically apply 1-100 supported page-level Commands through the shared Command Engine. All commands use one base revision, the final DSL must validate, and a single auditable MCP Revision is appended. CREATE_PAGE and DELETE_PAGE are intentionally excluded.",
+    description: "Atomically apply 1-100 supported page-level Commands through the shared Command Engine. All commands use one base revision, the final DSL must validate, and a single auditable MCP Revision is appended. CREATE_PAGE and DELETE_PAGE are intentionally excluded. Wireframe pages are edited with SET_WIREFRAME, which replaces the whole wireframe artboard ({ width, height, background, elements }).",
     inputSchema: applyCommandsInputSchema,
     annotations: destructiveAnnotations
   }, async (input) => response(await service.applyCommands(input), "命令已原子执行并生成 Revision。"));

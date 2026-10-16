@@ -111,6 +111,7 @@ import { getApiToken, webAuth, webMode, webProjects, webSpace, webTemplates, typ
 import { AuthScreen } from "./WebScreens";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
+const WireframeEditor = lazy(() => import("./WireframeEditor").then((mod) => ({ default: mod.WireframeEditor })));
 
 type ToastTone = "success" | "warning" | "danger" | "info";
 interface Toast { id: number; tone: ToastTone; title: string; detail?: string }
@@ -118,7 +119,9 @@ type AppModal =
   | { kind: "prompt"; title: string; label: string; confirmText: string; onConfirm: (value: string) => void }
   | { kind: "confirm"; title: string; message: string; confirmText: string; danger?: boolean; onConfirm: () => void };
 
-type CreatablePageType = "list" | "form" | "detail";
+type CreatablePageType = "list" | "form" | "detail" | "wireframe";
+
+const PAGE_TYPE_LABELS: Record<CreatablePageType, string> = { list: "列表", form: "表单", detail: "详情", wireframe: "线框" };
 
 function pageSlug(title: string, existingIds: string[]): string {
   const base = title
@@ -139,7 +142,7 @@ function createMinimalPage(id: string, title: string, type: CreatablePageType): 
     rendererVersion: caseListExample.rendererVersion,
     designSystemVersion: caseListExample.designSystemVersion,
     revision: 1,
-    page: { id, type, title, status: "Draft", description: `在 Prototype Studio 中创建的${type === "list" ? "列表" : type === "form" ? "表单" : "详情"}页。` },
+    page: { id, type, title, status: "Draft", description: `在 Prototype Studio 中创建的${PAGE_TYPE_LABELS[type]}页。` },
     layout: { type: "standard", density: "normal" },
     overlays: [],
     rules: [],
@@ -165,8 +168,11 @@ function createMinimalPage(id: string, title: string, type: CreatablePageType): 
       actions: [{ id: `${id}.form.submit`, type: "button", text: "提交", variant: "primary", event: { type: "submit", target: `${id}.form` }, source: "default" }],
       source: "default"
     };
-  } else {
+  } else if (type === "detail") {
     shared.detail = { id: `${id}.detail`, type: "description", title, description: "详情内容将在数据接入后展示。", source: "default" };
+  } else {
+    // 线框页：自由绘制的静态线框图，画板固定 1440 × 900。
+    shared.wireframe = { width: 1440, height: 900, background: "#ffffff", elements: [] };
   }
   return shared;
 }
@@ -183,6 +189,14 @@ interface MarkerDraft {
   tone: MarkerTone;
 }
 
+/** 画布上页面对象的默认尺寸：线框页按自身画板尺寸摆放，其它页面沿用 960 × 640。 */
+function boardPageSize(page: PageDSL): { width: number; height: number } {
+  if (page.page.type === "wireframe" && page.wireframe) {
+    return { width: page.wireframe.width, height: page.wireframe.height };
+  }
+  return { width: 960, height: 640 };
+}
+
 function defaultBoardFromPages(pages: PageDSL[], id = "main"): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
@@ -191,16 +205,19 @@ function defaultBoardFromPages(pages: PageDSL[], id = "main"): BoardDSL {
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
     revision: 1,
-    objects: pages.map((page, index) => ({
-      id: `obj-${page.page.id}`,
-      type: "page",
-      pageId: page.page.id,
-      x: 120,
-      y: 80 + index * 720,
-      width: 960,
-      height: 640,
-      source: "default"
-    })),
+    objects: pages.map((page, index) => {
+      const size = boardPageSize(page);
+      return {
+        id: `obj-${page.page.id}`,
+        type: "page" as const,
+        pageId: page.page.id,
+        x: 120,
+        y: 80 + index * (size.height + 80),
+        width: size.width,
+        height: size.height,
+        source: "default" as const
+      };
+    }),
     links: []
   };
 }
@@ -373,6 +390,7 @@ export function App() {
   const currentPageIdRef = useRef<string | null>(initialPages[0]?.page.id ?? null);
   const pageCommandQueuesRef = useRef<Map<string, Promise<boolean>>>(new Map());
   const [selectedId, setSelectedId] = useState<string>(initialPages[0] ? "search.status" : "");
+  const [wireframeSelectedIds, setWireframeSelectedIds] = useState<string[]>([]);
   const [history, setHistory] = useState<RevisionRecord[]>([]);
   const [redoStack, setRedoStack] = useState<RevisionRecord[]>([]);
   const [boardUndoStack, setBoardUndoStack] = useState<BoardDSL[]>([]);
@@ -469,6 +487,7 @@ export function App() {
 
   useEffect(() => {
     currentPageIdRef.current = currentPageId;
+    setWireframeSelectedIds([]);
   }, [currentPageId]);
 
   const selectedLocation = useMemo(() => selectedId ? getComponentLocation(dsl, selectedId) : undefined, [dsl, selectedId]);
@@ -1553,14 +1572,17 @@ export function App() {
     .filter((number): number is number => typeof number === "number")) + 1;
 
   const addBoardPageObject = async (pageId: string) => {
+    // 线框页是固定尺寸画板，画布对象直接按画板尺寸摆放，避免出现滚动条和裁剪。
+    const page = pages.find((item) => item.page.id === pageId);
+    const size = page ? boardPageSize(page) : { width: 960, height: 640 };
     const object: Extract<BoardObject, { type: "page" }> = {
       id: `obj-${pageId}`,
       type: "page",
       pageId,
       x: 120,
-      y: 80 + boardPageObjects.length * 720,
-      width: 960,
-      height: 640,
+      y: 80 + boardPageObjects.length * (size.height + 80),
+      width: size.width,
+      height: size.height,
       source: "default"
     };
     if (await runBoardCommands([{ type: "ADD_BOARD_OBJECT", object }])) {
@@ -2356,6 +2378,7 @@ ${boardExportRuntimeScript}
   };
 
   const isModulePage = dsl.page.title.includes("模块说明");
+  const isWireframePage = viewMode === "page" && dsl.page.type === "wireframe";
 
   const updatePageSections = async (sections: UIComponent[]): Promise<boolean> => {
     if (!currentPageId) return false;
@@ -2623,7 +2646,7 @@ ${boardExportRuntimeScript}
       "\n\n注册并连接成功后告诉我状态即可。"
     : "";
 
-  return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}>
+  return <div className={`studio-shell ${leftCollapsed ? "left-collapsed" : ""} ${rightCollapsed || isWireframePage ? "right-collapsed" : ""}`}>
     <header className="studio-titlebar">
       <div className="studio-brand"><span className="studio-mark"><i /><b /></span><div><strong>PROTOTYPE</strong><em>STUDIO</em></div></div>
       <div className="project-switcher-wrap">
@@ -2685,7 +2708,7 @@ ${boardExportRuntimeScript}
         <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
-          <div className="page-type-picker">{(["list", "form", "detail"] as CreatablePageType[]).map((type) => <button key={type} className={newPageType === type ? "is-active" : ""} onClick={() => setNewPageType(type)}>{type}</button>)}</div>
+          <div className="page-type-picker">{(["list", "form", "detail", "wireframe"] as CreatablePageType[]).map((type) => <button key={type} className={newPageType === type ? "is-active" : ""} onClick={() => setNewPageType(type)}>{PAGE_TYPE_LABELS[type]}</button>)}</div>
           <div className="page-creator-actions"><button onClick={() => setShowPageCreator(false)}>取消</button><button className="is-primary" onClick={() => void addPage()}>创建页面</button></div>
         </div> : null}
         <div className="page-tree" aria-label="页面树">{pages.map((page, index) => <div
@@ -2708,7 +2731,7 @@ ${boardExportRuntimeScript}
             <button className="is-danger" onClick={() => void deletePage(page.page.id)}><Trash2 size={12} />删除…</button>
           </div> : null}
         </div>)}</div>
-        {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单或详情页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
+        {!pages.length ? <EmptyState icon={<Layers3 size={17} />} title="还没有页面" description="新建列表、表单、详情或线框页，开始搭建原型。" /> : <><SectionTitle action={<button className="icon-plain"><Search size={12} /></button>}>组件大纲</SectionTitle><div className="outline-list">{outlineComponents.map((component) => <OutlineNode key={component.id} component={component} selectedId={selectedId} onSelect={setSelectedId} onMove={moveOutline} />)}</div></>}
         <div className="left-footer"><FileCheck2 size={13} /><span>{currentPage ? `pages/${currentPage.page.id}.ui.yaml` : "pages/"}</span><StatusDot tone={currentPage ? "success" : "neutral"}>{currentPage ? "有效" : "空"}</StatusDot></div>
       </> : activeWorkspace === "components" ? <>
         <div className="left-project-label"><span>组件模板 · {components.length}</span><ToolButton compact title="新建组件" active={showComponentCreator} onClick={() => setShowComponentCreator(!showComponentCreator)}><Plus size={13} /></ToolButton></div>
@@ -2752,6 +2775,14 @@ ${boardExportRuntimeScript}
     </aside>
 
     <main className="studio-canvas">
+      {isWireframePage ? <Suspense fallback={<div className="diagram-editor-loading"><Layers3 size={22} /><strong>正在打开线框编辑器…</strong></div>}>
+        <WireframeEditor
+          dsl={dsl}
+          selectedIds={wireframeSelectedIds}
+          onSelect={setWireframeSelectedIds}
+          onCommit={(wireframe) => runCommands([{ type: "SET_WIREFRAME", wireframe }], "manual")}
+        />
+      </Suspense> : <>
       <div className="canvas-toolbar">
         {viewMode === "page" ? <>
             <div className="canvas-toolbar-left">
@@ -2952,6 +2983,7 @@ ${boardExportRuntimeScript}
           </div> : null}
         </div>
       </> : <div className="canvas-empty"><EmptyState icon={<Layers3 size={22} />} title={isDesktopRuntime() && !projectRoot ? "打开或创建本地项目" : "选择或新建一个页面"} description={isDesktopRuntime() && !projectRoot ? "点击左上角项目名，选择「打开本地项目」或「创建新项目」。只有打开真实项目目录后，才能读写文件并连接 Codex。" : "页面树为空。新建页面后，Preview、组件大纲和属性面板会在这里同步刷新。"} /></div>}
+      </>}
     </main>
 
     <aside className="studio-right">
