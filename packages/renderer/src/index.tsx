@@ -829,24 +829,24 @@ export function WireframeElementView({ element }: { element: WireframeElement })
       return element.src ? (
         <img src={element.src} alt={element.text ?? ""} draggable={false} style={{ ...box, objectFit: "contain", borderRadius: radius }} />
       ) : (
-        <div style={{ ...box, display: "grid", placeItems: "center", border: `1px dashed ${WF.stroke}`, borderRadius: radius, color: "#b3b3b3", fontSize: 11 }}>图片</div>
+        <div style={{ ...box, display: "grid", placeItems: "center", border: `1px dashed ${WF.stroke}`, borderRadius: radius, color: "#8a8a8a", fontSize: 11 }}>图片</div>
       );
     case "button":
       return (
-        <div style={{ ...box, display: "grid", placeItems: "center", background: element.fill ?? "#ffffff", border: `${strokeWidth}px solid ${element.stroke ?? "#b3b3b3"}`, borderRadius: radius, ...label, textAlign: element.align ?? "center" }}>
+        <div style={{ ...box, display: "grid", placeItems: "center", background: element.fill ?? "#ffffff", border: `${strokeWidth}px solid ${element.stroke ?? "#8a8a8a"}`, borderRadius: radius, ...label, textAlign: element.align ?? "center" }}>
           {element.text ?? "按钮"}
         </div>
       );
     case "input":
       return (
         <div style={{ ...box, display: "flex", alignItems: "center", padding: "0 10px", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
-          <span style={{ color: "#b3b3b3", fontSize }}>{element.text ?? "请输入"}</span>
+          <span style={{ color: "#8a8a8a", fontSize }}>{element.text ?? "请输入"}</span>
         </div>
       );
     case "select":
       return (
         <div style={{ ...box, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: radius, overflow: "hidden" }}>
-          <span style={{ color: "#b3b3b3", fontSize }}>{element.text ?? "请选择"}</span>
+          <span style={{ color: "#8a8a8a", fontSize }}>{element.text ?? "请选择"}</span>
           <ChevronDown size={14} style={{ color: WF.text, opacity: 0.6, flex: "none" }} />
         </div>
       );
@@ -902,7 +902,7 @@ export function WireframeElementView({ element }: { element: WireframeElement })
         <div style={{ ...box, display: "flex", flexDirection: "column", background: "#ffffff", border: `${strokeWidth}px solid ${stroke}`, borderRadius: Math.max(radius, 8), overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: `1px solid ${WF.line}` }}>
             <span style={{ color, fontSize: Math.max(12, fontSize), fontWeight: 600 }}>{element.text ?? "弹窗标题"}</span>
-            <X size={14} style={{ color: "#b3b3b3" }} />
+            <X size={14} style={{ color: "#8a8a8a" }} />
           </div>
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, padding: 14 }}>
             {[0, 1].map((index) => (
