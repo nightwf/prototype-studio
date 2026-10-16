@@ -1,3 +1,6 @@
+/* Prototype Studio 设计令牌
+   - --ps-* ：原型渲染（design-system / renderer）沿用，保持产出外观稳定
+   - --ui-* ：工具界面（Studio 外壳）使用，风格参考 Twenty：浅色、极细描边、克制的蓝 */
 :root {
   --ps-ink-950: #151a1f;
   --ps-ink-900: #1d242b;
@@ -20,44 +23,77 @@
   --ps-font-sans: "Avenir Next", "HarmonyOS Sans SC", "PingFang SC", sans-serif;
   --ps-font-display: "DIN Alternate", "Avenir Next Condensed", "PingFang SC", sans-serif;
   --ps-font-mono: "SFMono-Regular", "Cascadia Code", monospace;
+
+  /* ===== 工具界面令牌（Twenty 风格） ===== */
+  --ui-bg: #ffffff;
+  --ui-bg-subtle: #f9f9f9;
+  --ui-bg-hover: #f1f1f1;
+  --ui-bg-active: #ebebeb;
+  --ui-border: #ebebeb;
+  --ui-border-strong: #d6d6d6;
+  --ui-text: #333333;
+  --ui-text-secondary: #666666;
+  --ui-text-tertiary: #999999;
+  --ui-text-light: #b3b3b3;
+  --ui-accent: #4662d5;
+  --ui-accent-hover: #3b57cc;
+  --ui-accent-wash: #eef2fd;
+  --ui-accent-border: #aebdf4;
+  --ui-danger: #d45453;
+  --ui-danger-wash: #fdf1f1;
+  --ui-danger-border: #f4cfcf;
+  --ui-warning: #e67333;
+  --ui-warning-wash: #fdf3ec;
+  --ui-success: #55a271;
+  --ui-success-wash: #f0f8f3;
+  --ui-radius-xs: 2px;
+  --ui-radius-sm: 4px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 16px;
+  --ui-shadow-sm: 0 1px 2px rgba(0, 0, 0, .04);
+  --ui-shadow-md: 0 4px 16px rgba(0, 0, 0, .08);
+  --ui-shadow-lg: 0 16px 48px rgba(0, 0, 0, .14);
+  --ui-font: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei", sans-serif;
+  --ui-font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ===== 外壳基础组件 ===== */
 .ps-tool-button {
   appearance: none;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-sm);
   background: transparent;
-  color: inherit;
-  min-height: 32px;
-  padding: 0 10px;
+  color: var(--ui-text-secondary);
+  min-height: 30px;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  font: 600 12px/1 var(--ps-font-sans);
+  gap: 6px;
+  font: 500 12px/1 var(--ui-font);
   cursor: pointer;
-  transition: background-color .16s ease, border-color .16s ease, transform .16s ease;
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
 }
 
-.ps-tool-button:hover:not(:disabled) { background: rgba(255,255,255,.08); }
-.ps-tool-button:active:not(:disabled) { transform: translateY(1px); }
-.ps-tool-button.is-active { background: var(--ps-cobalt); color: white; }
+.ps-tool-button:hover:not(:disabled) { background: var(--ui-bg-hover); color: var(--ui-text); }
+.ps-tool-button:active:not(:disabled) { background: var(--ui-bg-active); }
+.ps-tool-button.is-active { background: var(--ui-accent-wash); border-color: var(--ui-accent-border); color: var(--ui-accent); }
 .ps-tool-button.is-compact { width: 30px; min-height: 30px; padding: 0; }
-.ps-tool-button:disabled { opacity: .42; cursor: default; }
+.ps-tool-button:disabled { opacity: .4; cursor: default; }
 
-.ps-status-dot { display: inline-flex; align-items: center; gap: 7px; font: 600 11px/1 var(--ps-font-sans); color: var(--ps-ink-500); }
-.ps-status-dot i { width: 7px; height: 7px; border-radius: 50%; background: var(--ps-ink-300); box-shadow: 0 0 0 3px rgba(174,182,188,.16); }
-.ps-status-dot--success i { background: var(--ps-green); box-shadow: 0 0 0 3px rgba(43,138,102,.14); }
-.ps-status-dot--warning i { background: var(--ps-amber); box-shadow: 0 0 0 3px rgba(191,123,24,.14); }
-.ps-status-dot--danger i { background: var(--ps-coral); box-shadow: 0 0 0 3px rgba(241,107,77,.14); }
-.ps-status-dot--info i { background: var(--ps-cobalt); box-shadow: 0 0 0 3px rgba(31,94,255,.14); }
+.ps-status-dot { display: inline-flex; align-items: center; gap: 6px; font: 500 12px/1 var(--ui-font); color: var(--ui-text-tertiary); }
+.ps-status-dot i { width: 6px; height: 6px; border-radius: 50%; background: var(--ui-text-light); }
+.ps-status-dot--success i { background: var(--ui-success); }
+.ps-status-dot--warning i { background: var(--ui-warning); }
+.ps-status-dot--danger i { background: var(--ui-danger); }
+.ps-status-dot--info i { background: var(--ui-accent); }
 
-.ps-panel-header { min-height: 64px; padding: 15px 16px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--ps-ink-100); }
-.ps-panel-header h2 { margin: 2px 0 0; font: 700 14px/1.2 var(--ps-font-sans); color: var(--ps-ink-900); }
-.ps-eyebrow { font: 700 9px/1 var(--ps-font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ps-ink-500); }
+.ps-panel-header { min-height: 52px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--ui-border); }
+.ps-panel-header h2 { margin: 1px 0 0; font: 600 14px/1.3 var(--ui-font); color: var(--ui-text); }
+.ps-eyebrow { font: 500 11px/1 var(--ui-font); color: var(--ui-text-tertiary); }
 
-.ps-empty-state { padding: 30px 22px; min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--ps-ink-500); }
-.ps-empty-state strong { margin-top: 13px; color: var(--ps-ink-900); font: 650 13px/1.4 var(--ps-font-sans); }
-.ps-empty-state p { max-width: 220px; margin: 7px 0 16px; font: 12px/1.65 var(--ps-font-sans); }
-.ps-empty-icon { width: 42px; height: 42px; border: 1px solid var(--ps-ink-200); border-radius: 11px; display: grid; place-items: center; color: var(--ps-ink-500); background: white; box-shadow: var(--ps-shadow-sm); }
-.ps-keycap { border: 1px solid var(--ps-ink-200); border-bottom-width: 2px; border-radius: 4px; background: white; padding: 1px 5px; font: 10px/1.4 var(--ps-font-mono); color: var(--ps-ink-500); }
+.ps-empty-state { padding: 28px 20px; min-height: 160px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--ui-text-tertiary); }
+.ps-empty-state strong { margin-top: 12px; color: var(--ui-text); font: 600 13px/1.4 var(--ui-font); }
+.ps-empty-state p { max-width: 240px; margin: 6px 0 14px; font: 12px/1.7 var(--ui-font); }
+.ps-empty-icon { width: 40px; height: 40px; border: 1px solid var(--ui-border); border-radius: var(--ui-radius-md); display: grid; place-items: center; color: var(--ui-text-tertiary); background: var(--ui-bg-subtle); }
+.ps-keycap { border: 1px solid var(--ui-border-strong); border-radius: var(--ui-radius-xs); background: var(--ui-bg); padding: 1px 5px; font: 11px/1.4 var(--ui-font-mono); color: var(--ui-text-secondary); }

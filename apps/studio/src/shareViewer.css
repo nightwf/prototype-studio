@@ -1,200 +1,73 @@
+/* 发布链接查看器 —— 与 Studio 同风格 */
 .share-viewer {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #f2f4f7;
-  color: #1f2937;
-  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--ui-bg-subtle, #f9f9f9);
+  color: var(--ui-text, #333);
+  font-family: var(--ui-font, system-ui, -apple-system, "PingFang SC", sans-serif);
+  font-size: 13px;
 }
 
-.share-viewer--state {
-  align-items: center;
-  justify-content: center;
-}
+.share-viewer--state { align-items: center; justify-content: center; }
 
 .share-viewer-state-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 34px 42px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
-  color: #475569;
+  padding: 32px 40px;
+  border: 1px solid var(--ui-border, #ebebeb);
+  border-radius: var(--ui-radius-lg, 16px);
+  background: var(--ui-bg, #fff);
+  box-shadow: var(--ui-shadow-md, 0 4px 16px rgba(0, 0, 0, .08));
+  color: var(--ui-text-tertiary, #999);
   text-align: center;
 }
 
-.share-viewer-state-card strong {
-  font-size: 15px;
-  color: #1f2937;
-}
-
-.share-viewer-state-card p {
-  margin: 0;
-  font-size: 13px;
-  max-width: 320px;
-}
+.share-viewer-state-card strong { color: var(--ui-text, #333); font-size: 14px; font-weight: 600; }
+.share-viewer-state-card p { margin: 0; max-width: 320px; font-size: 12px; line-height: 1.7; }
 
 .share-viewer-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 10px 18px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #fff;
+  padding: 0 14px;
+  height: 48px;
+  border-bottom: 1px solid var(--ui-border, #ebebeb);
+  background: var(--ui-bg, #fff);
   flex: none;
 }
 
-.share-viewer-tabs {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
+.share-viewer-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--ui-radius-sm, 4px); background: var(--ui-bg-subtle, #f9f9f9); }
+.share-viewer-tabs button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px; border: 0; border-radius: var(--ui-radius-xs, 2px); background: transparent; color: var(--ui-text-secondary, #666); font-size: 12px; font-weight: 500; cursor: pointer; }
+.share-viewer-tabs button:hover { color: var(--ui-text, #333); }
+.share-viewer-tabs button.is-active { background: var(--ui-bg, #fff); color: var(--ui-text, #333); box-shadow: var(--ui-shadow-sm, 0 1px 2px rgba(0, 0, 0, .04)); }
 
-.share-viewer-tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #475569;
-  font: 600 13px/1 system-ui, -apple-system, "PingFang SC", sans-serif;
-  cursor: pointer;
-}
+.share-viewer-project { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.share-viewer-project strong { color: var(--ui-text, #333); font-size: 13px; font-weight: 600; white-space: nowrap; }
+.share-viewer-project span { overflow: hidden; color: var(--ui-text-tertiary, #999); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 
-.share-viewer-tabs button.is-active {
-  border-color: #2563eb;
-  background: #2563eb;
-  color: #fff;
-}
+.share-viewer-body { display: flex; flex: 1; min-height: 0; }
 
-.share-viewer-project {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
-}
+.share-viewer-pages { width: 240px; flex: none; overflow-y: auto; padding: 10px 8px 20px; border-right: 1px solid var(--ui-border, #ebebeb); background: var(--ui-bg, #fff); }
+.share-viewer-group { margin-bottom: 12px; }
+.share-viewer-group h3 { margin: 0 6px 5px; color: var(--ui-text-tertiary, #999); font-size: 11px; font-weight: 500; }
+.share-viewer-group button { display: flex; align-items: center; gap: 7px; width: 100%; height: 32px; padding: 0 8px; border: 0; border-radius: var(--ui-radius-sm, 4px); background: transparent; color: var(--ui-text, #333); font-size: 12px; text-align: left; cursor: pointer; }
+.share-viewer-group button:hover { background: var(--ui-bg-hover, #f1f1f1); }
+.share-viewer-group button.is-active { background: var(--ui-accent-wash, #eef2fd); color: var(--ui-accent, #4662d5); font-weight: 500; }
+.share-viewer-page-icon { display: inline-flex; color: var(--ui-text-light, #b3b3b3); flex: none; }
+.share-viewer-group button.is-active .share-viewer-page-icon { color: var(--ui-accent, #4662d5); }
 
-.share-viewer-project strong {
-  font-size: 15px;
-  color: #111827;
-  white-space: nowrap;
-}
+.share-viewer-page { flex: 1; min-width: 0; overflow: auto; padding: 20px 24px 44px; background: var(--ui-bg-subtle, #f9f9f9); }
+.share-viewer-page-loading { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--ui-text-tertiary, #999); font-size: 12px; }
 
-.share-viewer-project span {
-  overflow: hidden;
-  color: #94a3b8;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.share-viewer-body {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.share-viewer-pages {
-  width: 236px;
-  flex: none;
-  overflow-y: auto;
-  padding: 12px 10px 24px;
-  border-right: 1px solid #e2e8f0;
-  background: #fff;
-}
-
-.share-viewer-group {
-  margin-bottom: 14px;
-}
-
-.share-viewer-group h3 {
-  margin: 0 8px 6px;
-  color: #64748b;
-  font: 700 11px/1.4 system-ui, -apple-system, "PingFang SC", sans-serif;
-  letter-spacing: 0.04em;
-}
-
-.share-viewer-group button {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #334155;
-  font: 500 13px/1.4 system-ui, -apple-system, "PingFang SC", sans-serif;
-  text-align: left;
-  cursor: pointer;
-}
-
-.share-viewer-group button:hover {
-  background: #f1f5f9;
-}
-
-.share-viewer-group button.is-active {
-  background: #eff6ff;
-  color: #1d4ed8;
-  font-weight: 600;
-}
-
-.share-viewer-page-icon {
-  display: inline-flex;
-  color: #94a3b8;
-  flex: none;
-}
-
-.share-viewer-group button.is-active .share-viewer-page-icon {
-  color: #2563eb;
-}
-
-.share-viewer-page {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  padding: 22px 26px 48px;
-  background: #f2f4f7;
-}
-
-.share-viewer-page-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: #94a3b8;
-  font-size: 14px;
-}
-
-.share-viewer-canvas {
-  flex: 1;
-  min-height: 0;
-  background: #eef1f4;
-}
-
-.share-viewer-canvas iframe {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-}
+.share-viewer-canvas { flex: 1; min-height: 0; background: var(--ui-bg-subtle, #f9f9f9); }
+.share-viewer-canvas iframe { display: block; width: 100%; height: 100%; border: 0; }
 
 @media (max-width: 760px) {
-  .share-viewer-project span {
-    display: none;
-  }
-
-  .share-viewer-pages {
-    width: 180px;
-  }
-
-  .share-viewer-page {
-    padding: 14px 12px 32px;
-  }
+  .share-viewer-project span { display: none; }
+  .share-viewer-pages { width: 176px; }
+  .share-viewer-page { padding: 12px 10px 28px; }
 }
