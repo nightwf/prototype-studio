@@ -197,6 +197,17 @@ function boardPageSize(page: PageDSL): { width: number; height: number } {
   return { width: 960, height: 640 };
 }
 
+/** 画布组件对象的默认尺寸：弹窗 / 抽屉 / 浮层按各自形态给一个合适的长宽。 */
+function componentObjectSize(type: string): { width: number; height: number } {
+  if (type === "drawer") return { width: 420, height: 560 };
+  if (type === "popover") return { width: 340, height: 240 };
+  return { width: 480, height: 360 };
+}
+
+function componentTypeLabel(type: string): string {
+  return type === "drawer" ? "抽屉" : type === "popover" ? "浮层" : "弹窗";
+}
+
 function defaultBoardFromPages(pages: PageDSL[], id = "main"): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
@@ -461,7 +472,7 @@ export function App() {
   const boardCacheRef = useRef<Map<string, BoardDSL>>(new Map([[board.id, board]]));
   const boardQueueRefs = useRef<Map<string, Promise<boolean>>>(new Map());
   const boardQueueBaseRefs = useRef<Map<string, number>>(new Map());
-  const [boardTool, setBoardTool] = useState<"none" | "page" | "marker">("none");
+  const [boardTool, setBoardTool] = useState<"none" | "page" | "marker" | "component">("none");
   const [markerPicking, setMarkerPicking] = useState(false);
   const [markerDraft, setMarkerDraft] = useState<MarkerDraft>({ pageObjectId: "", componentId: "", number: "", text: "", tone: "orange" });
   const [boardDraft, setBoardDraft] = useState<Record<string, unknown>>({});
@@ -1558,6 +1569,8 @@ export function App() {
 
   const boardPageObjects = useMemo(() => board.objects.filter((object): object is Extract<BoardObject, { type: "page" }> => object.type === "page"), [board.objects]);
 
+  const libraryComponentTemplates = useMemo(() => accountTemplates.filter((template) => template.kind === "component"), [accountTemplates]);
+
   const boardSelectedObject = useMemo(() => board.objects.find((object) => object.id === boardSelectedId), [board.objects, boardSelectedId]);
   const boardSelectedLink = useMemo(() => board.links.find((link) => link.id === boardSelectedLinkId), [board.links, boardSelectedLinkId]);
   const diagramEditorObject = useMemo(() => {
@@ -1837,16 +1850,25 @@ export function App() {
     }
   };
 
+  /** 新对象统一放到现有内容右侧的空白处，避免所有组件都叠在同一个角落。 */
+  const nextObjectSpot = useCallback((): { x: number; y: number } => {
+    if (!board.objects.length) return { x: 120, y: 80 };
+    const bounds = boardContentBounds(board, {});
+    return { x: Math.round(bounds.maxX + 80), y: Math.round(bounds.minY) };
+  }, [board]);
+
   const insertComponentToBoard = async (componentId: string) => {
     const dsl = await loadComponentDsl(componentId);
     if (!dsl) return;
+    const size = componentObjectSize(dsl.component.type);
+    const spot = nextObjectSpot();
     const object: Extract<BoardObject, { type: "component" }> = {
       id: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       type: "component",
-      x: 1180,
-      y: 100 + board.objects.length * 20,
-      width: 420,
-      height: 320,
+      x: spot.x,
+      y: spot.y,
+      width: size.width,
+      height: size.height,
       component: structuredClone(dsl.component.ui),
       source: "explicit"
     };
@@ -1927,13 +1949,15 @@ export function App() {
     if (!template) return;
     if (template.kind === "component") {
       const dsl = template.data as unknown as ComponentTemplateDSL;
+      const size = componentObjectSize(dsl.component.type);
+      const spot = nextObjectSpot();
       const object: Extract<BoardObject, { type: "component" }> = {
         id: `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
         type: "component",
-        x: 1180,
-        y: 100 + board.objects.length * 20,
-        width: 420,
-        height: 320,
+        x: spot.x,
+        y: spot.y,
+        width: size.width,
+        height: size.height,
         component: structuredClone(dsl.component.ui),
         source: "explicit"
       };
@@ -2741,8 +2765,8 @@ ${boardExportRuntimeScript}
           <div className="page-creator-actions"><button onClick={() => setShowComponentCreator(false)}>取消</button><button className="is-primary" onClick={() => void createComponentTemplate()}>创建组件</button></div>
         </div> : null}
         <div className="board-list">{components.map((summary) => <div key={summary.id} className={`board-list-row ${summary.id === selectedComponentId ? "is-active" : ""}`}>
-          <button className="board-list-main" onClick={() => { setSelectedComponentId(summary.id); void loadComponentDsl(summary.id); }}><div className="page-icon"><Box size={14} /></div><span><strong>{summary.name}</strong><small>{summary.type} · R{summary.revision}</small></span></button>
-          <button className="page-more" title={`管理组件 ${summary.name}`} onClick={() => { setSelectedComponentId(summary.id); void loadComponentDsl(summary.id); }}><MoreHorizontal size={14} /></button>
+          <button className="board-list-main" onClick={() => { setSelectedComponentId(summary.id); void loadComponentDsl(summary.id); }}><div className="page-icon"><Box size={14} /></div><span><strong>{summary.name}</strong><small>{componentTypeLabel(summary.type)} · R{summary.revision}</small></span></button>
+          <button className="page-more" title={`把「${summary.name}」添加到当前画布`} onClick={() => void insertComponentToBoard(summary.id)}><Plus size={14} /></button>
         </div>)}</div>
         {!components.length ? <EmptyState icon={<Box size={17} />} title="还没有组件模板" description="创建弹窗/抽屉/浮层模板，或让 Codex 通过 MCP 生成。" /> : null}
         <div className="left-footer"><Box size={13} /><span>components/</span><StatusDot tone={components.length ? "success" : "neutral"}>{components.length ? "可复用模板" : "空"}</StatusDot></div>
@@ -2812,6 +2836,7 @@ ${boardExportRuntimeScript}
                 <button onClick={() => void addBoardFlowchart()}><GitBranch size={13} />流程</button>
                 <button onClick={() => void addBoardEr()}><Database size={13} />ER</button>
                 <button onClick={() => boardImageInputRef.current?.click()} title="选择 PNG/JPG 图片，或直接复制图片后在画布内粘贴"><ImageIcon size={13} />图片</button>
+                <button className={boardTool === "component" ? "is-active" : ""} onClick={() => { const next = boardTool === "component" ? "none" : "component"; setBoardTool(next); if (next === "component") { if (webMode) { void refreshComponents(); void refreshAccountTemplates(); } } }} title="把弹窗 / 抽屉 / 浮层组件摆到画布上"><Box size={13} />组件</button>
                 <button className={templateLibraryOpen ? "is-active" : ""} onClick={() => { setTemplateLibraryOpen((value) => !value); if (!accountTemplates.length) void refreshAccountTemplates(); }} title="从账号模板库添加组件或页面"><FolderOpen size={13} />模板库</button>
                 <i className="board-tools-divider" />
                 <button className={aiSelectMode ? "is-active" : ""} onClick={() => toggleAiSelect(!aiSelectMode)} title="框选画布对象生成修改指令"><MousePointer2 size={13} />框选修改</button>
@@ -2927,6 +2952,24 @@ ${boardExportRuntimeScript}
             <button key={page.page.id} className="board-tool-row" onClick={() => void addBoardPageObject(page.page.id)}><Layers3 size={13} /><span>{page.page.title}<small>{page.page.id}</small></span></button>
           ))}
           {pages.every((page) => board.objects.some((object) => object.type === "page" && object.pageId === page.page.id)) ? <div className="board-tool-empty">所有页面都已在画布上</div> : null}
+        </div> : null}
+        {boardTool === "component" ? <div className="board-tool-panel">
+          <div className="board-tool-head"><span>ADD COMPONENT</span><strong>添加组件到画布</strong><button onClick={() => setBoardTool("none")}><X size={13} /></button></div>
+          {!webMode ? <div className="board-tool-empty">组件模板存放在云端项目里，当前环境暂不可用。</div> : null}
+          {webMode && components.length ? <>
+            <div className="board-tool-section">本项目组件 · {components.length}</div>
+            {components.map((component) => (
+              <button key={component.id} className="board-tool-row" onClick={() => void insertComponentToBoard(component.id)} title={`添加「${component.name}」到画布`}><Box size={13} /><span>{component.name}<small>{componentTypeLabel(component.type)} · R{component.revision}</small></span></button>
+            ))}
+          </> : null}
+          {webMode && libraryComponentTemplates.length ? <>
+            <div className="board-tool-section">账号模板库 · {libraryComponentTemplates.length}</div>
+            {libraryComponentTemplates.map((template) => (
+              <button key={template.id} className="board-tool-row" onClick={() => void insertAccountTemplateToBoard(template.id)} title={`从模板库添加「${template.name}」`}><FolderOpen size={13} /><span>{template.name}<small>{componentTypeLabel(template.type)} · 模板</small></span></button>
+            ))}
+          </> : null}
+          {webMode && !components.length && !libraryComponentTemplates.length ? <div className="board-tool-empty">还没有组件模板。到左侧「组件」板块新建弹窗 / 抽屉 / 浮层，或让 Codex 生成。</div> : null}
+          {webMode ? <div className="board-tool-actions"><button onClick={() => { setBoardTool("none"); setActiveWorkspace("components"); }}>管理组件</button><button className="is-primary" onClick={() => { setBoardTool("none"); setActiveWorkspace("components"); setShowComponentCreator(true); }}>新建组件</button></div> : null}
         </div> : null}
         {templateLibraryOpen ? <div className="board-tool-panel board-tool-panel--library">
           <div className="board-tool-head"><span>ACCOUNT LIBRARY</span><strong>账号模板库</strong><button onClick={() => setTemplateLibraryOpen(false)}><X size={13} /></button></div>
