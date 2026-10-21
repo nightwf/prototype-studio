@@ -2544,16 +2544,22 @@ ${boardExportRuntimeScript}
       // 发布时把每个画布的最新内容与全部页面打包成只读快照；分享链接之后不再随项目变化。
       const fullBoards: BoardDSL[] = [];
       for (const summary of boards) fullBoards.push((await webSpace.board(webProjectId, summary.id)).board);
+      // 只上传画布引用到的页面：分享的是画布，页面只是渲染素材。
+      const referencedPageIds = new Set<string>();
+      for (const item of fullBoards) {
+        for (const object of item.objects) if (object.type === "page") referencedPageIds.add(object.pageId);
+      }
+      const sharePages = pages.filter((page) => referencedPageIds.has(page.page.id));
       const digest = shareSourceDigest(fullBoards, pages);
       await webSpace.shareBundle(webProjectId, {
         boards: fullBoards,
-        pages,
+        pages: sharePages,
         source_digest: digest,
         ...(expiresInSeconds ? { expires_in_seconds: expiresInSeconds } : {})
       });
       await refreshBoards();
       await refreshPublishLinks();
-      toast("success", "已发布", `链接已更新为当前内容快照 · ${fullBoards.length} 个画布 · ${pages.length} 个页面`);
+      toast("success", "已发布", `链接已更新为当前内容快照 · ${fullBoards.length} 个画布 · ${sharePages.length} 个画布内页面`);
     } catch (error) {
       toast("danger", "发布失败", error instanceof Error ? error.message : "未知错误");
     } finally {

@@ -42,6 +42,7 @@
 
 .share-viewer-tabs { display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--ui-radius-sm, 4px); background: var(--ui-bg-subtle, #f9f9f9); }
 .share-viewer-tabs button { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px; border: 0; border-radius: var(--ui-radius-xs, 2px); background: transparent; color: var(--ui-text-secondary, #666); font-size: 12px; font-weight: 500; cursor: pointer; }
+.share-viewer-mode { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 12px; border-radius: var(--ui-radius-xs, 2px); background: var(--ui-bg, #fff); color: var(--ui-text, #333); font-size: 12px; font-weight: 500; box-shadow: var(--ui-shadow-sm, 0 1px 2px rgba(0, 0, 0, .04)); }
 .share-viewer-tabs button:hover { color: var(--ui-text, #333); }
 .share-viewer-tabs button.is-active { background: var(--ui-bg, #fff); color: var(--ui-text, #333); box-shadow: var(--ui-shadow-sm, 0 1px 2px rgba(0, 0, 0, .04)); }
 
