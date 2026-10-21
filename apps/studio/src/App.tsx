@@ -10,6 +10,7 @@ import {
   Download,
   FileCheck2,
   FolderOpen,
+  HardDrive,
   GripVertical,
   GitBranch,
   History,
@@ -109,6 +110,7 @@ import {
 } from "./desktopBridge";
 import { getApiToken, webAuth, webMode, webProjects, webSpace, webTemplates, type AccountTemplate, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
 import { AuthScreen } from "./WebScreens";
+import { deleteLocalPage, ensureDirectoryPermission, loadDirectoryHandle, pickLocalDirectory, readLocalPages, supportsLocalDirectory, writeLocalPage, type LocalDirectoryHandle } from "./localPages";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
 const WireframeEditor = lazy(() => import("./WireframeEditor").then((mod) => ({ default: mod.WireframeEditor })));
@@ -492,6 +494,11 @@ export function App() {
   const boardSeedDone = useRef(false);
   const [webSession, setWebSession] = useState<WebUser>();
   const [webProjectId, setWebProjectId] = useState<string>();
+  const [localDirName, setLocalDirName] = useState<string>();
+  const [localPageIds, setLocalPageIds] = useState<string[]>([]);
+  const localDirRef = useRef<LocalDirectoryHandle | undefined>(undefined);
+  const localPageIdsRef = useRef<Set<string>>(new Set());
+  const localUndoRef = useRef<Map<string, PageDSL[]>>(new Map());
   const [webBoot, setWebBoot] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -522,6 +529,50 @@ export function App() {
     window.setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 3300);
   }, []);
 
+  /** 把本地页面合并进页面列表：与云端 id 冲突的本地页跳过，避免选中错页。 */
+  const mergeLocalPages = useCallback((cloudPages: PageDSL[], incoming: PageDSL[]) => {
+    const cloudIds = new Set(cloudPages.map((page) => page.page.id));
+    const accepted = incoming.filter((page) => !cloudIds.has(page.page.id));
+    const collisions = incoming.filter((page) => cloudIds.has(page.page.id)).map((page) => page.page.id);
+    const ids = new Set(accepted.map((page) => page.page.id));
+    localPageIdsRef.current = ids;
+    setLocalPageIds([...ids]);
+    setPages([...cloudPages, ...accepted]);
+    return { accepted, collisions };
+  }, []);
+
+  const connectLocalPages = useCallback(async () => {
+    if (!supportsLocalDirectory()) {
+      toast("warning", "当前浏览器不支持目录授权", "请使用 Chrome 或 Edge 连接本地页面文件夹。");
+      return;
+    }
+    try {
+      // 已保存过目录：优先申请恢复权限，失败或没有记录时再让用户重新选择。
+      let handle = localDirRef.current;
+      if (handle) {
+        const granted = await ensureDirectoryPermission(handle, true);
+        if (!granted) handle = undefined;
+      }
+      if (!handle) handle = await pickLocalDirectory();
+      const scan = await readLocalPages(handle);
+      localDirRef.current = handle;
+      setLocalDirName(handle.name);
+      const cloudPages = pagesRef.current.filter((page) => !localPageIdsRef.current.has(page.page.id));
+      const { collisions } = mergeLocalPages(cloudPages, scan.pages);
+      const extra = [
+        collisions.length ? `${collisions.length} 个与云端页面 id 冲突已跳过` : "",
+        scan.skipped.length ? `${scan.skipped.length} 个文件无法读取` : ""
+      ].filter(Boolean).join(" · ");
+      toast("success", "已连接本地页面文件夹", `${handle.name} · ${scan.pages.length} 个页面${extra ? ` · ${extra}` : ""}`);
+    } catch (error) {
+      if ((error as { name?: string }).name === "AbortError") return;
+      toast("danger", "无法连接本地文件夹", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [mergeLocalPages, toast]);
+
+  /** 页面刷新时保留本地页面：服务端只提供云端页，本地页来自已连接目录。 */
+  const localPagesFromCurrent = useCallback(() => pagesRef.current.filter((page) => localPageIdsRef.current.has(page.page.id)), []);
+
   const loadWebProject = useCallback(async (projectId: string) => {
     try {
       const tree = await webSpace.tree(projectId);
@@ -535,7 +586,11 @@ export function App() {
         ? requestedBoardId!
         : tree.manifest.defaultBoardId ?? tree.board.id;
       const selectedBoard = selectedBoardId === tree.board.id ? tree.board : (await webSpace.board(projectId, selectedBoardId)).board;
-      setPages(loadedPages);
+      const keptLocal = localPageIdsRef.current.size
+        ? localPagesFromCurrent().filter((page) => !loadedPages.some((cloudPage) => cloudPage.page.id === page.page.id))
+        : [];
+      const mergedPages = [...loadedPages, ...keptLocal];
+      setPages(mergedPages);
       setBoards(tree.boards);
       setComponents(tree.components ?? []);
       setComponentDsls({});
@@ -545,17 +600,40 @@ export function App() {
       boardCacheRef.current = new Map([[selectedBoardId, selectedBoard]]);
       setProjectName(tree.manifest.name);
       setProjectRoot(`web://${projectId}`);
-      setCurrentPageId(loadedPages.some((page) => page.page.id === requestedPageId) ? requestedPageId : loadedPages[0]?.page.id ?? null);
+      setCurrentPageId(mergedPages.some((page) => page.page.id === requestedPageId) ? requestedPageId : mergedPages[0]?.page.id ?? null);
       setSelectedId("");
       setHistory([]);
       setRedoStack([]);
-      setViewMode(requestedPageId && loadedPages.some((page) => page.page.id === requestedPageId) ? "page" : "canvas");
+      setViewMode(requestedPageId && mergedPages.some((page) => page.page.id === requestedPageId) ? "page" : "canvas");
       setActiveWorkspace(requestedPageId ? "pages" : "boards");
       setWebProjectId(projectId);
     } catch (error) {
       toast("danger", "无法打开项目", error instanceof Error ? error.message : "未知错误");
     }
   }, [toast]);
+
+  // 浏览器重开后尝试恢复上次授权的本地页面目录；权限回落到 prompt 时提示用户重新授权。
+  useEffect(() => {
+    if (!webMode) return;
+    let cancelled = false;
+    void (async () => {
+      const handle = await loadDirectoryHandle();
+      if (!handle || cancelled) return;
+      localDirRef.current = handle;
+      setLocalDirName(handle.name);
+      const granted = await ensureDirectoryPermission(handle, false);
+      if (!granted) {
+        if (!cancelled) setLocalDirName(`${handle.name}（待授权）`);
+        return;
+      }
+      try {
+        const scan = await readLocalPages(handle);
+        if (cancelled) return;
+        mergeLocalPages(pagesRef.current.filter((page) => !localPageIdsRef.current.has(page.page.id)), scan.pages);
+      } catch { /* 自动恢复失败不打断主流程，用户可手动重新连接 */ }
+    })();
+    return () => { cancelled = true; };
+  }, [mergeLocalPages]);
 
   const refreshVersions = useCallback(async () => {
     if (!webMode || !webProjectId) return;
@@ -966,6 +1044,7 @@ export function App() {
     setPreviewReady(false);
   }, [currentPageId]);
 
+
   const refreshBoards = useCallback(async () => {
     if (!webProjectId) return;
     const [active, trashed] = await Promise.all([webSpace.boards(webProjectId), webSpace.trashedBoards(webProjectId)]);
@@ -987,14 +1066,17 @@ export function App() {
         ? currentBoardIdRef.current
         : tree.manifest.defaultBoardId ?? tree.board.id;
       const selectedBoard = boardId === tree.board.id ? tree.board : (await webSpace.board(webProjectId, boardId)).board;
-      setPages(loadedPages);
+      const keptLocal = localPageIdsRef.current.size
+        ? localPagesFromCurrent().filter((page) => !loadedPages.some((cloudPage) => cloudPage.page.id === page.page.id))
+        : [];
+      setPages([...loadedPages, ...keptLocal]);
       setBoards(tree.boards);
       setComponents(tree.components ?? []);
       setTrashedBoards((await webSpace.trashedBoards(webProjectId)).boards);
       setCurrentBoardId(boardId);
       setBoard(selectedBoard);
       boardCacheRef.current = new Map([[boardId, selectedBoard]]);
-      if (currentPageIdRef.current && !loadedPages.some((page) => page.page.id === currentPageIdRef.current)) {
+      if (currentPageIdRef.current && ![...loadedPages, ...keptLocal].some((page) => page.page.id === currentPageIdRef.current)) {
         setCurrentPageId(loadedPages[0]?.page.id ?? null);
       }
       const placedCount = selectedBoard.objects.filter((object) => object.type === "page").length;
@@ -1215,7 +1297,11 @@ export function App() {
         if (!trimmed || trimmed === page.page.title) return;
         const renamed: PageDSL = { ...page, revision: page.revision + 1, page: { ...page.page, title: trimmed } };
         try {
-          if (webMode && webProjectId) {
+          if (localPageIdsRef.current.has(pageId)) {
+            const handle = localDirRef.current;
+            if (!handle) throw new Error("本地目录未授权，请重新连接文件夹");
+            await writeLocalPage(handle, renamed);
+          } else if (webMode && webProjectId) {
             await webSpace.putPage(webProjectId, pageId, renamed, page.revision, "manual", "jojo");
           } else if (projectRoot && isDesktopRuntime()) {
             await renameDesktopPage(pageId, trimmed);
@@ -1241,7 +1327,14 @@ export function App() {
       danger: true,
       onConfirm: async () => {
         try {
-          if (webMode && webProjectId) {
+          if (localPageIdsRef.current.has(pageId)) {
+            const handle = localDirRef.current;
+            if (!handle) throw new Error("本地目录未授权，请重新连接文件夹");
+            await deleteLocalPage(handle, pageId);
+            localPageIdsRef.current.delete(pageId);
+            setLocalPageIds([...localPageIdsRef.current]);
+            localUndoRef.current.delete(pageId);
+          } else if (webMode && webProjectId) {
             await webSpace.deletePage(webProjectId, pageId);
           } else if (projectRoot && isDesktopRuntime()) {
             await trashDesktopPage(pageId);
@@ -1267,6 +1360,10 @@ export function App() {
     const fromIndex = pages.findIndex((item) => item.page.id === pageId);
     const boundedIndex = Math.max(0, Math.min(targetIndex, pages.length - 1));
     if (fromIndex < 0 || fromIndex === boundedIndex) return;
+    if (localPageIdsRef.current.has(pageId)) {
+      toast("info", "本地页面暂不支持排序", "页面顺序以本地文件名与标题为准。");
+      return;
+    }
     const reordered = [...pages];
     const [moved] = reordered.splice(fromIndex, 1);
     if (!moved) return;
@@ -1387,7 +1484,13 @@ export function App() {
         if (!latest) throw new Error(`找不到页面“${pageId}”。`);
         const operator = source === "ai" ? "Codex" : "jojo";
         const result = executeCommands({ dsl: latest, baseRevision: latest.revision, commands, source, operator });
-        if (webMode && webProjectId) {
+        if (localPageIdsRef.current.has(pageId)) {
+          // 本地页面：不经过服务器，直接把命令结果写回授权目录里的 YAML。
+          const handle = localDirRef.current;
+          if (!handle) throw new Error("本地页面目录未授权，请重新连接文件夹。");
+          localUndoRef.current.set(pageId, [...(localUndoRef.current.get(pageId) ?? []), structuredClone(latest)].slice(-20));
+          await writeLocalPage(handle, result.dsl);
+        } else if (webMode && webProjectId) {
           await webSpace.commands(webProjectId, pageId, latest.revision, commands, source, operator);
         } else {
           await persistDesktopPage(result.dsl, result.revision);
@@ -2562,6 +2665,24 @@ ${boardExportRuntimeScript}
   const undo = async () => {
     const target = history.at(-1);
     if (!target) return;
+    const localPageId = currentPageIdRef.current;
+    if (localPageId && localPageIdsRef.current.has(localPageId)) {
+      const stack = localUndoRef.current.get(localPageId) ?? [];
+      const previous = stack.pop();
+      if (!previous) { toast("info", "没有可撤销的修改", "本地页面的撤销记录只在本次会话内保留。"); return; }
+      const handle = localDirRef.current;
+      if (!handle) { toast("danger", "本地目录未授权", "请重新连接本地页面文件夹。"); return; }
+      try {
+        await writeLocalPage(handle, previous);
+        localUndoRef.current.set(localPageId, stack);
+        setDsl(previous);
+        setHistory((items) => items.slice(0, -1));
+        setRedoStack([]);
+      } catch (error) {
+        toast("danger", "无法撤销", error instanceof Error ? error.message : "未知错误");
+      }
+      return;
+    }
     try {
       const result = createRevertRevision(dsl, target, "jojo");
       if (webMode && webProjectId) {
@@ -2756,7 +2877,8 @@ ${boardExportRuntimeScript}
         }}><Box size={14} />组件</button>
       </div>
       {activeWorkspace === "pages" ? <>
-        <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></div>
+        <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><span className="left-project-actions"><ToolButton compact title={localDirName ? `本地页面目录：${localDirName}（点击切换）` : "连接本地页面文件夹（AI 生成的页面）"} active={Boolean(localDirName)} onClick={() => void connectLocalPages()}><HardDrive size={13} /></ToolButton><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></span></div>
+        {localDirName ? <div className="local-source-row" title={`本地目录：${localDirName}`}><HardDrive size={11} /><span>{localDirName}</span><strong>{localPageIds.length} 页</strong></div> : null}
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
           <div className="page-creator-note"><Pencil size={12} />新建页面为线框页，创建后直接在画板上拖拽绘制。</div>
@@ -2770,7 +2892,7 @@ ${boardExportRuntimeScript}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => { event.preventDefault(); const pageId = event.dataTransfer.getData("text/page-id"); if (pageId) void movePage(pageId, index); }}
         >
-          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon"><Monitor size={14} /></div><div><strong>{page.page.title}{!placedPageIdsOnCurrentBoard.has(page.page.id) ? <em className="page-badge">未上画布</em> : null}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
+          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon">{localPageIds.includes(page.page.id) ? <HardDrive size={14} /> : <Monitor size={14} />}</div><div><strong>{page.page.title}{localPageIds.includes(page.page.id) ? <em className="page-badge page-badge--local" title="文件保存在你授权的本地目录">本地</em> : <em className="page-badge page-badge--cloud" title="保存在云端项目">云端</em>}{!placedPageIdsOnCurrentBoard.has(page.page.id) ? <em className="page-badge">未上画布</em> : null}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
           <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
           {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
