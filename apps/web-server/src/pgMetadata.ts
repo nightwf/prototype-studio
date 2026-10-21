@@ -146,8 +146,8 @@ export class PostgresMetadataStore implements MetadataStore {
 
   async createShareLink(row: ShareLinkRow): Promise<void> {
     await this.pool.query(
-      "insert into share_links (id, project_id, token, mode, created_by, expires_at, created_at) values ($1,$2,$3,$4,$5,$6,$7)",
-      [row.id, row.projectId, row.token, row.mode, row.createdBy, row.expiresAt ?? null, row.createdAt ?? new Date().toISOString()]
+      "insert into share_links (id, project_id, token, mode, bundle_id, created_by, expires_at, created_at) values ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [row.id, row.projectId, row.token, row.mode, row.bundleId ?? null, row.createdBy, row.expiresAt ?? null, row.createdAt ?? new Date().toISOString()]
     );
   }
 
@@ -159,6 +159,7 @@ export class PostgresMetadataStore implements MetadataStore {
       projectId: String(row.project_id),
       token: String(row.token),
       mode: String(row.mode),
+      ...(row.bundle_id ? { bundleId: String(row.bundle_id) } : {}),
       createdBy: String(row.created_by),
       expiresAt: row.expires_at == null ? undefined : String(row.expires_at),
       createdAt: String(row.created_at)
@@ -172,6 +173,7 @@ export class PostgresMetadataStore implements MetadataStore {
       projectId: String(row.project_id),
       token: String(row.token),
       mode: String(row.mode),
+      ...(row.bundle_id ? { bundleId: String(row.bundle_id) } : {}),
       createdBy: String(row.created_by),
       expiresAt: row.expires_at == null ? undefined : String(row.expires_at),
       createdAt: String(row.created_at)

@@ -38,6 +38,7 @@ import {
   type ExecuteBoardCommandsInput
 } from "@prototype-studio/project-store";
 import type { ExecuteCommandsInput } from "@prototype-studio/command-engine";
+import { bundleRoot, computeSourceDigest, deleteShareBundle, readShareBundle, writeShareBundle, type ShareBundleInput } from "./shareBundles";
 import { validateDSL } from "@prototype-studio/dsl-validator";
 import type { BoardDSL, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { MetadataStore, ProjectRow, User } from "./metadata";
@@ -373,20 +374,96 @@ export class ProjectSpaceManager {
     const [latest, ...stale] = active;
     for (const link of stale) await this.metadata.deleteShareLink(link.token);
     if (!latest) return [];
+    let sourceDigest: string | undefined;
+    let updatedAt: string | undefined;
+    if (latest.bundleId) {
+      try {
+        const bundle = await readShareBundle(bundleRoot(this.spacesBaseDir), latest.bundleId);
+        sourceDigest = bundle.manifest.sourceDigest;
+        updatedAt = bundle.manifest.updatedAt;
+      } catch { /* 分享包缺失时仍返回链接，由发布页提示重新发布 */ }
+    }
     return [{
       token: latest.token,
       url: `${baseUrl}/share/${latest.token}`,
       expiresAt: latest.expiresAt,
-      createdAt: latest.createdAt
+      createdAt: latest.createdAt,
+      ...(sourceDigest ? { sourceDigest } : {}),
+      ...(updatedAt ? { updatedAt } : {})
     }];
+  }
+
+  /**
+   * 发布：把「当前这一刻」的画布与页面打包成只读分享包。
+   * 与旧实现不同，分享链接读取的是快照，发布后项目再改动不会自动影响链接。
+   */
+  async createShareBundle(
+    userId: string,
+    projectId: string,
+    baseUrl: string,
+    input: Omit<ShareBundleInput, "projectId">,
+    expiresInSeconds?: number
+  ) {
+    const row = await this.requireProject(userId, projectId);
+    const now = Date.now();
+    const links = await this.metadata.listShareLinksByProject(projectId);
+    const active = links
+      .filter((link) => !link.expiresAt || new Date(link.expiresAt).getTime() >= now)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    // 复用同一条链接：token 不变，只更新内容与有效期。
+    const token = active?.token ?? newToken();
+    const bundleId = active?.bundleId ?? active?.token ?? randomUUID();
+    const manifest = await writeShareBundle(bundleRoot(this.spacesBaseDir), bundleId, {
+      ...input,
+      projectId,
+      projectName: input.projectName?.trim() || row.name,
+      description: input.description ?? row.description,
+      sourceDigest: input.sourceDigest?.trim() || computeSourceDigest(input.boards, input.pages)
+    });
+    for (const link of links) await this.metadata.deleteShareLink(link.token);
+    const expiresAt = expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000).toISOString() : undefined;
+    await this.metadata.createShareLink({
+      id: randomUUID(),
+      projectId,
+      token,
+      mode: "bundle",
+      bundleId,
+      createdBy: userId,
+      ...(expiresAt ? { expiresAt } : {}),
+      createdAt: new Date().toISOString()
+    });
+    return {
+      token,
+      url: `${baseUrl}/share/${token}`,
+      bundleId,
+      sourceDigest: manifest.sourceDigest,
+      updatedAt: manifest.updatedAt,
+      ...(expiresAt ? { expiresAt } : {})
+    };
   }
 
   async revokeShare(userId: string, projectId: string, token: string): Promise<void> {
     await this.requireProject(userId, projectId);
+    const link = await this.metadata.getShareLinkByToken(token);
     await this.metadata.deleteShareLink(token);
+    if (link?.bundleId) await deleteShareBundle(bundleRoot(this.spacesBaseDir), link.bundleId);
   }
 
   async shareData(token: string) {
+    const link = await this.requireShareLink(token);
+    if (link.bundleId) {
+      const bundle = await readShareBundle(bundleRoot(this.spacesBaseDir), link.bundleId);
+      return {
+        project: {
+          id: link.projectId,
+          name: bundle.manifest.projectName,
+          description: bundle.manifest.description ?? "",
+          defaultBoardId: bundle.manifest.defaultBoardId
+        },
+        pages: bundle.pages.map((page) => ({ id: page.page.id, title: page.page.title })),
+        boards: bundle.boards
+      };
+    }
     const row = await this.requireShareProject(token);
     const opened = await openProject(row.spacePath);
     const pages: Array<{ id: string; title: string }> = [];
@@ -402,8 +479,24 @@ export class ProjectSpaceManager {
   }
 
   async sharePage(token: string, pageId: string): Promise<PageDSL> {
+    const link = await this.requireShareLink(token);
+    if (link.bundleId) {
+      const bundle = await readShareBundle(bundleRoot(this.spacesBaseDir), link.bundleId);
+      const page = bundle.pages.find((item) => item.page.id === pageId);
+      if (!page) throw new SpaceError("NOT_FOUND", "分享包中没有这个页面。");
+      return page;
+    }
     const row = await this.requireShareProject(token);
     return getPage(row.spacePath, pageId);
+  }
+
+  private async requireShareLink(token: string) {
+    const link = await this.metadata.getShareLinkByToken(token);
+    if (!link) throw new SpaceError("NOT_FOUND", "分享链接不存在。");
+    if (link.expiresAt && new Date(link.expiresAt).getTime() < Date.now()) {
+      throw new SpaceError("NOT_FOUND", "分享链接已过期。");
+    }
+    return link;
   }
 
   private async requireShareProject(token: string): Promise<ProjectRow> {
@@ -418,6 +511,13 @@ export class ProjectSpaceManager {
   }
 
   async shareHtml(token: string): Promise<string> {
+    const link = await this.requireShareLink(token);
+    if (link.bundleId) {
+      const bundle = await readShareBundle(bundleRoot(this.spacesBaseDir), link.bundleId);
+      const pages: Record<string, PageDSL> = {};
+      for (const page of bundle.pages) pages[page.page.id] = page;
+      return renderBoardsHtml(bundle.boards, pages, bundle.manifest.projectName, bundle.manifest.defaultBoardId);
+    }
     const data = await this.shareData(token);
     const row = await this.metadata.getProjectById(data.project.id);
     const pages: Record<string, PageDSL> = {};

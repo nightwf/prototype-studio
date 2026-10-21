@@ -55,6 +55,7 @@ create table if not exists share_links (
 
 -- 兼容旧库：早期版本没有 created_at 列
 alter table share_links add column if not exists created_at timestamptz not null default now();
+alter table share_links add column if not exists bundle_id text;
 
 create table if not exists audit_index (
   id bigserial primary key,

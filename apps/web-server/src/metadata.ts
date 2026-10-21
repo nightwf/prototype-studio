@@ -38,6 +38,8 @@ export interface ShareLinkRow {
   projectId: string;
   token: string;
   mode: string;
+  /** 指向分享包目录；为空表示旧版「实时读取项目」的分享。 */
+  bundleId?: string;
   createdBy: string;
   expiresAt?: string;
   createdAt: string;

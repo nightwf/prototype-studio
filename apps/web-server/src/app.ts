@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
-import type { BoardCommand, Command, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
+import type { BoardCommand, BoardDSL, Command, ComponentTemplateDSL, PageDSL, RevisionSource } from "@prototype-studio/dsl-schema";
 import type { AccountTemplateRow, MetadataStore, User } from "./metadata";
 import { MetadataError } from "./metadata";
 import { hashPassword, newToken, verifyPassword } from "./auth";
@@ -271,6 +271,29 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
     const user = await requireUser(request, reply);
     const body = request.body as { expires_in_seconds?: number };
     const share = await options.spaces.createShare(user.id, projectIdOf(request.params), baseUrl, body.expires_in_seconds);
+    reply.code(201).send({ ok: true, ...share });
+  });
+
+  // 发布分享包：发布时把画布与页面打包为只读快照；之后项目再改动不影响已发布链接。
+  app.post("/api/projects/:projectId/share/bundle", async (request, reply) => {
+    const user = await requireUser(request, reply);
+    const body = request.body as {
+      boards?: BoardDSL[];
+      pages?: PageDSL[];
+      source_digest?: string;
+      expires_in_seconds?: number;
+    };
+    if (!Array.isArray(body.boards) || !body.boards.length || !Array.isArray(body.pages)) {
+      reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "boards 与 pages 为必填，且 boards 不能为空。" });
+      return;
+    }
+    const share = await options.spaces.createShareBundle(
+      user.id,
+      projectIdOf(request.params),
+      baseUrl,
+      { boards: body.boards, pages: body.pages, ...(body.source_digest ? { sourceDigest: body.source_digest } : {}) },
+      body.expires_in_seconds
+    );
     reply.code(201).send({ ok: true, ...share });
   });
 

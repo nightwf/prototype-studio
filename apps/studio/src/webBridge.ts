@@ -272,11 +272,23 @@ export const webSpace = {
     });
   },
   shareList(projectId: string) {
-    return request<{ ok: true; links: Array<{ token: string; url: string; expiresAt?: string; createdAt: string }> }>(`/api/projects/${projectId}/share`);
+    return request<{ ok: true; links: Array<{ token: string; url: string; expiresAt?: string; createdAt: string; sourceDigest?: string; updatedAt?: string }> }>(`/api/projects/${projectId}/share`);
   },
   shareRevoke(projectId: string, token: string) {
     return request<{ ok: true }>(`/api/projects/${projectId}/share/${encodeURIComponent(token)}`, {
       method: "DELETE"
     });
+  },
+
+  shareBundle(projectId: string, payload: {
+    boards: BoardDSL[];
+    pages: PageDSL[];
+    source_digest?: string;
+    expires_in_seconds?: number;
+  }) {
+    return request<{ ok: true; token: string; url: string; bundleId: string; sourceDigest: string; updatedAt: string; expiresAt?: string }>(
+      `/api/projects/${projectId}/share/bundle`,
+      { method: "POST", body: JSON.stringify(payload) }
+    );
   }
 };

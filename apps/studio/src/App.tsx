@@ -208,6 +208,19 @@ function componentTypeLabel(type: string): string {
   return type === "drawer" ? "抽屉" : type === "popover" ? "浮层" : "弹窗";
 }
 
+/** 与后端一致的分享包指纹：画布 + 页面 revision 的组合，用来判断发布后是否又有改动。 */
+function shareSourceDigest(boards: Array<{ id: string; revision: number }>, pages: PageDSL[]): string {
+  const boardPart = [...boards]
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+    .map((board) => `${board.id}@${board.revision}`)
+    .join("|");
+  const pagePart = [...pages]
+    .sort((a, b) => String(a.page.id).localeCompare(String(b.page.id)))
+    .map((page) => `${page.page.id}@${page.revision}`)
+    .join("|");
+  return `${boardPart}#${pagePart}`;
+}
+
 function defaultBoardFromPages(pages: PageDSL[], id = "main"): BoardDSL {
   return {
     dslVersion: DSL_VERSION,
@@ -426,7 +439,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsSection, setSettingsSection] = useState<"account" | "connection" | "local">("account");
   const [publishOpen, setPublishOpen] = useState(false);
-  const [publishLinks, setPublishLinks] = useState<Array<{ token: string; url: string; expiresAt?: string; createdAt: string }>>([]);
+  const [publishLinks, setPublishLinks] = useState<Array<{ token: string; url: string; expiresAt?: string; createdAt: string; sourceDigest?: string; updatedAt?: string }>>([]);
   const [publishExpiry, setPublishExpiry] = useState("30");
   const [publishBusy, setPublishBusy] = useState(false);
   const [boardAiText, setBoardAiText] = useState("");
@@ -2332,15 +2345,29 @@ ${boardExportRuntimeScript}
   const openPublishDrawer = useCallback(() => {
     setPublishOpen(true);
     void refreshPublishLinks();
-  }, [refreshPublishLinks]);
+    void refreshBoards();
+  }, [refreshPublishLinks, refreshBoards]);
+
+  const currentShareDigest = useMemo(() => shareSourceDigest(boards, pages), [boards, pages]);
 
   const publishWebProject = async () => {
     if (!webProjectId || publishBusy) return;
     setPublishBusy(true);
     try {
       const expiresInSeconds = publishExpiry === "forever" ? undefined : Number(publishExpiry) * 86400;
-      await webSpace.shareCreate(webProjectId, expiresInSeconds);
+      // 发布时把每个画布的最新内容与全部页面打包成只读快照；分享链接之后不再随项目变化。
+      const fullBoards: BoardDSL[] = [];
+      for (const summary of boards) fullBoards.push((await webSpace.board(webProjectId, summary.id)).board);
+      const digest = shareSourceDigest(fullBoards, pages);
+      await webSpace.shareBundle(webProjectId, {
+        boards: fullBoards,
+        pages,
+        source_digest: digest,
+        ...(expiresInSeconds ? { expires_in_seconds: expiresInSeconds } : {})
+      });
+      await refreshBoards();
       await refreshPublishLinks();
+      toast("success", "已发布", `链接已更新为当前内容快照 · ${fullBoards.length} 个画布 · ${pages.length} 个页面`);
     } catch (error) {
       toast("danger", "发布失败", error instanceof Error ? error.message : "未知错误");
     } finally {
@@ -3301,28 +3328,30 @@ ${boardExportRuntimeScript}
         <div className="publish-body">
           {publishLinks.length ? publishLinks.map((link) => {
             const expires = link.expiresAt ? new Date(link.expiresAt) : null;
+            const upToDate = !link.sourceDigest || link.sourceDigest === currentShareDigest;
             return (
               <div className="publish-live" key={link.token}>
-                <div className="publish-live-head"><StatusDot tone="success">已发布</StatusDot><small>任何人可访问</small></div>
+                <div className="publish-live-head"><StatusDot tone={upToDate ? "success" : "warning"}>{upToDate ? "已发布" : "有改动未同步"}</StatusDot><small>{upToDate ? "任何人可访问" : "链接内容是上一次发布的快照"}</small></div>
                 <div className="publish-link-row">
                   <code>{link.url}</code>
                   <button onClick={() => void copyText(link.url)} disabled={publishBusy}><Copy size={13} />复制</button>
                 </div>
                 <div className="publish-meta">
+                  <span>内容版本</span>
+                  <strong>{link.updatedAt ? new Date(link.updatedAt).toLocaleString("zh-CN") : new Date(link.createdAt).toLocaleString("zh-CN")}</strong>
+                </div>
+                <div className="publish-meta">
                   <span>有效期</span>
                   <strong>{expires ? `${expires.toLocaleDateString("zh-CN")} ${expires.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })} 过期` : "永久有效"}</strong>
                 </div>
-                <div className="publish-meta">
-                  <span>创建时间</span>
-                  <strong>{new Date(link.createdAt).toLocaleString("zh-CN")}</strong>
-                </div>
+                {!upToDate ? <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "同步中…" : "更新发布（同步当前内容）"}</button> : null}
                 <button className="publish-close" onClick={() => void closePublishWebProject(link.token)} disabled={publishBusy}><X size={13} />关闭发布</button>
               </div>
             );
           }) : <>
             <div className="publish-intro">
               <strong>发布为公共链接</strong>
-              <p>发布后，任何人可以通过链接浏览项目页面与画布，无需登录。发布内容随项目修改实时更新。</p>
+              <p>发布时会把当前所有画布与页面打包成一份只读快照，任何人通过链接即可浏览，无需登录。之后项目再有改动，需要点「更新发布」才会同步到链接。</p>
             </div>
             <label className="publish-expiry-field"><span>有效期</span>
               <select value={publishExpiry} onChange={(event) => setPublishExpiry(event.target.value)}>
@@ -3333,7 +3362,7 @@ ${boardExportRuntimeScript}
                 <option value="forever">永久有效</option>
               </select>
             </label>
-            <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "发布中…" : "发布"}</button>
+            <button className="publish-action" onClick={() => void publishWebProject()} disabled={publishBusy}><Share2 size={14} />{publishBusy ? "发布中…" : "发布（同步当前内容）"}</button>
           </>}
         </div>
       </section>
