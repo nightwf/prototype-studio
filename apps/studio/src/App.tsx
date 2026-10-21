@@ -110,7 +110,7 @@ import {
 } from "./desktopBridge";
 import { getApiToken, webAuth, webMode, webProjects, webSpace, webTemplates, type AccountTemplate, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
 import { AuthScreen } from "./WebScreens";
-import { deleteLocalPage, ensureDirectoryPermission, loadDirectoryHandle, pickLocalDirectory, readLocalPages, supportsLocalDirectory, writeLocalPage, type LocalDirectoryHandle } from "./localPages";
+import { deleteLocalPage, ensureDirectoryPermission, listLocalRevisions, loadDirectoryHandle, pickLocalDirectory, readLocalPages, readLocalRevision, supportsLocalDirectory, writeLocalPage, type LocalDirectoryHandle } from "./localPages";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
 const WireframeEditor = lazy(() => import("./WireframeEditor").then((mod) => ({ default: mod.WireframeEditor })));
@@ -573,6 +573,30 @@ export function App() {
   /** 页面刷新时保留本地页面：服务端只提供云端页，本地页来自已连接目录。 */
   const localPagesFromCurrent = useCallback(() => pagesRef.current.filter((page) => localPageIdsRef.current.has(page.page.id)), []);
 
+  /** 把本地页面复制一份到云端：本地文件保留，云端用 <id>-cloud 形成独立副本。 */
+  const copyLocalPageToCloud = useCallback(async (pageId: string) => {
+    if (!webMode || !webProjectId) {
+      toast("warning", "需要云端项目", "登录云端项目后才能把页面复制到云端。");
+      return;
+    }
+    const page = pagesRef.current.find((item) => item.page.id === pageId);
+    if (!page) return;
+    const existing = new Set(pagesRef.current.map((item) => item.page.id));
+    let nextId = `${pageId}-cloud`;
+    let suffix = 2;
+    while (existing.has(nextId)) nextId = `${pageId}-cloud-${suffix++}`;
+    const copy: PageDSL = structuredClone(page);
+    copy.revision = 1;
+    copy.page = { ...copy.page, id: nextId, title: `${page.page.title}（云端副本）` };
+    try {
+      await webSpace.createPage(webProjectId, copy);
+      setPages((items) => [...items, copy]);
+      toast("success", "已复制到云端", `${copy.page.title} · 云端副本与本地文件各自独立`);
+    } catch (error) {
+      toast("danger", "复制到云端失败", error instanceof Error ? error.message : "未知错误");
+    }
+  }, [toast, webProjectId]);
+
   // 本地目录轮询：AI（本地 MCP）写完文件后，页面树约 5 秒内自动出现，无需手动刷新。
   useEffect(() => {
     if (!webMode || !localDirName || !localPageIds.length) return;
@@ -595,6 +619,41 @@ export function App() {
     const timer = window.setInterval(() => void tick(), 5000);
     return () => { stopped = true; window.clearInterval(timer); };
   }, [webMode, localDirName, localPageIds.length, localPagesFromCurrent, mergeLocalPages]);
+
+  // 打开本地页面时用版本链重建撤销栈，刷新浏览器后依然可以撤销。
+  useEffect(() => {
+    const pageId = currentPageId;
+    if (!pageId || !localPageIds.includes(pageId)) return;
+    const handle = localDirRef.current;
+    if (!handle) return;
+    void (async () => {
+      const numbers = await listLocalRevisions(handle, pageId);
+      const stack: PageDSL[] = [];
+      for (const revision of numbers.slice(0, -1).slice(-20)) {
+        const snapshot = await readLocalRevision(handle, pageId, revision);
+        if (snapshot) stack.push(snapshot);
+      }
+      if (currentPageIdRef.current !== pageId) return;
+      localUndoRef.current.set(pageId, stack);
+      const latestRevision = numbers.at(-1);
+      const latest = latestRevision ? await readLocalRevision(handle, pageId, latestRevision) : undefined;
+      if (!latest || currentPageIdRef.current !== pageId) return;
+      // 合成一条记录让顶部撤销按钮可用；本地撤销本身按版本栈回放。
+      setHistory(stack.length ? [{
+        id: `local-${pageId}-${latest.revision}`,
+        pageId,
+        revision: latest.revision,
+        baseRevision: Math.max(0, latest.revision - 1),
+        source: "manual" as const,
+        operator: "local",
+        commands: [],
+        before: latest,
+        after: latest,
+        changedComponentIds: [],
+        createdAt: new Date().toISOString()
+      }] : []);
+    })();
+  }, [currentPageId, localPageIds]);
 
   const loadWebProject = useCallback(async (projectId: string) => {
     try {
@@ -2412,6 +2471,7 @@ export function App() {
       <BoardRenderer
         board={board}
         pages={boardPageMap}
+        localPageIds={localPageIds}
         interactive={false}
         showAnnotationPanel={mode === "with-annotations"}
       />
@@ -2517,7 +2577,13 @@ ${boardExportRuntimeScript}
   const downloadWebZip = async () => {
     if (!webProjectId) return;
     try {
-      const result = await webSpace.exportZip(webProjectId);
+      // 本地页面不在服务器上，导出时把它们的 YAML 原文一并带进整包。
+      const localPages = pages.filter((page) => localPageIds.includes(page.page.id));
+      const extraFiles = localPages.map((page) => ({
+        name: `pages/${page.page.id.replace(/[^a-zA-Z0-9._-]+/g, "_")}.ui.yaml`,
+        content: stringifyYaml(page, { lineWidth: 0 })
+      }));
+      const result = await webSpace.exportZip(webProjectId, extraFiles);
       const binary = atob(result.zip);
       const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
       const blob = new Blob([bytes], { type: "application/zip" });
@@ -2527,7 +2593,7 @@ ${boardExportRuntimeScript}
       link.download = "prototype-project.zip";
       link.click();
       URL.revokeObjectURL(url);
-      toast("success", "整包已下载", "prototype-project.zip");
+      toast("success", "整包已下载", `prototype-project.zip${localPages.length ? ` · 含 ${localPages.length} 个本地页面` : ""}`);
     } catch (error) {
       toast("danger", "下载失败", error instanceof Error ? error.message : "未知错误");
     }
@@ -2686,26 +2752,28 @@ ${boardExportRuntimeScript}
   };
 
   const undo = async () => {
-    const target = history.at(-1);
-    if (!target) return;
     const localPageId = currentPageIdRef.current;
+    // 本地页面：撤销栈由本地版本链（.prototype/revisions）重建，跨会话可用。
     if (localPageId && localPageIdsRef.current.has(localPageId)) {
-      const stack = localUndoRef.current.get(localPageId) ?? [];
-      const previous = stack.pop();
-      if (!previous) { toast("info", "没有可撤销的修改", "本地页面的撤销记录只在本次会话内保留。"); return; }
       const handle = localDirRef.current;
       if (!handle) { toast("danger", "本地目录未授权", "请重新连接本地页面文件夹。"); return; }
+      const current = pagesRef.current.find((page) => page.page.id === localPageId);
+      const stack = localUndoRef.current.get(localPageId) ?? [];
+      const previous = stack.pop();
+      if (!current || !previous) { toast("info", "没有可撤销的修改", "本地页面还没有更早的版本快照。"); return; }
       try {
-        await writeLocalPage(handle, previous);
+        const reverted: PageDSL = { ...previous, revision: current.revision + 1 };
+        await writeLocalPage(handle, reverted);
         localUndoRef.current.set(localPageId, stack);
-        setDsl(previous);
-        setHistory((items) => items.slice(0, -1));
+        setDsl(reverted);
         setRedoStack([]);
       } catch (error) {
         toast("danger", "无法撤销", error instanceof Error ? error.message : "未知错误");
       }
       return;
     }
+    const target = history.at(-1);
+    if (!target) return;
     try {
       const result = createRevertRevision(dsl, target, "jojo");
       if (webMode && webProjectId) {
@@ -2919,6 +2987,7 @@ ${boardExportRuntimeScript}
           <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
           {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
+            {localPageIds.includes(page.page.id) ? <button onClick={() => { setOpenPageMenuId(undefined); void copyLocalPageToCloud(page.page.id); }}><Upload size={12} />复制到云端</button> : null}
             <button disabled={!webMode || !webProjectId || placedPageIdsOnCurrentBoard.has(page.page.id)} onClick={() => void placePageOnCurrentBoard(page.page.id)}><LayoutGrid size={12} />放入当前画布</button>
             <button disabled={!webMode || !webProjectId} onClick={() => void savePageToTemplateLibrary(page.page.id)}><FolderOpen size={12} />保存为模板</button>
             <button disabled={index === 0} onClick={() => void movePage(page.page.id, index - 1)}><ArrowUp size={12} />上移</button>
@@ -3065,6 +3134,7 @@ ${boardExportRuntimeScript}
           ref={boardViewRef}
           board={board}
           pages={boardPageMap}
+          localPageIds={localPageIds}
           selectedId={boardSelectedId}
           selectedIds={boardSelectedIds}
           selectedLinkId={boardSelectedLinkId}

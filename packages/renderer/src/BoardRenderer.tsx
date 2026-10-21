@@ -40,6 +40,8 @@ import "./board.css";
 export interface BoardRendererProps {
   board: BoardDSL;
   pages: Record<string, PageDSL>;
+  /** 来自本地目录的页面 id：画布上给这些页面对象加「本地」角标。 */
+  localPageIds?: string[];
   selectedId?: string;
   selectedIds?: string[];
   selectedLinkId?: string;
@@ -298,6 +300,7 @@ registerBoardObjectRenderer("component", ({ object }) => <ComponentView object={
 export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>(function BoardRenderer({
   board,
   pages,
+  localPageIds = [],
   selectedId,
   selectedIds = [],
   selectedLinkId,
@@ -798,7 +801,7 @@ export const BoardRenderer = forwardRef<BoardRendererHandle, BoardRendererProps>
             </>
           ) : (
             <>
-              <div className="board-page-head"><span>{pages[object.pageId]?.page.title ?? object.pageId}</span><small>{object.pageId}</small></div>
+              <div className="board-page-head"><span>{pages[object.pageId]?.page.title ?? object.pageId}{localPageIds.includes(object.pageId) ? <em className="board-page-source board-page-source--local" title="页面文件保存在本地目录">本地</em> : null}</span><small>{object.pageId}</small></div>
             <div
               className="board-page-body"
               ref={(node) => { if (node) frameRefs.current.set(object.id, node); else frameRefs.current.delete(object.id); }}

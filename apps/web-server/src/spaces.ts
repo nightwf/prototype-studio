@@ -327,7 +327,11 @@ export class ProjectSpaceManager {
     return buildProductPackage(row.spacePath, {});
   }
 
-  async exportZip(userId: string, projectId: string): Promise<Buffer> {
+  /**
+   * 导出整包。extraFiles 用来把浏览器侧的本地页面（YAML 原文）一并打包，
+   * 让整包导出不只包含云端页面。
+   */
+  async exportZip(userId: string, projectId: string, extraFiles: Array<{ name: string; content: string }> = []): Promise<Buffer> {
     const row = await this.requireProject(userId, projectId);
     const { ZipArchive } = await import("archiver");
     const archive = new ZipArchive({ zlib: { level: 6 } });
@@ -338,6 +342,17 @@ export class ProjectSpaceManager {
       archive.on("error", reject);
     });
     archive.directory(row.spacePath, false);
+    if (extraFiles.length) {
+      const opened = await openProject(row.spacePath);
+      const existing = new Set(opened.pages.map((page) => `pages/${page.id}.ui.yaml`));
+      for (const file of extraFiles) {
+        const name = normalize(file.name).replace(/^\.\//, "");
+        // 只允许写入 pages/ 下的页面文件，避免越权覆盖其它项目文件。
+        if (!/^pages\/[A-Za-z0-9._-]+\.ui\.yaml$/.test(name)) continue;
+        if (existing.has(name)) continue;
+        archive.append(file.content, { name });
+      }
+    }
     await archive.finalize();
     return output;
   }

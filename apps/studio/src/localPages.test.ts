@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { stringify } from "yaml";
 import type { PageDSL } from "@prototype-studio/dsl-schema";
-import { deleteLocalPage, readLocalPages, writeLocalPage, type LocalDirectoryHandle, type LocalFileHandle } from "./localPages";
+import { deleteLocalPage, listLocalRevisions, readLocalPages, readLocalRevision, writeLocalPage, type LocalDirectoryHandle, type LocalFileHandle } from "./localPages";
 
 function page(id: string, title: string): PageDSL {
   return {
@@ -88,5 +88,15 @@ describe("本地页面目录", () => {
     await deleteLocalPage(root, "repayment");
     expect(root.files.has("repayment.ui.yaml")).toBe(false);
     expect((await readLocalPages(root)).pages).toHaveLength(0);
+  });
+
+  it("每次写回都留版本快照，可按 revision 读取（跨会话撤销的基础）", async () => {
+    const root = fakeDirectory();
+    await writeLocalPage(root, { ...page("repayment", "还款管理"), revision: 1 });
+    await writeLocalPage(root, { ...page("repayment", "还款管理"), revision: 2 });
+    expect(await listLocalRevisions(root, "repayment")).toEqual([1, 2]);
+    const first = await readLocalRevision(root, "repayment", 1);
+    expect(first?.revision).toBe(1);
+    expect(await readLocalRevision(root, "repayment", 99)).toBeUndefined();
   });
 });

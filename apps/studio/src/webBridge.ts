@@ -259,10 +259,10 @@ export const webSpace = {
       body: JSON.stringify({ type: "html", mode, scope, board_id: boardId })
     });
   },
-  exportZip(projectId: string) {
+  exportZip(projectId: string, extraFiles?: Array<{ name: string; content: string }>) {
     return request<{ ok: true; zip: string; bytes: number }>(`/api/projects/${projectId}/export`, {
       method: "POST",
-      body: JSON.stringify({ type: "zip" })
+      body: JSON.stringify({ type: "zip", ...(extraFiles?.length ? { extra_files: extraFiles } : {}) })
     });
   },
   shareCreate(projectId: string, expiresInSeconds?: number) {

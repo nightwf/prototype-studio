@@ -102,6 +102,16 @@ function pageFileName(pageId: string): string {
   return `${pageId.replace(/[^a-zA-Z0-9._-]+/g, "_")}.ui.yaml`;
 }
 
+function revisionFileName(revision: number): string {
+  return `${String(Math.max(0, Math.round(revision))).padStart(6, "0")}.json`;
+}
+
+async function revisionDirectory(root: LocalDirectoryHandle, pageId: string, create = true): Promise<LocalDirectoryHandle> {
+  const dotPrototype = await root.getDirectoryHandle(".prototype", { create });
+  const revisions = await dotPrototype.getDirectoryHandle("revisions", { create });
+  return revisions.getDirectoryHandle(pageId.replace(/[^a-zA-Z0-9._-]+/g, "_"), { create });
+}
+
 export interface LocalPageScan {
   pages: PageDSL[];
   fileById: Record<string, string>;
@@ -140,6 +150,41 @@ export async function writeLocalPage(root: LocalDirectoryHandle, dsl: PageDSL): 
   const writable = await file.createWritable();
   await writable.write(stringifyYaml(dsl, { lineWidth: 0 }));
   await writable.close();
+  // 同时留存一份版本快照，支持跨会话回溯（与云端 .prototype/revisions 结构一致）。
+  try {
+    const dir = await revisionDirectory(root, dsl.page.id);
+    const snapshot = await dir.getFileHandle(revisionFileName(dsl.revision), { create: true });
+    const revisionWritable = await snapshot.createWritable();
+    await revisionWritable.write(JSON.stringify(dsl, null, 2));
+    await revisionWritable.close();
+  } catch { /* 版本快照失败不影响页面写入 */ }
+}
+
+/** 列出本地页面的历史 revision 编号（升序）。 */
+export async function listLocalRevisions(root: LocalDirectoryHandle, pageId: string): Promise<number[]> {
+  try {
+    const dir = await revisionDirectory(root, pageId, false);
+    const numbers: number[] = [];
+    for await (const entry of dir.values()) {
+      if (entry.kind !== "file" || !entry.name.endsWith(".json")) continue;
+      const value = Number(entry.name.replace(/\.json$/, ""));
+      if (Number.isFinite(value)) numbers.push(value);
+    }
+    return numbers.sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
+}
+
+/** 读取指定 revision 的本地快照。 */
+export async function readLocalRevision(root: LocalDirectoryHandle, pageId: string, revision: number): Promise<PageDSL | undefined> {
+  try {
+    const dir = await revisionDirectory(root, pageId, false);
+    const file = await dir.getFileHandle(revisionFileName(revision), { create: false });
+    return JSON.parse(await (await file.getFile()).text()) as PageDSL;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function deleteLocalPage(root: LocalDirectoryHandle, pageId: string): Promise<void> {

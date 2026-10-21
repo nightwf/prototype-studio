@@ -34,6 +34,7 @@
 .board-page-head > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .board-page-head:active { cursor: grabbing; }
 .board-page-head small { color: #9a9a9a; font: 11px/1 var(--ps-font-mono); flex: none; }
+.board-page-source { margin-left: 6px; padding: 1px 5px; border-radius: 2px; background: #fff; border: 1px solid #d6d6d6; color: #4d4d4d; font-size: 10px; font-style: normal; font-weight: 500; vertical-align: middle; }
 .board-object--page.is-module { border-color: #e0e0e0; background-color: #fff; }
 .board-page-head--module { background: #f9f9f9; color: #333; }
 .board-page-head--module small { color: #e67333; font-weight: 500; }

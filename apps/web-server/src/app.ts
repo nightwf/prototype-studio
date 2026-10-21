@@ -597,7 +597,7 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
   app.post("/api/projects/:projectId/export", async (request, reply) => {
     const user = await requireUser(request, reply);
     const projectId = projectIdOf(request.params);
-    const body = request.body as { type?: string; mode?: string; scope?: string; board_id?: string };
+    const body = request.body as { type?: string; mode?: string; scope?: string; board_id?: string; extra_files?: unknown };
     if (body.type === "product-package") {
       return { ok: true, package: await options.spaces.productPackage(user.id, projectId) };
     }
@@ -625,7 +625,11 @@ export async function buildApp(options: AppOptions): Promise<FastifyInstance> {
       return { ok: true, html };
     }
     if (body.type === "zip") {
-      const zip = await options.spaces.exportZip(user.id, projectId);
+      const extraFiles = Array.isArray(body.extra_files)
+        ? (body.extra_files as Array<{ name?: unknown; content?: unknown }>)
+          .filter((file): file is { name: string; content: string } => typeof file?.name === "string" && typeof file?.content === "string")
+        : [];
+      const zip = await options.spaces.exportZip(user.id, projectId, extraFiles);
       return { ok: true, zip: zip.toString("base64"), bytes: zip.length };
     }
     reply.code(400).send({ ok: false, error: "INVALID_INPUT", message: "导出类型仅支持 product-package 或 html。" });
