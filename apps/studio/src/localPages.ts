@@ -35,6 +35,16 @@ export function supportsLocalDirectory(): boolean {
   return typeof window !== "undefined" && typeof (window as unknown as DirectoryPickerWindow).showDirectoryPicker === "function";
 }
 
+export type LocalDirectorySupport = "ok" | "insecure" | "unsupported";
+
+/** 区分「浏览器不支持」和「当前地址不是安全上下文」——两者提示与解法完全不同。 */
+export function localDirectorySupport(): LocalDirectorySupport {
+  if (typeof window === "undefined") return "unsupported";
+  if (supportsLocalDirectory()) return "ok";
+  if (!window.isSecureContext) return "insecure";
+  return "unsupported";
+}
+
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);

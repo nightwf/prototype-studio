@@ -110,7 +110,7 @@ import {
 } from "./desktopBridge";
 import { getApiToken, webAuth, webMode, webProjects, webSpace, webTemplates, type AccountTemplate, type BoardSummary, type TrashedBoardSummary, type WebProject, type WebUser } from "./webBridge";
 import { AuthScreen } from "./WebScreens";
-import { deleteLocalPage, ensureDirectoryPermission, listLocalRevisions, loadDirectoryHandle, pickLocalDirectory, readLocalPages, readLocalRevision, supportsLocalDirectory, writeLocalPage, type LocalDirectoryHandle } from "./localPages";
+import { deleteLocalPage, ensureDirectoryPermission, listLocalRevisions, loadDirectoryHandle, localDirectorySupport, pickLocalDirectory, readLocalPages, readLocalRevision, writeLocalPage, type LocalDirectoryHandle } from "./localPages";
 
 const DiagramEditor = lazy(() => import("./DiagramEditor"));
 const WireframeEditor = lazy(() => import("./WireframeEditor").then((mod) => ({ default: mod.WireframeEditor })));
@@ -542,8 +542,13 @@ export function App() {
   }, []);
 
   const connectLocalPages = useCallback(async () => {
-    if (!supportsLocalDirectory()) {
-      toast("warning", "当前浏览器不支持目录授权", "请使用 Chrome 或 Edge 连接本地页面文件夹。");
+    const support = localDirectorySupport();
+    if (support !== "ok") {
+      if (support === "insecure") {
+        toast("warning", "当前地址不是安全上下文", "浏览器只在 HTTPS 或本机 localhost 下开放目录授权；当前是纯 HTTP 地址。可改用 HTTPS，或在 Chrome 中把本站点标记为安全来源后重试。");
+      } else {
+        toast("warning", "当前浏览器不支持目录授权", "Safari / Firefox 没有该能力，请使用 Chrome 或 Edge（并使站点处于 HTTPS 或本机 localhost）。");
+      }
       return;
     }
     try {
@@ -2627,6 +2632,7 @@ ${boardExportRuntimeScript}
   };
 
   const isModulePage = dsl.page.title.includes("模块说明");
+  const localDirectoryState = localDirectorySupport();
   const isWireframePage = viewMode === "page" && dsl.page.type === "wireframe";
 
   const updatePageSections = async (sections: UIComponent[]): Promise<boolean> => {
@@ -2970,7 +2976,7 @@ ${boardExportRuntimeScript}
         }}><Box size={14} />组件</button>
       </div>
       {activeWorkspace === "pages" ? <>
-        <div className="left-project-label"><span>页面结构 · {pages.length}</span><span className="left-project-actions"><ToolButton compact title={localDirName ? `本地页面目录：${localDirName}（点击切换）` : "连接本地页面文件夹（AI 生成的页面）"} active={Boolean(localDirName)} onClick={() => void connectLocalPages()}><HardDrive size={13} /></ToolButton><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></span></div>
+        <div className="left-project-label"><span>页面结构 · {pages.length}</span><span className="left-project-actions"><ToolButton compact title={localDirName ? `本地页面目录：${localDirName}（点击切换）` : localDirectoryState === "insecure" ? "目录授权不可用：需要 HTTPS 或本机 localhost" : localDirectoryState === "unsupported" ? "当前浏览器不支持目录授权（请用 Chrome / Edge）" : "连接本地页面文件夹（AI 生成的页面）"} active={Boolean(localDirName)} onClick={() => void connectLocalPages()}><HardDrive size={13} /></ToolButton><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></span></div>
         {localDirName ? <div className="local-source-row" title={`本地目录：${localDirName}`}><HardDrive size={11} /><span>{localDirName}</span><strong>{localPageIds.length} 页</strong></div> : null}
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
