@@ -573,6 +573,29 @@ export function App() {
   /** 页面刷新时保留本地页面：服务端只提供云端页，本地页来自已连接目录。 */
   const localPagesFromCurrent = useCallback(() => pagesRef.current.filter((page) => localPageIdsRef.current.has(page.page.id)), []);
 
+  // 本地目录轮询：AI（本地 MCP）写完文件后，页面树约 5 秒内自动出现，无需手动刷新。
+  useEffect(() => {
+    if (!webMode || !localDirName || !localPageIds.length) return;
+    const handle = localDirRef.current;
+    if (!handle) return;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped || document.visibilityState !== "visible") return;
+      try {
+        if (!(await ensureDirectoryPermission(handle, false))) return;
+        const scan = await readLocalPages(handle);
+        if (stopped) return;
+        const current = localPagesFromCurrent();
+        const unchanged = scan.pages.length === current.length
+          && scan.pages.every((page) => current.some((item) => item.page.id === page.page.id && item.revision === page.revision));
+        if (unchanged) return;
+        mergeLocalPages(pagesRef.current.filter((page) => !localPageIdsRef.current.has(page.page.id)), scan.pages);
+      } catch { /* 轮询失败不打断编辑 */ }
+    };
+    const timer = window.setInterval(() => void tick(), 5000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [webMode, localDirName, localPageIds.length, localPagesFromCurrent, mergeLocalPages]);
+
   const loadWebProject = useCallback(async (projectId: string) => {
     try {
       const tree = await webSpace.tree(projectId);
