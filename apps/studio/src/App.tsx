@@ -2877,10 +2877,6 @@ ${boardExportRuntimeScript}
     () => new Set(board.objects.filter((object): object is Extract<BoardObject, { type: "page" }> => object.type === "page").map((object) => object.pageId)),
     [board.objects]
   );
-  const unplacedPageCount = useMemo(
-    () => pages.filter((page) => !placedPageIdsOnCurrentBoard.has(page.page.id)).length,
-    [pages, placedPageIdsOnCurrentBoard]
-  );
 
   const outlineComponents: UIComponent[] = [
     ...(dsl.search?.fields ?? []),
@@ -2968,7 +2964,7 @@ ${boardExportRuntimeScript}
         }}><Box size={14} />组件</button>
       </div>
       {activeWorkspace === "pages" ? <>
-        <div className="left-project-label"><span>页面结构 · {pages.length}{unplacedPageCount ? ` · ${unplacedPageCount} 未上画布` : ""}</span><span className="left-project-actions"><ToolButton compact title={localDirName ? `本地页面目录：${localDirName}（点击切换）` : "连接本地页面文件夹（AI 生成的页面）"} active={Boolean(localDirName)} onClick={() => void connectLocalPages()}><HardDrive size={13} /></ToolButton><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></span></div>
+        <div className="left-project-label"><span>页面结构 · {pages.length}</span><span className="left-project-actions"><ToolButton compact title={localDirName ? `本地页面目录：${localDirName}（点击切换）` : "连接本地页面文件夹（AI 生成的页面）"} active={Boolean(localDirName)} onClick={() => void connectLocalPages()}><HardDrive size={13} /></ToolButton><ToolButton compact title="新建页面" active={showPageCreator} onClick={() => setShowPageCreator(!showPageCreator)}><Plus size={13} /></ToolButton></span></div>
         {localDirName ? <div className="local-source-row" title={`本地目录：${localDirName}`}><HardDrive size={11} /><span>{localDirName}</span><strong>{localPageIds.length} 页</strong></div> : null}
         {showPageCreator ? <div className="page-creator">
           <input autoFocus value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void addPage(); if (event.key === "Escape") setShowPageCreator(false); }} placeholder="页面名称" aria-label="页面名称" />
@@ -2983,7 +2979,7 @@ ${boardExportRuntimeScript}
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => { event.preventDefault(); const pageId = event.dataTransfer.getData("text/page-id"); if (pageId) void movePage(pageId, index); }}
         >
-          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon">{localPageIds.includes(page.page.id) ? <HardDrive size={14} /> : <Monitor size={14} />}</div><div><strong>{page.page.title}{localPageIds.includes(page.page.id) ? <em className="page-badge page-badge--local" title="文件保存在你授权的本地目录">本地</em> : <em className="page-badge page-badge--cloud" title="保存在云端项目">云端</em>}{!placedPageIdsOnCurrentBoard.has(page.page.id) ? <em className="page-badge">未上画布</em> : null}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
+          <button className="page-row-main" onClick={() => selectPage(page.page.id)} aria-label={`打开页面 ${page.page.title}`}><GripVertical className="page-drag-handle" size={11} /><div className="page-icon">{localPageIds.includes(page.page.id) ? <HardDrive size={14} /> : <Monitor size={14} />}</div><div><strong>{page.page.title}{localPageIds.includes(page.page.id) ? <em className="page-badge page-badge--local" title="文件保存在你授权的本地目录">本地</em> : <em className="page-badge page-badge--cloud" title="保存在云端项目">云端</em>}</strong><span>{page.page.id} · {page.page.type.toUpperCase()}</span></div></button>
           <button className="page-more" title={`管理页面 ${page.page.title}`} aria-label={`管理页面 ${page.page.title}`} onClick={(event) => { const rect = (event.currentTarget as HTMLElement).getBoundingClientRect(); const up = rect.bottom + 196 > window.innerHeight; setPageMenuAnchor({ x: Math.min(rect.left, window.innerWidth - 150), y: up ? rect.top - 4 : rect.bottom + 4, up }); setOpenPageMenuId(openPageMenuId === page.page.id ? undefined : page.page.id); }}><MoreHorizontal size={14} /></button>
           {openPageMenuId === page.page.id && pageMenuAnchor ? <div className="page-row-menu is-fixed" style={{ left: pageMenuAnchor.x, top: pageMenuAnchor.up ? undefined : pageMenuAnchor.y, bottom: pageMenuAnchor.up ? window.innerHeight - pageMenuAnchor.y : undefined }}>
             <button onClick={() => void renamePage(page.page.id)}><Pencil size={12} />重命名</button>
